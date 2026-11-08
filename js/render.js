@@ -374,7 +374,7 @@
     const ctrl = new AbortController();
     const m = F.modal({
       title: 'Exportando video', locked: true, wide: true,
-      body: `<div style="display:grid;grid-template-columns:1fr 240px;gap:18px;align-items:center">
+      body: `<div class="ex-grid">
         <canvas id="exCv" style="width:100%;max-height:52vh;object-fit:contain;border-radius:10px;background:#000;border:1px solid var(--line2)"></canvas>
         <div><div class="pill" id="exSt"><span class="spin"></span> Grabando</div>
         <h2 style="margin:14px 0 4px;font-size:28px" id="exPct">0%</h2><div class="muted small" id="exT">Preparando…</div>

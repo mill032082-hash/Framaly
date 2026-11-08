@@ -31,16 +31,21 @@
     const el = F.$('#apiDots'); if (!el) return;
     el.innerHTML = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['googleClientId', 'YouTube']].map(([k, n]) => `<a href="#/integraciones" style="color:var(--muted);text-decoration:none"><span class="dot ${F.api.has(k) ? 'ok' : ''}"></span>${n}</a>`).join('');
   }
+  /** Menú lateral deslizable en celular */
+  function menu(open) {
+    F.$('#sidebar').classList.toggle('open', open);
+    document.body.classList.toggle('menu-open', open);
+  }
   function topbar(r) {
     const p = F.projects.current();
-    F.$('#topbar').innerHTML = `<button class="icon-btn menu" id="mMenu">${I('menu')}</button><div><h1>${r.name}</h1></div><span class="sub">${r.sub || ''}</span><span class="grow"></span>
+    F.$('#topbar').innerHTML = `<button class="icon-btn menu" id="mMenu" aria-label="Abrir menú">${I('menu')}</button><h1>${r.name}</h1><span class="sub">${r.sub || ''}</span><span class="grow"></span>
       ${p ? `<a class="proj-chip" href="#/editor" title="Proyecto actual">${I('film')}<span>${F.esc(p.name)}</span></a>` : ''}
       ${window.FRAMALY_DEMO ? '<span class="tag or" title="Vista de demostración: la IA y las descargas funcionan en la app instalada en tu PC">Vista demo</span>' : ''}
-      <button class="btn sm" id="tbHelp" title="Instrucciones de esta sección">${I('script')} Instrucciones</button>
-      <button class="btn primary sm" id="tbNew">${I('plus')} Nuevo proyecto</button>`;
+      <button class="btn sm" id="tbHelp" title="Instrucciones de esta sección">${I('script')}<span class="bt">Instrucciones</span></button>
+      <button class="btn primary sm" id="tbNew" title="Nuevo proyecto">${I('plus')}<span class="bt">Nuevo proyecto</span></button>`;
     F.$('#tbNew').onclick = () => F.views.newProject();
     F.$('#tbHelp').onclick = () => F.showHelp(r.id);
-    F.$('#mMenu').onclick = () => F.$('#sidebar').classList.toggle('open');
+    F.$('#mMenu').onclick = () => menu(true);
   }
 
   let pending = false;
@@ -52,7 +57,7 @@
       const r = ROUTES.find((x) => x.id === id) || ROUTES[1];
       if (destroy) { try { destroy(); } catch (e) { console.error(e); } destroy = null; }
       F.$$('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.r === r.id));
-      F.$('#sidebar').classList.remove('open');
+      menu(false);
       topbar(r);
       const view = F.$('#view');
       view.className = 'view' + (r.full ? ' full' : '');
@@ -114,6 +119,7 @@
     await Promise.all([F.media.load(), F.projects.load()]).catch((e) => console.error(e));
     if (window.FRAMALY_DEMO && !F.projects.list.length) { try { await F.seedDemo(); } catch (e) { console.error(e); } }
     sidebar();
+    const scrim = document.createElement('div'); scrim.className = 'scrim'; scrim.onclick = () => menu(false); document.body.appendChild(scrim);
     F.on('settings', dots);
     F.on('projects', () => { const r = ROUTES.find((x) => x.id === (location.hash.replace(/^#\/?/, '') || 'inicio')); if (r && !r.sec) { const chip = F.$('.proj-chip span'); const p = F.projects.current(); if (chip && p) chip.textContent = p.name; } });
     window.addEventListener('hashchange', render);

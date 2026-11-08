@@ -387,6 +387,8 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     l.insertAdjacentHTML('beforeend', `<div class="${c}">${F.esc(logLines[logLines.length - 1].t)}</div>`); l.scrollTop = 1e9;
   }
   function renderList() {
+    const sel = root.querySelector('#flTpl');
+    if (sel) sel.innerHTML = `<option value="">Plantillas…</option>${Object.entries(TPL).map(([k, t]) => `<option value="tpl:${k}">${F.esc(t.name)}</option>`).join('')}${F.settings.flows.length ? `<optgroup label="Mis flujos">${F.settings.flows.map((f) => `<option value="fl:${f.id}">${F.esc(f.name)}</option>`).join('')}</optgroup>` : ''}`;
     const el = root.querySelector('#flList');
     el.innerHTML = `<div class="nav-sec">Plantillas</div>${Object.entries(TPL).map(([k, t]) => `<button class="it" data-tpl="${k}"><b>${t.name}</b><small>${t.desc}</small></button>`).join('')}
       <div class="nav-sec">Mis flujos</div>${F.settings.flows.length ? F.settings.flows.map((f) => `<button class="it ${f.id === flow.id ? 'on' : ''}" data-fl="${f.id}"><b>${F.esc(f.name)}</b><small>${F.esc(f.cfg.idea.topic.slice(0, 40) || 'Sin tema')}</small></button>`).join('') : '<div class="small dim" style="padding:4px 12px">Aún no guardaste flujos</div>'}`;
@@ -423,7 +425,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       el.innerHTML = `<div class="flows">
         <aside class="fl-list" id="flList"></aside>
         <div class="fl-canvas" id="flc" style="grid-column:2;grid-row:1">
-          <div class="fl-bar"><input type="text" id="flName" title="Nombre del flujo"><span class="pill">${I('bot')} 6 agentes</span><span class="grow"></span>
+          <div class="fl-bar"><input type="text" id="flName" title="Nombre del flujo"><select id="flTpl" class="fl-tpl" title="Cambiar de plantilla"></select><span class="pill">${I('bot')} 6 agentes</span><span class="grow"></span>
             <button class="btn sm ghost" id="flReset" title="Reordenar nodos">${I('grid')}</button>
             <button class="btn sm" id="flSave">${I('save')} Guardar</button><button class="btn primary" id="flRun"></button></div>
           <div class="fl-area" id="fla"><svg class="edges" id="edges"></svg></div>
@@ -447,13 +449,20 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
         if (i >= 0) F.settings.flows[i] = copy; else F.settings.flows.unshift(copy);
         F.saveSettings(); renderList(); F.toast('Flujo guardado', 'ok');
       };
-      el.querySelector('#flList').addEventListener('click', async (e) => {
-        if (running) return F.toast('Espera a que termine la ejecución');
-        const t = e.target.closest('[data-tpl]'), f = e.target.closest('[data-fl]');
-        if (t) { const topic = flow.cfg.idea.topic; flow = makeFlow(t.dataset.tpl); flow.cfg.idea.topic = topic; }
-        else if (f) { const s = F.settings.flows.find((x) => x.id === f.dataset.fl); if (s) flow = JSON.parse(JSON.stringify(s)); }
+      const loadFrom = (tpl, fl) => {
+        if (running) { F.toast('Espera a que termine la ejecución'); return; }
+        if (tpl) { const topic = flow.cfg.idea.topic; flow = makeFlow(tpl); flow.cfg.idea.topic = topic; }
+        else if (fl) { const s = F.settings.flows.find((x) => x.id === fl); if (!s) return; flow = JSON.parse(JSON.stringify(s)); }
         else return;
         states = {}; saveDraft(); el.querySelector('#flName').value = flow.name; renderList(); renderNodes(); renderInsp();
+      };
+      el.querySelector('#flList').addEventListener('click', (e) => {
+        const t = e.target.closest('[data-tpl]'), f = e.target.closest('[data-fl]');
+        loadFrom(t?.dataset.tpl, f?.dataset.fl);
+      });
+      el.querySelector('#flTpl').addEventListener('change', (e) => {
+        const [k, id] = e.target.value.split(':'); e.target.value = '';
+        loadFrom(k === 'tpl' ? id : null, k === 'fl' ? id : null);
       });
       el.querySelector('#flList').addEventListener('contextmenu', async (e) => {
         const f = e.target.closest('[data-fl]'); if (!f) return; e.preventDefault();
@@ -488,7 +497,10 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
         };
         const up = () => {
           window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up);
-          if (moved) saveDraft(); else if (selNode !== id) { selNode = id; renderNodes(); renderInsp(); }
+          if (moved) return saveDraft();
+          if (selNode !== id) { selNode = id; renderNodes(); renderInsp(); }
+          // En celular los ajustes del nodo están debajo del lienzo: llevar al usuario hasta ellos
+          if (window.innerWidth <= 1000) root?.querySelector('#fli')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         };
         window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
       });

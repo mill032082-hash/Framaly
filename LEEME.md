@@ -8,6 +8,15 @@ Estudio para crear videos con imágenes, voces y agentes de IA, y publicarlos en
 
 > También puedes abrir `index.html` directamente, pero la subida a YouTube solo funciona desde `http://localhost:5577`.
 
+## Usarla en el celular
+FRAMALY se adapta sola a celular, tablet y PC.
+1. Abre `Iniciar FRAMALY.bat` en tu PC. La ventana negra muestra una dirección como `http://192.168.1.22:5577`.
+2. Con el celular conectado **a la misma red Wi-Fi**, abre esa dirección en Chrome (Android) o Safari (iPhone).
+3. Si Windows pregunta por el firewall, pulsa **Permitir acceso**.
+4. Para tenerla como app: en Chrome, menú ⋮ → **Agregar a pantalla principal**; en Safari, **Compartir → Agregar a inicio**.
+
+Cada dispositivo guarda su propia biblioteca y sus propias claves de API.
+
 ## Modo automático (lo normal)
 1. Conecta tu clave de **OpenAI** en *Integraciones API* (solo una vez).
 2. En **Inicio → Modo automático** escribe la idea del video y elige formato, duración y estilo.

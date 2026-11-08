@@ -51,7 +51,7 @@
       <span class="grow"></span>
       <button class="icon-btn" id="bUndo" title="Deshacer (Ctrl+Z)">${I('undo')}</button>
       <button class="icon-btn" id="bRedo" title="Rehacer (Ctrl+Y)">${I('redo')}</button>
-      <button class="btn sm" id="bProj">${I('folder')} Proyectos</button>
+      <button class="btn sm" id="bProj" title="Proyectos">${I('folder')}<span class="bt">Proyectos</span></button>
       <button class="btn primary sm" id="bExport">${I('download')} Exportar</button>
     </div>
     <div class="stage" id="stage"><canvas id="pv"></canvas>
@@ -70,10 +70,10 @@
     <div class="tl-bar">
       <button class="btn sm" id="bAddImg">${I('plus')} Imágenes</button>
       <button class="btn sm" id="bAddAud">${I('music')} Audio</button>
-      <button class="btn sm ghost" id="bFit" title="Estira o encoge los clips para que duren lo mismo que la narración">${I('clock')} Ajustar a narración</button>
-      <button class="btn sm ghost" id="bUni">${I('scissors')} Duración uniforme</button>
+      <button class="btn sm ghost" id="bFit" title="Ajustar a narración: los clips duran lo mismo que la voz">${I('clock')}<span class="bt">Ajustar a narración</span></button>
+      <button class="btn sm ghost" id="bUni" title="Duración uniforme">${I('scissors')}<span class="bt">Duración uniforme</span></button>
       <span class="grow"></span>
-      <span class="muted small">Zoom</span><input type="range" id="tlZoom" min="10" max="160" value="${E.pps}">
+      <span class="muted small bt">Zoom</span><input type="range" id="tlZoom" min="10" max="160" value="${E.pps}">
       <button class="icon-btn" id="bDel" title="Eliminar seleccionado (Supr)">${I('trash')}</button>
     </div>
     <div class="tl-body">
@@ -245,7 +245,7 @@
       const c = obj, i = p.clips.indexOf(c), m = F.media.byId(c.mediaId);
       el.innerHTML = `<h4>${I('film')} Clip ${i + 1}</h4><div class="muted small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${F.esc(m?.name || 'Sin imagen')}</div>
         <div class="insp-thumb" style="${m ? `background-image:url('${F.media.url(m)}')` : ''}"></div>
-        <div class="row" style="margin-top:10px;gap:6px"><button class="btn sm" data-act="dup">${I('copy')} Duplicar</button><button class="btn sm" data-act="replace">${I('image')} Cambiar</button><span class="grow"></span><button class="btn sm danger" data-act="del" title="Eliminar">${I('trash')}</button></div>
+        <div class="row" style="margin-top:10px;gap:6px"><button class="btn sm" data-act="left" title="Mover a la izquierda" ${i === 0 ? 'disabled' : ''}>←</button><button class="btn sm" data-act="right" title="Mover a la derecha" ${i === p.clips.length - 1 ? 'disabled' : ''}>→</button><button class="btn sm" data-act="dup">${I('copy')} Duplicar</button><button class="btn sm" data-act="replace">${I('image')} Cambiar</button><span class="grow"></span><button class="btn sm danger" data-act="del" title="Eliminar">${I('trash')}</button></div>
         ${sec('Tiempo y encuadre', `<label class="lbl">Duración (segundos)</label><input type="number" step="0.1" min="0.5" data-k="duration">
           <label class="lbl">Encuadre</label><select data-k="fit"><option value="cover">Rellenar (recorta bordes)</option><option value="contain">Ajustar + fondo desenfocado</option></select>`, 'duration,fit')}
         ${sec('Movimiento de cámara', `<select data-k="motion">${R.opts(R.MOTIONS)}</select><label class="lbl">Intensidad</label><div class="rangeval"><input type="range" min="0.02" max="0.45" step="0.01" data-k="motionAmt"><span data-v="motionAmt"></span></div>`, 'motion,motionAmt')}
@@ -381,6 +381,12 @@
       }
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (act === 'del') deleteSelected();
+      if (act === 'left' || act === 'right') {
+        const c = clipById(E.sel); if (!c) return;
+        const i = p.clips.indexOf(c), j = i + (act === 'left' ? -1 : 1);
+        if (j < 0 || j >= p.clips.length) return;
+        commit(); p.clips.splice(i, 1); p.clips.splice(j, 0, c); after({ insp: true });
+      }
       if (act === 'dup') { const c = clipById(E.sel); if (!c) return; commit(); const d = { ...c, id: F.uid() }; p.clips.splice(p.clips.indexOf(c) + 1, 0, d); select('clip', d.id, false); after({ insp: true }); }
       if (act === 'replace') { const id = await pickImage(); const c = clipById(E.sel); if (id && c) { commit(); c.mediaId = id; F.media.image(id).catch(() => {}); after({ insp: true }); } }
     });

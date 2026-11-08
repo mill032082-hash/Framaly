@@ -405,31 +405,120 @@ kbd { font: 11px var(--font); padding: 1px 6px; border-radius: 5px; border: 1px 
 .help-steps li::marker { color: var(--or2); font-weight: 700; }
 .help .hint svg.i, .modal .hint svg.i { width: 13px; height: 13px; vertical-align: -2px; color: var(--amber); }
 
-/* ============ Responsive ============ */
+/* ============ Responsive: PC, tablet y celular ============ */
+.app { height: 100dvh; }
+.fl-tpl { display: none; width: auto; height: 34px; padding: 4px 30px 4px 10px; }
+.scrim { display: none; position: fixed; inset: 0; background: rgba(5, 3, 2, .6); backdrop-filter: blur(2px); z-index: 45; }
+.ex-grid { display: grid; grid-template-columns: 1fr 240px; gap: 18px; align-items: center; }
+.topbar h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.clip-handle, .aclip, .tl-ruler, .node { touch-action: none; }
+
+/* Pantallas táctiles: sin "hover", los botones ocultos se muestran siempre */
+@media (hover: none) {
+  .bin-item .add { opacity: 1; }
+  .tile .ov { opacity: 1; background: linear-gradient(transparent 55%, rgba(0, 0, 0, .85)); }
+  .tile .ov .nm { display: none; }
+  .clip-handle { opacity: 1; width: 16px; }
+  .icon-btn { width: 40px; height: 40px; }
+}
+
 @media (max-width: 1250px) {
   .mods { grid-template-columns: repeat(2, 1fr); }
   .hero { grid-template-columns: 1fr; }
   .split { grid-template-columns: 1fr; }
+  .sticky { position: static; }
   .flows { grid-template-columns: 0 minmax(0, 1fr) 300px; }
   .fl-list { display: none; }
+  .fl-tpl { display: block; }
 }
+
 @media (max-width: 1000px) {
   .app { grid-template-columns: 1fr; }
-  .sidebar { position: fixed; z-index: 50; left: 0; top: 0; bottom: 0; width: 250px; transform: translateX(-100%); transition: .25s; }
+  .sidebar { position: fixed; z-index: 50; left: 0; top: 0; bottom: 0; width: 270px; max-width: 85vw; transform: translateX(-100%); transition: transform .25s; padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(16px, env(safe-area-inset-bottom)); }
   .sidebar.open { transform: none; box-shadow: var(--sh); }
-  .topbar .menu { display: inline-grid; }
+  body.menu-open .scrim { display: block; }
+  .topbar { padding: 0 12px; gap: 8px; }
+  .topbar .menu { display: inline-grid; flex: none; }
+  .topbar .sub, .proj-chip { display: none; }
+  .btn .bt { display: none; }
+  .btn.sm { height: 36px; padding: 0 11px; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .int-grid, .split.even { grid-template-columns: 1fr; }
-  .editor { grid-template-columns: 0 minmax(0, 1fr) 0; }
-  .ed-bin, .ed-insp { display: none; }
+  .page { padding: 20px 16px 32px; }
+  input[type=text], input[type=number], input[type=password], input[type=search], select, textarea { font-size: 16px; }
+
+  /* Editor en una columna: vista previa → timeline → ajustes del clip → biblioteca */
   .view.full { overflow: auto; }
-  .flows { grid-template-columns: 0 minmax(0, 1fr) 0; }
-  .fl-insp { display: none; }
+  .editor { display: flex; flex-direction: column; height: auto; min-height: 100%; }
+  .ed-stage { order: 1; }
+  .ed-tl { order: 2; height: 290px; flex: none; }
+  .ed-insp { order: 3; display: block; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .ed-bin { order: 4; display: flex; border-right: 0; border-top: 1px solid var(--line); }
+  .bin-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); max-height: 360px; }
+  .bin-item.aud { grid-column: 1 / -1; }
+  .stage { flex: none; padding: 10px; min-height: 220px; }
+  .stage canvas { max-height: 48vh; }
+  .stage-empty div { padding: 16px; margin: 0 12px; }
+  .stage-bar { flex-wrap: wrap; padding: 8px; }
+  .title-in { flex: 1 1 140px; min-width: 0; max-width: none; }
+  .tl-bar { overflow-x: auto; flex-wrap: nowrap; padding: 6px 8px; }
+  .tl-bar input[type=range] { width: 90px; flex: none; }
+  .tl-body { grid-template-columns: 66px 1fr; }
+  .tl-heads div { padding: 0 8px; font-size: 10px; gap: 4px; }
+
+  /* Flujos en una columna: lienzo → ajustes del agente → registro */
+  .flows { display: flex; flex-direction: column; height: auto; min-height: 100%; }
+  .fl-canvas { height: 62vh; min-height: 380px; flex: none; }
+  .fl-insp { display: block; border-left: 0; border-top: 1px solid var(--line); }
+  .fl-log { height: 230px; flex: none; }
+  .fl-bar { flex-wrap: wrap; }
+  .fl-bar input { flex: 1 1 160px; max-width: none; }
+  .fl-bar .pill { display: none; }
 }
+
+@media (max-width: 700px) {
+  .ex-grid { grid-template-columns: 1fr; }
+  .modal-bg { padding: 10px; place-items: end center; }
+  .modal { max-height: calc(100dvh - 20px); }
+  .modal-h { padding: 14px 10px 10px 16px; }
+  .modal-b { padding: 4px 16px 16px; }
+  .modal-f { padding: 12px 16px max(12px, env(safe-area-inset-bottom)); flex-wrap: wrap; }
+  .modal-f .btn { flex: 1 1 auto; }
+  #toasts { left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); }
+  .toast { min-width: 0; max-width: none; }
+}
+
 @media (max-width: 600px) {
-  .page { padding: 16px; }
-  .hero { padding: 24px; }
+  .hero { padding: 20px 16px; border-radius: 18px; }
   .hero h1 { font-size: 28px; }
-  .mods, .stats, .fmt-pick { grid-template-columns: 1fr 1fr; }
+  .hero p { font-size: 14px; }
+  .flowviz { display: none; }
+  .auto-box { padding: 12px; }
+  .auto-row { grid-template-columns: 1fr; }
+  .stats { gap: 10px; }
+  .stat { padding: 12px; gap: 10px; }
+  .stat .ic { width: 34px; height: 34px; }
+  .stat b { font-size: 18px; }
+  .mods { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .mod { padding: 14px; }
+  .mod p { display: none; }
+  .fmt-pick { grid-template-columns: 1fr 1fr; }
   .grid3 { grid-template-columns: 1fr; }
+  .card { padding: 16px; }
+  .help { padding: 14px; gap: 10px; }
+  .help-ic { display: none; }
+  .projs { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pcard .bd small { display: none; }
+  .img-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .fx-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .fx .bd { flex-wrap: wrap; padding: 8px; }
+  .fx .bd b { flex-basis: 100%; font-size: 12px; }
+  .seg { max-width: 100%; overflow-x: auto; }
+  .seg button { white-space: nowrap; }
+  .aitem { flex-wrap: wrap; }
+  .aitem audio { width: 100%; max-width: none; order: 3; }
+  .aitem > .row { order: 4; width: 100%; justify-content: flex-end; flex-wrap: wrap !important; }
+  .keyrow { flex-wrap: wrap; }
+  .keyrow input { flex: 1 1 100%; }
+  h2.sec-t { margin-top: 24px; }
 }

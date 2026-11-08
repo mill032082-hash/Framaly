@@ -1,0 +1,15 @@
+{
+  "name": "FRAMALY Studio",
+  "short_name": "FRAMALY",
+  "description": "Crea videos con imágenes, voces y agentes de IA, en automático.",
+  "lang": "es",
+  "start_url": "./#/inicio",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c0907",
+  "theme_color": "#110d0a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
