@@ -29,7 +29,7 @@
   }
   function dots() {
     const el = F.$('#apiDots'); if (!el) return;
-    el.innerHTML = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['googleClientId', 'YouTube']].map(([k, n]) => `<a href="#/integraciones" style="color:var(--muted);text-decoration:none"><span class="dot ${F.api.has(k) ? 'ok' : ''}"></span>${n}</a>`).join('');
+    el.innerHTML = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['googleClientId', 'YouTube'], ['@cloud', 'Nube']].map(([k, n]) => `<a href="#/integraciones" style="color:var(--muted);text-decoration:none"><span class="dot ${(k === '@cloud' ? F.cloud?.signedIn() : F.api.has(k)) ? 'ok' : ''}"></span>${n}</a>`).join('');
   }
   /** Menú lateral deslizable en celular */
   function menu(open) {
@@ -120,7 +120,7 @@
     if (window.FRAMALY_DEMO && !F.projects.list.length) { try { await F.seedDemo(); } catch (e) { console.error(e); } }
     sidebar();
     const scrim = document.createElement('div'); scrim.className = 'scrim'; scrim.onclick = () => menu(false); document.body.appendChild(scrim);
-    F.on('settings', dots);
+    F.on('settings', dots); F.on('cloud', dots);
     F.on('projects', () => { const r = ROUTES.find((x) => x.id === (location.hash.replace(/^#\/?/, '') || 'inicio')); if (r && !r.sec) { const chip = F.$('.proj-chip span'); const p = F.projects.current(); if (chip && p) chip.textContent = p.name; } });
     window.addEventListener('hashchange', render);
     // Pedir almacenamiento persistente para que el navegador no borre la biblioteca

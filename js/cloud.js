@@ -1,0 +1,269 @@
+/* FRAMALY — conector de nube con Supabase: cuenta, sincronización de proyectos y biblioteca.
+   Lo local (IndexedDB) sigue siendo la fuente de verdad; la nube es una copia que une tus dispositivos.
+   Las API keys de OpenAI/Claude/ElevenLabs NO se suben nunca. */
+(function () {
+  'use strict';
+  const LIB = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';
+  const BUCKET = 'framaly-media';
+  const C = F.settings.cloud;
+  const LS_LAST = 'framaly.cloud.last', LS_UID = 'framaly.cloud.uid';
+  const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} return null; };
+
+  const st = (F.cloud = {
+    status: 'off', // off | signedout | idle | syncing | error
+    user: null, error: '', progress: '', last: Number(ls(LS_LAST)) || 0,
+  });
+  const set = (p) => { Object.assign(st, p); F.emit('cloud'); };
+  const cfg = () => ({
+    url: (C.url || window.FRAMALY_CLOUD?.url || '').trim().replace(/\/+$/, ''),
+    key: (C.anonKey || window.FRAMALY_CLOUD?.anonKey || '').trim(),
+  });
+  st.configured = () => { const c = cfg(); return /^https:\/\/.+/.test(c.url) && c.key.length > 20; };
+  st.signedIn = () => !!st.user;
+  st.fromFile = () => !C.url && !!window.FRAMALY_CLOUD?.url;
+
+  let client = null, clientSig = '', syncing = false, applying = false, timer = null;
+
+  /* ---------- librería y cliente ---------- */
+  function loadLib() {
+    if (window.supabase?.createClient) return Promise.resolve();
+    return (loadLib.p ||= new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = LIB; s.async = true;
+      s.onload = () => (window.supabase?.createClient ? res() : rej(new Error('No se pudo iniciar la librería de Supabase.')));
+      s.onerror = () => { loadLib.p = null; rej(new Error('No se pudo cargar la librería de Supabase. Revisa tu conexión a internet.')); };
+      document.head.appendChild(s);
+    }));
+  }
+  async function sb() {
+    if (!st.configured()) throw new Error('Primero pega la URL y la clave anon de tu proyecto Supabase.');
+    await loadLib();
+    const c = cfg(), sig = c.url + '|' + c.key;
+    if (client && sig === clientSig) return client;
+    client = window.supabase.createClient(c.url, c.key, {
+      auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'framaly.supabase.auth' },
+    });
+    clientSig = sig;
+    client.auth.onAuthStateChange((ev, session) => {
+      const u = session?.user || null;
+      if (u?.id === st.user?.id && ev !== 'SIGNED_OUT') return;
+      set({ user: u, status: u ? 'idle' : 'signedout', error: '' });
+      if (u) setTimeout(() => st.sync(), 300);
+    });
+    return client;
+  }
+
+  /** Traduce errores técnicos a algo que el usuario pueda resolver */
+  function explain(e) {
+    const m = String(e?.message || e || ''), code = e?.code || '';
+    if (code === '42P01' || code === 'PGRST205' || /schema cache|does not exist|relation .* not exist/i.test(m)) return 'Faltan las tablas en Supabase. Ejecuta el archivo supabase/schema.sql en el SQL Editor de tu proyecto.';
+    if (/bucket not found/i.test(m)) return 'Falta el bucket de archivos. Ejecuta el archivo supabase/schema.sql en el SQL Editor de tu proyecto.';
+    if (/invalid api key|invalid jwt|apikey/i.test(m)) return 'La clave anon no es válida. Cópiala de Supabase → Project Settings → API.';
+    if (/invalid login credentials/i.test(m)) return 'Correo o contraseña incorrectos.';
+    if (/email not confirmed/i.test(m)) return 'Confirma tu correo: te enviamos un enlace al registrarte.';
+    if (/already registered|already been registered/i.test(m)) return 'Ese correo ya tiene cuenta. Usa “Entrar”.';
+    if (/password should be at least/i.test(m)) return 'La contraseña debe tener al menos 6 caracteres.';
+    if (/failed to fetch|networkerror|load failed/i.test(m)) return 'No hay conexión con Supabase. Revisa tu internet y la URL del proyecto.';
+    if (/payload too large|exceeded the maximum allowed size/i.test(m)) return 'Un archivo supera el límite de tamaño de tu plan de Supabase.';
+    return m || 'Error desconocido de Supabase.';
+  }
+  const fail = (e) => { console.error(e); const msg = explain(e); set({ status: st.user ? 'error' : 'signedout', error: msg, progress: '' }); throw new Error(msg); };
+
+  /* ---------- configuración ---------- */
+  st.configure = async (url, anonKey) => {
+    C.url = (url || '').trim().replace(/\/+$/, ''); C.anonKey = (anonKey || '').trim();
+    F.saveSettings();
+    client = null; clientSig = '';
+    if (!st.configured()) { set({ status: 'off', user: null, error: '' }); return; }
+    set({ status: 'signedout', error: '' });
+    await st.init();
+  };
+  st.test = async () => {
+    if (!st.configured()) throw new Error('Pega primero la URL y la clave anon.');
+    const c = cfg();
+    let r;
+    try { r = await fetch(c.url + '/auth/v1/health', { headers: { apikey: c.key } }); } catch (e) { return fail(e); }
+    if (r.status === 401 || r.status === 403) return fail(new Error('invalid api key'));
+    if (!r.ok) return fail(new Error('Supabase respondió ' + r.status + '. Revisa la URL del proyecto.'));
+    if (!st.user) return 'Conexión correcta. Ahora crea tu cuenta o inicia sesión.';
+    const s = await sb();
+    const { error } = await s.from('framaly_projects').select('id').limit(1);
+    if (error) return fail(error);
+    const b = await s.storage.from(BUCKET).list(st.user.id, { limit: 1 });
+    if (b.error) return fail(b.error);
+    return 'Conexión correcta: tablas y almacenamiento listos.';
+  };
+
+  /* ---------- cuenta ---------- */
+  st.init = async () => {
+    if (!st.configured()) { set({ status: 'off' }); return; }
+    try {
+      const s = await sb();
+      const { data, error } = await s.auth.getSession();
+      if (error) throw error;
+      if (/[?&]code=/.test(location.search)) history.replaceState(null, '', location.pathname + location.hash);
+      set({ user: data.session?.user || null, status: data.session ? 'idle' : 'signedout', error: '' });
+      if (data.session) setTimeout(() => st.sync(), 800);
+    } catch (e) { set({ status: 'error', error: explain(e) }); }
+  };
+  st.signUp = async (email, password) => {
+    const s = await sb();
+    const { data, error } = await s.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } });
+    if (error) return fail(error);
+    if (!data.session) return 'Cuenta creada. Revisa tu correo y confirma el enlace; luego pulsa “Entrar”.';
+    return 'Cuenta creada y sesión iniciada.';
+  };
+  st.signIn = async (email, password) => {
+    const s = await sb();
+    const { error } = await s.auth.signInWithPassword({ email, password });
+    if (error) return fail(error);
+    return 'Sesión iniciada.';
+  };
+  st.signInGoogle = async () => {
+    const s = await sb();
+    const { error } = await s.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+    if (error) return fail(error);
+  };
+  st.signOut = async () => {
+    const s = await sb();
+    await s.auth.signOut();
+    set({ user: null, status: 'signedout', progress: '' });
+  };
+
+  /* ---------- borrados pendientes ---------- */
+  st.tomb = (kind, id) => {
+    if (applying || !st.configured()) return;
+    (C.tomb ||= []).push({ k: kind, id, t: Date.now() });
+    F.saveSettings();
+    schedule();
+  };
+
+  /* ---------- sincronización ---------- */
+  const mTime = (m) => m.updated || m.created || 0;
+  const strip = (m) => ({ id: m.id, type: m.type, name: m.name, source: m.source || 'upload', meta: m.meta || {}, size: m.size || m.blob?.size || 0, duration: m.duration ?? null, mime: m.blob?.type || '', created: m.created || 0, updated: mTime(m) });
+
+  async function pending(s, uid) {
+    const left = [];
+    for (const t of C.tomb || []) {
+      const now = Date.now();
+      const tbl = t.k === 'projects' ? 'framaly_projects' : 'framaly_media';
+      const { error } = await s.from(tbl).upsert({ user_id: uid, id: t.id, updated: now, deleted: true }, { onConflict: 'user_id,id' });
+      if (error) { left.push(t); continue; }
+      if (t.k === 'media') await s.storage.from(BUCKET).remove([uid + '/' + t.id]).catch(() => {});
+    }
+    C.tomb = left; F.saveSettings();
+  }
+
+  async function syncMedia(s, uid, log) {
+    const { data: rows, error } = await s.from('framaly_media').select('*').eq('user_id', uid);
+    if (error) throw error;
+    const remote = new Map(rows.map((r) => [r.id, r]));
+    const local = new Map(F.media.list.map((m) => [m.id, m]));
+    const up = [], down = [], meta = [], drop = [];
+    for (const m of local.values()) {
+      const r = remote.get(m.id);
+      if (!r) up.push(m);
+      else if (r.deleted) { if (mTime(m) > r.updated) up.push(m); else drop.push(m); }
+      else if (mTime(m) > r.updated) meta.push(m);
+      else if (r.updated > mTime(m)) { m.name = r.name; m.meta = r.meta || m.meta; m.updated = r.updated; applying = true; await F.db.put('media', m); }
+    }
+    for (const r of remote.values()) if (!r.deleted && !local.has(r.id)) down.push(r);
+
+    let n = 0; const total = up.length + down.length;
+    const tick = (what) => { n++; set({ progress: `${what} ${n}/${total} archivo(s)…` }); };
+    await F.pool(up, 3, async (m) => {
+      const up1 = await s.storage.from(BUCKET).upload(uid + '/' + m.id, m.blob, { upsert: true, contentType: m.blob.type || 'application/octet-stream' });
+      if (up1.error) throw up1.error;
+      const { error: e2 } = await s.from('framaly_media').upsert({ user_id: uid, ...strip(m), deleted: false }, { onConflict: 'user_id,id' });
+      if (e2) throw e2;
+      tick('Subiendo'); log.up++;
+    });
+    for (const m of meta) {
+      const { error: e3 } = await s.from('framaly_media').upsert({ user_id: uid, ...strip(m), deleted: false }, { onConflict: 'user_id,id' });
+      if (e3) throw e3;
+    }
+    await F.pool(down, 3, async (r) => {
+      const d = await s.storage.from(BUCKET).download(uid + '/' + r.id);
+      if (d.error) throw d.error;
+      const m = { id: r.id, type: r.type, name: r.name, source: r.source, meta: r.meta || {}, size: r.size, duration: r.duration ?? undefined, created: r.created, updated: r.updated, blob: d.data };
+      applying = true;
+      await F.db.put('media', m); F.media.list.push(m);
+      tick('Bajando'); log.down++;
+    });
+    applying = true;
+    for (const m of drop) { await F.media.remove(m.id); log.down++; }
+    if (log.down || drop.length || meta.length) { F.media.list.sort((a, b) => b.created - a.created); F.emit('media'); }
+  }
+
+  async function syncProjects(s, uid, log) {
+    const { data: rows, error } = await s.from('framaly_projects').select('id,updated,deleted').eq('user_id', uid);
+    if (error) throw error;
+    const remote = new Map(rows.map((r) => [r.id, r]));
+    const local = new Map(F.projects.list.map((p) => [p.id, p]));
+    const up = [], down = [], drop = [];
+    for (const p of local.values()) {
+      const r = remote.get(p.id);
+      if (!r) up.push(p);
+      else if (r.deleted) { if (p.updated > r.updated) up.push(p); else drop.push(p); }
+      else if (p.updated > r.updated) up.push(p);
+      else if (r.updated > p.updated) down.push(r.id);
+    }
+    for (const r of remote.values()) if (!r.deleted && !local.has(r.id)) down.push(r.id);
+
+    for (const p of up) {
+      const { error: e } = await s.from('framaly_projects').upsert({ user_id: uid, id: p.id, data: JSON.parse(JSON.stringify(p)), updated: p.updated, deleted: false }, { onConflict: 'user_id,id' });
+      if (e) throw e;
+      log.up++;
+    }
+    if (down.length) {
+      const { data: full, error: e } = await s.from('framaly_projects').select('id,data,updated').eq('user_id', uid).in('id', down);
+      if (e) throw e;
+      applying = true;
+      for (const r of full) { await F.db.put('projects', { ...r.data, id: r.id, updated: r.updated }); log.down++; }
+    }
+    applying = true;
+    for (const p of drop) { await F.projects.remove(p.id); log.down++; }
+    if (down.length || drop.length) { await F.projects.load(); F.emit('projects'); F.emit('project-changed', F.settings.currentProject); }
+  }
+
+  /** Sincroniza ahora. manual=true muestra errores al llamador. */
+  st.sync = async ({ manual = false } = {}) => {
+    if (syncing || !st.user) return;
+    syncing = true; clearTimeout(timer);
+    const log = { up: 0, down: 0 };
+    set({ status: 'syncing', error: '', progress: 'Conectando…' });
+    try {
+      const s = await sb();
+      const uid = st.user.id;
+      const prev = ls(LS_UID);
+      if (prev && prev !== uid && (F.media.list.length || F.projects.list.length)) {
+        syncing = false;
+        const ok = await F.confirm('Datos de otra cuenta', 'Este navegador tiene proyectos y archivos que se sincronizaron con otra cuenta. Si continúas, se subirán también a esta cuenta.', 'Continuar', false);
+        if (!ok) { await st.signOut(); return; }
+        syncing = true;
+      }
+      ls(LS_UID, uid);
+      await pending(s, uid);
+      await syncMedia(s, uid, log);
+      await syncProjects(s, uid, log);
+      st.last = Date.now(); ls(LS_LAST, String(st.last));
+      set({ status: 'idle', progress: '', error: '' });
+      if (manual) F.toast(log.up || log.down ? `Sincronizado: ${log.up} subido(s), ${log.down} descargado(s)` : 'Todo está al día', 'ok');
+    } catch (e) {
+      set({ status: 'error', progress: '', error: explain(e) });
+      if (manual) throw new Error(explain(e)); else console.error(e);
+    } finally { syncing = false; applying = false; }
+  };
+
+  function schedule() {
+    if (!st.user || !C.auto || syncing || applying) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => st.sync(), 5000);
+  }
+  F.on('projects', schedule);
+  F.on('media', schedule);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && st.user && C.auto && Date.now() - st.last > 60000) st.sync(); });
+
+  st.label = () => ({ off: 'Sin configurar', signedout: 'Sin sesión', idle: 'Conectado', syncing: 'Sincronizando…', error: 'Error' }[st.status]);
+  st.init();
+})();

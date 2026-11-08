@@ -26,6 +26,21 @@ Cada dispositivo guarda su propia biblioteca y sus propias claves de API.
 Si subes una canción a la *Biblioteca*, se usa automáticamente como música de fondo.
 Cada sección tiene instrucciones paso a paso arriba y en el botón **Instrucciones**.
 
+## Nube con Supabase (opcional)
+Une tus dispositivos: tus proyectos y tu biblioteca se sincronizan entre PC y celular con tu cuenta. Todo sigue funcionando sin nube; esto es un extra.
+
+Se configura una sola vez:
+1. Crea un proyecto gratis en **supabase.com**.
+2. En **SQL Editor → New query** pega el contenido de **`supabase/schema.sql`** y pulsa **Run** (crea las tablas, el almacenamiento privado y la seguridad por usuario).
+3. En **Project Settings → API** copia el **Project URL** y la clave **anon public**. Pégalos en **Integraciones API → Supabase · Nube** y pulsa **Guardar y probar**. Nunca uses la clave `service_role`.
+4. En **Authentication → URL Configuration** añade como Site URL y Redirect URL la dirección donde publicas la app (por ejemplo tu dominio de Vercel).
+5. Opcional, para entrar con Google: **Authentication → Providers → Google**.
+6. Crea tu cuenta (correo y contraseña, o Google) y pulsa **Sincronizar ahora**.
+
+Para que cada dispositivo nuevo ya venga conectado, escribe la URL y la clave anon en **`js/config.js`** y vuelve a publicar (Vercel). Son datos públicos; la seguridad la dan las reglas del SQL.
+
+Cómo se sincroniza: gana el cambio más reciente. Borrar algo en un dispositivo lo borra en los demás. Tus claves de OpenAI, Claude y ElevenLabs **no se suben nunca**: siguen solo en cada navegador.
+
 ## Configuración (sección «Integraciones API»)
 | Servicio | Para qué | Dónde se consigue |
 |---|---|---|
@@ -33,6 +48,7 @@ Cada sección tiene instrucciones paso a paso arriba y en el botón **Instruccio
 | Anthropic (Claude) | Guiones y SEO | console.anthropic.com → API keys |
 | ElevenLabs (opcional) | Voces premium | elevenlabs.io → Profile → API key |
 | Google OAuth Client ID (opcional) | Subir a YouTube | console.cloud.google.com (los pasos están en la app) |
+| Supabase (opcional) | Cuenta y sincronización entre dispositivos | supabase.com (ver «Nube con Supabase») |
 
 Las claves se guardan solo en tu navegador.
 

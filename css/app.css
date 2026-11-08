@@ -124,6 +124,7 @@ input[type=checkbox] { accent-color: var(--or); width: 16px; height: 16px; }
 .tag { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 20px; background: var(--panel3); color: var(--muted); }
 .tag.or { background: var(--or-soft); color: var(--or2); }
 .tag.ok { background: rgba(60, 207, 145, .12); color: var(--ok); }
+.tag.err { background: rgba(255, 93, 93, .12); color: var(--err); }
 kbd { font: 11px var(--font); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line2); background: var(--panel2); color: var(--muted); }
 
 /* ============ Cards ============ */

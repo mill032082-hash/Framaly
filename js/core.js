@@ -44,10 +44,11 @@
     currentProject: null,
     customFilters: [],
     flows: [],
+    cloud: { url: '', anonKey: '', auto: true, tomb: [] },
   };
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem('framaly.settings') || '{}'); } catch (e) { saved = {}; }
-  F.settings = { ...DEF, ...saved, keys: { ...DEF.keys, ...(saved.keys || {}) }, models: { ...DEF.models, ...(saved.models || {}) } };
+  F.settings = { ...DEF, ...saved, keys: { ...DEF.keys, ...(saved.keys || {}) }, models: { ...DEF.models, ...(saved.models || {}) }, cloud: { ...DEF.cloud, ...(saved.cloud || {}) } };
   F.saveSettings = () => { try { localStorage.setItem('framaly.settings', JSON.stringify(F.settings)); } catch (e) {} F.emit('settings'); };
 
   /* ---------- iconos (trazos estilo lucide) ---------- */
@@ -146,9 +147,10 @@
       if (out.length) F.toast(`${out.length} archivo(s) añadidos a la biblioteca`, 'ok');
       return out;
     },
-    async rename(id, name) { const m = this.byId(id); if (!m) return; m.name = name; await F.db.put('media', m); F.emit('media'); },
+    async rename(id, name) { const m = this.byId(id); if (!m) return; m.name = name; m.updated = Date.now(); await F.db.put('media', m); F.emit('media'); },
     async remove(id) {
       await F.db.del('media', id);
+      F.cloud?.tomb('media', id);
       this.list = this.list.filter((m) => m.id !== id);
       if (this.urls.has(id)) { URL.revokeObjectURL(this.urls.get(id)); this.urls.delete(id); }
       this.imgs.delete(id); this.bufs.delete(id);
@@ -213,6 +215,7 @@
     },
     async remove(id) {
       await F.db.del('projects', id);
+      F.cloud?.tomb('projects', id);
       this.list = this.list.filter((p) => p.id !== id);
       if (F.settings.currentProject === id) this.setCurrent(this.list[0]?.id || null);
       F.emit('projects');
