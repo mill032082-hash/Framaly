@@ -60,6 +60,7 @@
     if (code === '42P01' || code === 'PGRST205' || /schema cache|does not exist|relation .* not exist/i.test(m)) return 'La base de datos todavía no está preparada. Avisa a quien administra la plataforma.';
     if (/bucket not found/i.test(m)) return 'El almacenamiento de archivos todavía no está preparado. Avisa a quien administra la plataforma.';
     if (/invalid api key|invalid jwt|apikey/i.test(m)) return 'La conexión con la base de datos no está bien configurada. Avisa a quien administra la plataforma.';
+    if (/provider is not enabled|unsupported provider/i.test(m)) return 'El acceso con Google todavía no está activado. Avisa a quien administra la plataforma.';
     if (/invalid login credentials/i.test(m)) return 'Correo o contraseña incorrectos.';
     if (/email not confirmed/i.test(m)) return 'Confirma tu correo: te enviamos un enlace al registrarte.';
     if (/already registered|already been registered/i.test(m)) return 'Ese correo ya tiene cuenta. Usa “Entrar”.';

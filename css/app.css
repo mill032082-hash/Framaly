@@ -541,3 +541,7 @@ kbd { font: 11px var(--font); padding: 1px 6px; border-radius: 5px; border: 1px 
 .acct small { color: var(--muted); display: block; } .acct small.bad { color: var(--err); }
 .acct:not(:empty) { margin-top: auto; }
 .acct:not(:empty) + .side-foot { margin-top: 0; }
+.gate-card .gbtn { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 4px; background: #fff; color: #1f1f1f; border-color: #fff; font-weight: 600; }
+.gate-card .gbtn:hover { background: #f1f1f1; }
+.or-line { display: flex; align-items: center; gap: 12px; margin: 16px 0 6px; color: var(--dim); font-size: 12px; }
+.or-line::before, .or-line::after { content: ""; flex: 1; height: 1px; background: var(--line2); }

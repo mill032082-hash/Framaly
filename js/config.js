@@ -7,5 +7,5 @@
 window.FRAMALY_CLOUD = {
   url: 'https://gscnmmphitmzdwxvmwzr.supabase.co',
   anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzY25tbXBoaXRtemR3eHZtd3pyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzMDM1NzUsImV4cCI6MjEwNTg3OTU3NX0.fiWh6o4Fg0fZqK2sIscpYmuL3qZcY65LSHvvWL5xaYQ',
-  google: false, // pon true solo si activaste Google en Supabase → Authentication → Providers
+  google: true, // botón "Continuar con Google". Funciona cuando Google está activado en Supabase → Authentication → Providers
 };
