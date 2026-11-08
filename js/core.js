@@ -44,7 +44,7 @@
     currentProject: null,
     customFilters: [],
     flows: [],
-    cloud: { url: '', anonKey: '', auto: true, tomb: [] },
+    cloud: { tomb: [] },
   };
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem('framaly.settings') || '{}'); } catch (e) { saved = {}; }

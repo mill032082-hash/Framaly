@@ -590,20 +590,6 @@
         ${card('googleClientId', I('youtube'), 'linear-gradient(135deg,#ff3d3d,#c40000)', 'YouTube · Google', 'Subida directa a tu canal', ['Subir videos', 'Miniaturas', 'Metadatos'], `<details style="margin-top:12px" class="small muted"><summary style="cursor:pointer;color:var(--or2)">¿Cómo obtengo el Client ID?</summary><ol style="padding-left:18px;line-height:1.8">
           <li>Entra a <b>console.cloud.google.com</b> y crea un proyecto.</li><li>En “APIs y servicios” habilita <b>YouTube Data API v3</b>.</li><li>Configura la pantalla de consentimiento OAuth (tipo Externo) y añádete como usuario de prueba.</li><li>Credenciales → Crear → <b>ID de cliente OAuth</b> → tipo “Aplicación web”.</li><li>En “Orígenes de JavaScript autorizados” añade <b>http://localhost:5577</b>.</li><li>Copia el Client ID aquí y abre FRAMALY con <b>Iniciar FRAMALY.bat</b>.</li></ol></details>`)}
       </div>
-      <div class="card int-card cloud-card" style="margin-top:16px">
-        <div class="hd"><div class="lg" style="background:linear-gradient(135deg,#3ecf8e,#1f8f5f)">${I('upload')}</div><div style="flex:1"><b>Supabase · Nube</b><small>Cuenta y sincronización entre tus dispositivos</small></div><span class="tag" id="cTag"></span></div>
-        <div class="grid2"><div><label class="lbl">Project URL</label><input type="text" id="cUrl" value="${F.esc(S.cloud.url)}" placeholder="${F.esc(window.FRAMALY_CLOUD?.url || 'https://xxxxxxxx.supabase.co')}" autocomplete="off" spellcheck="false"></div>
-          <div><label class="lbl">Clave anon public</label><div class="keyrow"><input type="password" id="cKey" value="${F.esc(S.cloud.anonKey)}" placeholder="${window.FRAMALY_CLOUD?.anonKey ? 'Definida en js/config.js' : 'eyJhbGciOi…'}" autocomplete="off" spellcheck="false"><button class="icon-btn" id="cEye" title="Mostrar">${I('eye')}</button><button class="btn" id="cSave">Guardar y probar</button></div></div></div>
-        <div id="cDyn" style="margin-top:14px"></div>
-        <details style="margin-top:12px" class="small muted"><summary style="cursor:pointer;color:var(--or2)">¿Cómo lo conecto? (5 pasos, una sola vez)</summary><ol style="padding-left:18px;line-height:1.8">
-          <li>Crea un proyecto gratis en <b>supabase.com</b>.</li>
-          <li>Abre <b>SQL Editor → New query</b>, pega el contenido de <b>supabase/schema.sql</b> (está en este repositorio) y pulsa <b>Run</b>.</li>
-          <li>En <b>Project Settings → API</b> copia el <b>Project URL</b> y la clave <b>anon public</b> y pégalos arriba. <b>Nunca</b> uses la clave service_role.</li>
-          <li>En <b>Authentication → URL Configuration</b> pon como <b>Site URL</b> y en <b>Redirect URLs</b> esta dirección: <code>${F.esc(location.origin)}</code></li>
-          <li>Opcional, para entrar con Google: <b>Authentication → Providers → Google</b> y pega tu Client ID y Secret de Google Cloud.</li></ol>
-          <p>Para que todos tus dispositivos vengan ya conectados, escribe la URL y la clave anon en <b>js/config.js</b> y vuelve a publicar la app.</p></details>
-        <div class="feat"><span class="tag">Proyectos</span><span class="tag">Biblioteca</span><span class="tag">Login con correo o Google</span><span class="tag">Tus claves de IA no se suben</span></div>
-      </div>
       <div class="split even" style="margin-top:16px">
         <div class="card"><h3>${I('bot')} Preferencias de agentes</h3><label class="lbl">Proveedor de texto preferido</label><div class="seg" id="tp"><button data-v="anthropic">Claude (Anthropic)</button><button data-v="openai">OpenAI</button></div><p class="hint">Si el preferido no tiene clave, se usa el otro automáticamente.</p></div>
         <div class="card"><h3>${I('folder')} Datos</h3><p class="desc" id="dUse">Calculando almacenamiento…</p><div class="row"><button class="btn danger" id="dClrM">${I('trash')} Vaciar biblioteca</button><button class="btn danger" id="dClrAll">${I('trash')} Borrar todo</button></div></div>
@@ -627,44 +613,8 @@
         F.busy(t, false);
       }
     });
-    /* ----- Supabase ----- */
-    const CL = F.cloud;
-    const cTagCls = { off: '', signedout: '', idle: 'ok', syncing: 'or', error: 'err' };
-    const renderCloud = () => {
-      const keep = {}; ['cEmail', 'cPass'].forEach((id) => { const i = q('#' + id); if (i) keep[id] = i.value; });
-      const focus = document.activeElement?.id;
-      const tag = q('#cTag'); tag.className = 'tag ' + (cTagCls[CL.status] || ''); tag.textContent = CL.label();
-      let h = '';
-      if (!CL.configured()) h = `<p class="small muted" style="margin:0">Pega arriba la URL y la clave de tu proyecto para activar la nube. Sin esto, FRAMALY sigue funcionando solo en este dispositivo.</p>`;
-      else if (!CL.signedIn()) h = `<div class="grid2"><div><label class="lbl">Correo</label><input type="email" id="cEmail" autocomplete="email" placeholder="tu@correo.com"></div><div><label class="lbl">Contraseña</label><input type="password" id="cPass" autocomplete="current-password" placeholder="Mínimo 6 caracteres"></div></div>
-        <div class="row" style="margin-top:10px"><button class="btn primary" id="cIn">Entrar</button><button class="btn" id="cUp">Crear cuenta</button><button class="btn" id="cGo">Entrar con Google</button></div>`;
-      else h = `<div class="row" style="gap:10px;flex-wrap:wrap"><span class="small"><b>${F.esc(CL.user.email || 'Sesión iniciada')}</b><br><span class="muted">${CL.last ? 'Última sincronización: ' + F.ago(CL.last) : 'Aún no sincronizado'}${CL.progress ? ' · ' + F.esc(CL.progress) : ''}</span></span><span class="grow"></span>
-        <label class="check" style="margin:0"><input type="checkbox" id="cAuto" ${S.cloud.auto ? 'checked' : ''}> Sincronizar solo</label>
-        <button class="btn primary" id="cSync" ${CL.status === 'syncing' ? 'disabled' : ''}>${I('upload')} Sincronizar ahora</button><button class="btn" id="cOut">Cerrar sesión</button></div>`;
-      if (CL.error) h += `<div class="notice" style="margin-top:12px">${I('shield')}<div>${F.esc(CL.error)}</div></div>`;
-      q('#cDyn').innerHTML = h;
-      for (const [id, v] of Object.entries(keep)) { const i = q('#' + id); if (i) i.value = v; }
-      if (focus && q('#' + focus)) q('#' + focus).focus();
-    };
-    renderCloud();
-    const offCloud = F.on('cloud', renderCloud);
-    const run = async (btn, label, fn) => { F.busy(btn, true, label); try { const m = await fn(); if (m) F.toast(m, 'ok'); } catch (err) { F.toast(err.message, 'error'); } if (btn.isConnected) F.busy(btn, false); renderCloud(); };
-    q('#cEye').onclick = () => { const i = q('#cKey'); i.type = i.type === 'password' ? 'text' : 'password'; };
-    q('#cSave').onclick = (e) => run(e.currentTarget, 'Probando…', async () => { await CL.configure(q('#cUrl').value, q('#cKey').value); return CL.test(); });
-    q('#cDyn').addEventListener('click', (e) => {
-      const b = e.target.closest('button'); if (!b) return;
-      const em = () => q('#cEmail').value.trim(), pw = () => q('#cPass').value;
-      const need = () => { if (!em() || !pw()) { F.toast('Escribe tu correo y contraseña'); return false; } return true; };
-      if (b.id === 'cIn' && need()) run(b, 'Entrando…', () => CL.signIn(em(), pw()));
-      else if (b.id === 'cUp' && need()) run(b, 'Creando…', () => CL.signUp(em(), pw()));
-      else if (b.id === 'cGo') run(b, 'Abriendo Google…', () => CL.signInGoogle());
-      else if (b.id === 'cSync') run(b, 'Sincronizando…', async () => { await CL.sync({ manual: true }); });
-      else if (b.id === 'cOut') run(b, '', () => CL.signOut());
-    });
-    q('#cDyn').addEventListener('change', (e) => { if (e.target.id === 'cAuto') { S.cloud.auto = e.target.checked; F.saveSettings(); } });
     navigator.storage?.estimate?.().then((x) => (q('#dUse').textContent = `${F.media.list.length} archivos y ${F.projects.list.length} proyectos · ${F.bytes(x.usage || 0)} usados de ${F.bytes(x.quota || 0)}`)).catch(() => {});
     q('#dClrM').onclick = async () => { if (!(await F.confirm('Vaciar biblioteca', 'Se eliminarán todas las imágenes y audios. No se puede deshacer.', 'Vaciar'))) return; F.media.list.forEach((m) => F.cloud?.tomb('media', m.id)); await F.db.clear('media'); F.media.list = []; F.emit('media'); F.toast('Biblioteca vaciada'); F.router.reload(); };
     q('#dClrAll').onclick = async () => { if (!(await F.confirm('Borrar todo', 'Se eliminarán proyectos, biblioteca y ajustes de este dispositivo (incluidas tus API keys y la sesión de la nube). La copia que ya esté en Supabase no se borra. No se puede deshacer.', 'Borrar todo'))) return; await F.db.clear('media'); await F.db.clear('projects'); Object.keys(localStorage).filter((k) => k.startsWith('framaly.')).forEach((k) => localStorage.removeItem(k)); location.reload(); };
-    return offCloud;
   };
 })();

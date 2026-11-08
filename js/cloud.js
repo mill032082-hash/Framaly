@@ -14,13 +14,14 @@
     user: null, error: '', progress: '', last: Number(ls(LS_LAST)) || 0,
   });
   const set = (p) => { Object.assign(st, p); F.emit('cloud'); };
+  /* La conexión viene de js/config.js: la persona usuaria no ve ni toca nada técnico */
   const cfg = () => ({
-    url: (C.url || window.FRAMALY_CLOUD?.url || '').trim().replace(/\/+$/, ''),
-    key: (C.anonKey || window.FRAMALY_CLOUD?.anonKey || '').trim(),
+    url: String(window.FRAMALY_CLOUD?.url || '').trim().replace(/\/+$/, ''),
+    key: String(window.FRAMALY_CLOUD?.anonKey || '').trim(),
   });
   st.configured = () => { const c = cfg(); return /^https:\/\/.+/.test(c.url) && c.key.length > 20; };
   st.signedIn = () => !!st.user;
-  st.fromFile = () => !C.url && !!window.FRAMALY_CLOUD?.url;
+  st.google = () => !!window.FRAMALY_CLOUD?.google;
 
   let client = null, clientSig = '', syncing = false, applying = false, timer = null;
 
@@ -31,12 +32,12 @@
       const s = document.createElement('script');
       s.src = LIB; s.async = true;
       s.onload = () => (window.supabase?.createClient ? res() : rej(new Error('No se pudo iniciar la librería de Supabase.')));
-      s.onerror = () => { loadLib.p = null; rej(new Error('No se pudo cargar la librería de Supabase. Revisa tu conexión a internet.')); };
+      s.onerror = () => { loadLib.p = null; rej(new Error('No se pudo conectar. Revisa tu internet e inténtalo de nuevo.')); };
       document.head.appendChild(s);
     }));
   }
   async function sb() {
-    if (!st.configured()) throw new Error('Primero pega la URL y la clave anon de tu proyecto Supabase.');
+    if (!st.configured()) throw new Error('La nube no está configurada en esta plataforma.');
     await loadLib();
     const c = cfg(), sig = c.url + '|' + c.key;
     if (client && sig === clientSig) return client;
@@ -56,43 +57,18 @@
   /** Traduce errores técnicos a algo que el usuario pueda resolver */
   function explain(e) {
     const m = String(e?.message || e || ''), code = e?.code || '';
-    if (code === '42P01' || code === 'PGRST205' || /schema cache|does not exist|relation .* not exist/i.test(m)) return 'Faltan las tablas en Supabase. Ejecuta el archivo supabase/schema.sql en el SQL Editor de tu proyecto.';
-    if (/bucket not found/i.test(m)) return 'Falta el bucket de archivos. Ejecuta el archivo supabase/schema.sql en el SQL Editor de tu proyecto.';
-    if (/invalid api key|invalid jwt|apikey/i.test(m)) return 'La clave anon no es válida. Cópiala de Supabase → Project Settings → API.';
+    if (code === '42P01' || code === 'PGRST205' || /schema cache|does not exist|relation .* not exist/i.test(m)) return 'La base de datos todavía no está preparada. Avisa a quien administra la plataforma.';
+    if (/bucket not found/i.test(m)) return 'El almacenamiento de archivos todavía no está preparado. Avisa a quien administra la plataforma.';
+    if (/invalid api key|invalid jwt|apikey/i.test(m)) return 'La conexión con la base de datos no está bien configurada. Avisa a quien administra la plataforma.';
     if (/invalid login credentials/i.test(m)) return 'Correo o contraseña incorrectos.';
     if (/email not confirmed/i.test(m)) return 'Confirma tu correo: te enviamos un enlace al registrarte.';
     if (/already registered|already been registered/i.test(m)) return 'Ese correo ya tiene cuenta. Usa “Entrar”.';
     if (/password should be at least/i.test(m)) return 'La contraseña debe tener al menos 6 caracteres.';
-    if (/failed to fetch|networkerror|load failed/i.test(m)) return 'No hay conexión con Supabase. Revisa tu internet y la URL del proyecto.';
-    if (/payload too large|exceeded the maximum allowed size/i.test(m)) return 'Un archivo supera el límite de tamaño de tu plan de Supabase.';
-    return m || 'Error desconocido de Supabase.';
+    if (/failed to fetch|networkerror|load failed/i.test(m)) return 'No hay conexión. Revisa tu internet e inténtalo de nuevo.';
+    if (/payload too large|exceeded the maximum allowed size/i.test(m)) return 'Un archivo es demasiado grande para guardarlo en la nube.';
+    return m || 'Ocurrió un error inesperado. Inténtalo de nuevo.';
   }
   const fail = (e) => { console.error(e); const msg = explain(e); set({ status: st.user ? 'error' : 'signedout', error: msg, progress: '' }); throw new Error(msg); };
-
-  /* ---------- configuración ---------- */
-  st.configure = async (url, anonKey) => {
-    C.url = (url || '').trim().replace(/\/+$/, ''); C.anonKey = (anonKey || '').trim();
-    F.saveSettings();
-    client = null; clientSig = '';
-    if (!st.configured()) { set({ status: 'off', user: null, error: '' }); return; }
-    set({ status: 'signedout', error: '' });
-    await st.init();
-  };
-  st.test = async () => {
-    if (!st.configured()) throw new Error('Pega primero la URL y la clave anon.');
-    const c = cfg();
-    let r;
-    try { r = await fetch(c.url + '/auth/v1/health', { headers: { apikey: c.key } }); } catch (e) { return fail(e); }
-    if (r.status === 401 || r.status === 403) return fail(new Error('invalid api key'));
-    if (!r.ok) return fail(new Error('Supabase respondió ' + r.status + '. Revisa la URL del proyecto.'));
-    if (!st.user) return 'Conexión correcta. Ahora crea tu cuenta o inicia sesión.';
-    const s = await sb();
-    const { error } = await s.from('framaly_projects').select('id').limit(1);
-    if (error) return fail(error);
-    const b = await s.storage.from(BUCKET).list(st.user.id, { limit: 1 });
-    if (b.error) return fail(b.error);
-    return 'Conexión correcta: tablas y almacenamiento listos.';
-  };
 
   /* ---------- cuenta ---------- */
   st.init = async () => {
@@ -256,14 +232,14 @@
   };
 
   function schedule() {
-    if (!st.user || !C.auto || syncing || applying) return;
+    if (!st.user || syncing || applying) return;
     clearTimeout(timer);
     timer = setTimeout(() => st.sync(), 5000);
   }
   F.on('projects', schedule);
   F.on('media', schedule);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && st.user && C.auto && Date.now() - st.last > 60000) st.sync(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && st.user && Date.now() - st.last > 60000) st.sync(); });
 
   st.label = () => ({ off: 'Sin configurar', signedout: 'Sin sesión', idle: 'Conectado', syncing: 'Sincronizando…', error: 'Error' }[st.status]);
-  st.init();
+  st.ready = st.init();
 })();

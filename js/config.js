@@ -1,9 +1,11 @@
-/* FRAMALY — configuración de nube (opcional).
-   Si rellenas estos dos valores, TODOS los dispositivos que abran la app ya vienen conectados
-   a tu Supabase: solo tendrán que iniciar sesión.
-   Son datos PÚBLICOS (Supabase → Project Settings → API): "Project URL" y la clave "anon public".
-   NUNCA pongas aquí la clave "service_role". La seguridad la da el SQL de supabase/schema.sql. */
+/* FRAMALY — conexión con la base de datos (la pone el dueño de la plataforma, UNA sola vez).
+   Las personas que usen la app NO ven ni configuran nada: solo inician sesión.
+   Supabase → Project Settings → API:
+     url     = "Project URL"
+     anonKey = clave "anon public"   (es pública por diseño; NUNCA pongas la "service_role")
+   Si los dejas vacíos, la app funciona sin cuentas y guarda todo solo en el dispositivo. */
 window.FRAMALY_CLOUD = {
-  url: '',      // ej: https://abcdefghijk.supabase.co
-  anonKey: '',  // ej: eyJhbGciOi... (clave anon public)
+  url: '',
+  anonKey: '',
+  google: false, // pon true solo si activaste Google en Supabase → Authentication → Providers
 };

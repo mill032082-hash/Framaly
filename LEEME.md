@@ -26,20 +26,20 @@ Cada dispositivo guarda su propia biblioteca y sus propias claves de API.
 Si subes una canción a la *Biblioteca*, se usa automáticamente como música de fondo.
 Cada sección tiene instrucciones paso a paso arriba y en el botón **Instrucciones**.
 
-## Nube con Supabase (opcional)
-Une tus dispositivos: tus proyectos y tu biblioteca se sincronizan entre PC y celular con tu cuenta. Todo sigue funcionando sin nube; esto es un extra.
+## Cuentas y base de datos (Supabase)
+La plataforma trae **inicio de sesión y base de datos integrados**. Las personas que la usen solo ven una pantalla de «Inicia sesión» (correo y contraseña); no configuran nada. Sus proyectos y su biblioteca se guardan en su cuenta y aparecen en cualquier dispositivo (PC, celular).
 
-Se configura una sola vez:
+**Lo prepara el administrador una sola vez:**
 1. Crea un proyecto gratis en **supabase.com**.
-2. En **SQL Editor → New query** pega el contenido de **`supabase/schema.sql`** y pulsa **Run** (crea las tablas, el almacenamiento privado y la seguridad por usuario).
-3. En **Project Settings → API** copia el **Project URL** y la clave **anon public**. Pégalos en **Integraciones API → Supabase · Nube** y pulsa **Guardar y probar**. Nunca uses la clave `service_role`.
-4. En **Authentication → URL Configuration** añade como Site URL y Redirect URL la dirección donde publicas la app (por ejemplo tu dominio de Vercel).
-5. Opcional, para entrar con Google: **Authentication → Providers → Google**.
-6. Crea tu cuenta (correo y contraseña, o Google) y pulsa **Sincronizar ahora**.
+2. **SQL Editor → New query**: pega el contenido de **`supabase/schema.sql`** y pulsa **Run**.
+3. **Project Settings → API**: copia el **Project URL** y la clave **anon public** y escríbelos en **`js/config.js`**. Nunca uses la clave `service_role`.
+4. **Authentication → URL Configuration**: pon la dirección donde publicas la app (por ejemplo tu dominio de Vercel) como Site URL y Redirect URL.
+5. **Authentication → Providers → Email**: desactiva **Confirm email** para que las personas entren al crear su cuenta sin revisar el correo.
+6. Publica de nuevo (Vercel). Listo.
 
-Para que cada dispositivo nuevo ya venga conectado, escribe la URL y la clave anon en **`js/config.js`** y vuelve a publicar (Vercel). Son datos públicos; la seguridad la dan las reglas del SQL.
+**Dar acceso a solo dos personas:** cuando ellas ya hayan creado su cuenta, en **Authentication → Sign In / Providers** desactiva **Allow new users to sign up**. Así nadie más podrá registrarse.
 
-Cómo se sincroniza: gana el cambio más reciente. Borrar algo en un dispositivo lo borra en los demás. Tus claves de OpenAI, Claude y ElevenLabs **no se suben nunca**: siguen solo en cada navegador.
+Cómo se sincroniza: automático, gana el cambio más reciente, y borrar algo en un dispositivo lo borra en los demás. Las claves de OpenAI, Claude y ElevenLabs **no se suben nunca**: siguen solo en cada navegador. Si `js/config.js` está vacío, la app funciona sin cuentas y guarda todo solo en el dispositivo.
 
 ## Configuración (sección «Integraciones API»)
 | Servicio | Para qué | Dónde se consigue |
@@ -48,7 +48,6 @@ Cómo se sincroniza: gana el cambio más reciente. Borrar algo en un dispositivo
 | Anthropic (Claude) | Guiones y SEO | console.anthropic.com → API keys |
 | ElevenLabs (opcional) | Voces premium | elevenlabs.io → Profile → API key |
 | Google OAuth Client ID (opcional) | Subir a YouTube | console.cloud.google.com (los pasos están en la app) |
-| Supabase (opcional) | Cuenta y sincronización entre dispositivos | supabase.com (ver «Nube con Supabase») |
 
 Las claves se guardan solo en tu navegador.
 

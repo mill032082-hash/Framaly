@@ -24,12 +24,59 @@
     const sb = F.$('#sidebar');
     sb.innerHTML = `<a class="brand" href="#/inicio"><div class="logo"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg></div><div><b>FRAMALY</b><small>Studio de video IA</small></div></a>
       <nav class="nav">${ROUTES.map((r) => (r.sec ? `<div class="nav-sec">${r.sec}</div>` : `<a href="#/${r.id}" data-r="${r.id}">${I(r.icon)}<span>${r.name}</span>${r.badge ? `<span class="badge">${r.badge}</span>` : ''}</a>`)).join('')}</nav>
+      <div class="acct" id="acct"></div>
       <div class="side-foot"><b style="color:var(--text);font-size:12px">Conexiones</b><div class="apis" id="apiDots"></div></div>`;
-    dots();
+    dots(); acct();
   }
+  /** Bloque de cuenta en el menú lateral (solo si la plataforma tiene base de datos) */
+  function acct() {
+    const el = F.$('#acct'); if (!el) return;
+    const C = F.cloud;
+    if (!C?.configured() || !C.user) { el.innerHTML = ''; return; }
+    const msg = C.status === 'syncing' ? (C.progress || 'Sincronizando…') : C.status === 'error' ? C.error : C.last ? 'Guardado en la nube · ' + F.ago(C.last) : 'Conectado';
+    el.innerHTML = `<div class="who"><span class="av">${F.esc((C.user.email || '?')[0].toUpperCase())}</span><div style="min-width:0"><b>${F.esc(C.user.email || 'Mi cuenta')}</b><small class="${C.status === 'error' ? 'bad' : ''}">${F.esc(msg)}</small></div></div>
+      <div class="row" style="gap:6px;margin-top:8px"><button class="btn sm" data-sync ${C.status === 'syncing' ? 'disabled' : ''}>Sincronizar</button><button class="btn sm" data-out>Cerrar sesión</button></div>`;
+  }
+  /** Pantalla de inicio de sesión: se muestra mientras la plataforma tenga base de datos y no haya sesión */
+  let gateEl = null;
+  const gate = { keep: { e: '', p: '' }, mode: 'in' };
+  const needGate = () => !!F.cloud?.configured() && !F.cloud.user;
+  function drawGate(err = '', info = '') {
+    const C = F.cloud, el = gateEl, k = gate.keep, up = gate.mode === 'up';
+    el.innerHTML = `<form class="gate-card" novalidate>
+      <div class="brand" style="justify-content:center;padding-bottom:6px"><div class="logo"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg></div><div><b>FRAMALY</b><small>Studio de video IA</small></div></div>
+      <h1>${up ? 'Crea tu cuenta' : 'Inicia sesión'}</h1><p class="muted" style="margin:0 0 14px">${up ? 'Solo necesitas un correo y una contraseña.' : 'Entra para abrir tu estudio. Tus proyectos te esperan en cualquier dispositivo.'}</p>
+      <div class="seg"><button type="button" data-m="in" class="${up ? '' : 'on'}">Entrar</button><button type="button" data-m="up" class="${up ? 'on' : ''}">Crear cuenta</button></div>
+      <label class="lbl">Correo</label><input type="text" inputmode="email" id="gEmail" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="tu@correo.com" value="${F.esc(k.e)}">
+      <label class="lbl">Contraseña</label><input type="password" id="gPass" autocomplete="${up ? 'new-password' : 'current-password'}" placeholder="Mínimo 6 caracteres">
+      ${err ? `<div class="gate-msg bad">${F.esc(err)}</div>` : ''}${info ? `<div class="gate-msg ok">${F.esc(info)}</div>` : ''}
+      <button class="btn primary lg block" id="gGo" type="submit" style="margin-top:14px">${up ? 'Crear cuenta' : 'Entrar'}</button>
+      ${C.google() ? '<button class="btn lg block" id="gGoogle" type="button" style="margin-top:8px">Continuar con Google</button>' : ''}</form>`;
+    el.querySelector(k.e ? '#gPass' : '#gEmail').focus();
+  }
+  function openGate() {
+    if (gateEl) return;
+    gateEl = document.createElement('div'); gateEl.className = 'gate';
+    const read = () => { gate.keep.e = gateEl.querySelector('#gEmail').value.trim(); gate.keep.p = gateEl.querySelector('#gPass').value; };
+    gateEl.addEventListener('click', (ev) => {
+      const m = ev.target.closest('[data-m]'); if (m) { read(); gate.mode = m.dataset.m; drawGate(); }
+      if (ev.target.closest('#gGoogle')) F.cloud.signInGoogle().catch((e) => drawGate(e.message));
+    });
+    gateEl.addEventListener('submit', async (ev) => {
+      ev.preventDefault(); read();
+      if (!gate.keep.e || !gate.keep.p) return drawGate('Escribe tu correo y tu contraseña.');
+      const b = gateEl.querySelector('#gGo'); F.busy(b, true, gate.mode === 'in' ? 'Entrando…' : 'Creando…');
+      try {
+        const m = gate.mode === 'in' ? await F.cloud.signIn(gate.keep.e, gate.keep.p) : await F.cloud.signUp(gate.keep.e, gate.keep.p);
+        if (!F.cloud.user) { gate.mode = 'in'; drawGate('', m); }
+      } catch (e) { drawGate(e.message); }
+    });
+    document.body.appendChild(gateEl); drawGate(F.cloud.error);
+  }
+  function closeGate() { gateEl?.remove(); gateEl = null; gate.keep.p = ''; }
   function dots() {
     const el = F.$('#apiDots'); if (!el) return;
-    el.innerHTML = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['googleClientId', 'YouTube'], ['@cloud', 'Nube']].map(([k, n]) => `<a href="#/integraciones" style="color:var(--muted);text-decoration:none"><span class="dot ${(k === '@cloud' ? F.cloud?.signedIn() : F.api.has(k)) ? 'ok' : ''}"></span>${n}</a>`).join('');
+    el.innerHTML = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['googleClientId', 'YouTube']].map(([k, n]) => `<a href="#/integraciones" style="color:var(--muted);text-decoration:none"><span class="dot ${F.api.has(k) ? 'ok' : ''}"></span>${n}</a>`).join('');
   }
   /** Menú lateral deslizable en celular */
   function menu(open) {
@@ -120,13 +167,28 @@
     if (window.FRAMALY_DEMO && !F.projects.list.length) { try { await F.seedDemo(); } catch (e) { console.error(e); } }
     sidebar();
     const scrim = document.createElement('div'); scrim.className = 'scrim'; scrim.onclick = () => menu(false); document.body.appendChild(scrim);
-    F.on('settings', dots); F.on('cloud', dots);
+    F.on('settings', dots);
     F.on('projects', () => { const r = ROUTES.find((x) => x.id === (location.hash.replace(/^#\/?/, '') || 'inicio')); if (r && !r.sec) { const chip = F.$('.proj-chip span'); const p = F.projects.current(); if (chip && p) chip.textContent = p.name; } });
-    window.addEventListener('hashchange', render);
+    window.addEventListener('hashchange', () => { if (!needGate()) render(); });
     // Pedir almacenamiento persistente para que el navegador no borre la biblioteca
     navigator.storage?.persist?.().catch(() => {});
-    await render();
-    if (!localStorage.getItem('framaly.onboarded')) F.onboarding();
+    // Cuenta: sin sesión se muestra solo la pantalla de inicio de sesión
+    F.$('#acct')?.addEventListener('click', async (e) => {
+      if (e.target.closest('[data-out]')) { await F.cloud.signOut(); }
+      if (e.target.closest('[data-sync]')) { try { await F.cloud.sync({ manual: true }); } catch (err) { F.toast(err.message, 'error'); } }
+    });
+    let started = false;
+    const sync = () => {
+      acct();
+      if (needGate()) { openGate(); F.$('#view').innerHTML = ''; return; }
+      if (gateEl) closeGate();
+      if (!started) { started = true; render().then(() => { if (!localStorage.getItem('framaly.onboarded')) F.onboarding(); }); }
+      else if (F.cloud.user && gateOpened) { gateOpened = false; render(); }
+    };
+    let gateOpened = false;
+    F.on('cloud', () => { if (needGate()) gateOpened = true; sync(); });
+    if (F.cloud?.configured()) await F.cloud.ready.catch(() => {});
+    sync();
   }
   init();
 })();
