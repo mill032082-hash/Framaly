@@ -42,6 +42,7 @@
     textProvider: 'anthropic',
     models: { anthropic: 'claude-sonnet-5-5', openai: 'gpt-4.1-mini', image: 'gpt-image-1', tts: 'gpt-4o-mini-tts', eleven: 'eleven_multilingual_v2' },
     currentProject: null,
+    defaultFps: 30,
     customFilters: [],
     flows: [],
     cloud: { tomb: [] },
@@ -93,6 +94,7 @@
     grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
     edit: '<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     arrow: '<path d="M5 12h14M12 5l7 7-7 7"/>',
+    sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
   };
   F.icon = (n, cls = '') => `<svg class="i ${n === 'play' ? 'fill ' : ''}${cls}" viewBox="0 0 24 24">${IC[n] || IC.zap}</svg>`;
   F.icon.names = IC;
@@ -194,7 +196,7 @@
     list: [],
     async load() { this.list = (await F.db.all('projects')).sort((a, b) => b.updated - a.updated); },
     blank(name = 'Proyecto sin título', aspect = '16:9') {
-      return { id: F.uid(), name, aspect, fps: 30, clips: [], audio: [], watermark: '', letterbox: false, progressBar: false, meta: { title: '', description: '', tags: '' }, created: Date.now(), updated: Date.now() };
+      return { id: F.uid(), name, aspect, fps: F.settings.defaultFps || 30, clips: [], audio: [], watermark: '', letterbox: false, progressBar: false, meta: { title: '', description: '', tags: '' }, created: Date.now(), updated: Date.now() };
     },
     async create(name, aspect) { const p = this.blank(name, aspect); await this.save(p); this.setCurrent(p.id); return p; },
     async save(p) {

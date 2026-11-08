@@ -1,0 +1,113 @@
+/* FRAMALY — Ajustes: cuenta, ejecución de videos, exportación, agentes de IA, datos y ayuda.
+   Cada opción escribe en los mismos valores que ya usan las otras secciones, así que cambiarla tiene efecto real. */
+(function () {
+  'use strict';
+  const I = F.icon, R = F.R, V = F.views;
+  const load = (k, d) => { try { return { ...d, ...JSON.parse(localStorage.getItem('framaly.' + k) || '{}') }; } catch (e) { return { ...d }; } };
+  const store = (k, v) => { try { localStorage.setItem('framaly.' + k, JSON.stringify(v)); } catch (e) {} };
+  const opt = (pairs, sel) => pairs.map(([v, n]) => `<option value="${F.esc(v)}" ${String(v) === String(sel) ? 'selected' : ''}>${F.esc(n)}</option>`).join('');
+  const TONES = ['informativo y entretenido', 'misterioso e intrigante', 'motivacional e inspirador', 'humorístico y cercano', 'educativo y claro', 'épico y dramático', 'emotivo y narrativo', 'enérgico estilo viral'];
+  const VERSION = '1.0';
+
+  V.ajustes = (el) => {
+    const S = F.settings;
+    const au = load('auto', { topic: '', aspect: '16:9', duration: 60, style: 'cine', exportAfter: true });
+    const pub = load('pub', { format: F.Engine.supportsMp4() ? 'mp4' : 'webm', quality: 'high', privacy: 'private', category: '22', thumbStyle: 'impacto', thumbUpload: true });
+    const sc = load('script', { tone: TONES[0], audience: 'público general', language: 'español', provider: 'auto', voice: 'nova' });
+    const im = load('img', { prompt: '', style: 'cine', size: '1536x1024', quality: 'medium', n: 1 });
+    // cada formulario guarda su grupo; "data-g" dice a cuál pertenece
+    const groups = { auto: au, pub, script: sc, img: im };
+    const sel = (g, k, label, options, extra = '') => `<div><label class="lbl">${label}</label><select data-g="${g}" data-k="${k}" ${extra}>${opt(options, groups[g][k])}</select></div>`;
+    const txt = (g, k, label, ph = '') => `<div><label class="lbl">${label}</label><input type="text" data-g="${g}" data-k="${k}" value="${F.esc(groups[g][k])}" placeholder="${F.esc(ph)}"></div>`;
+
+    el.innerHTML = `<div class="page">
+      <div class="split even">
+        <div class="card" id="aCuenta"></div>
+        <div class="card"><h3>${I('zap')} Ejecución de videos</h3><p class="desc">Valores con los que arrancan el modo automático y los proyectos nuevos.</p>
+          <div class="grid2">${sel('auto', 'aspect', 'Formato', R.ASPECTS)}${sel('auto', 'duration', 'Duración', [[30, '30 segundos'], [60, '1 minuto'], [90, '1,5 minutos'], [120, '2 minutos'], [180, '3 minutos'], [300, '5 minutos']])}
+            ${sel('auto', 'style', 'Estilo visual', Object.entries(F.STYLES).filter(([k]) => k !== 'ninguno').map(([k, v]) => [k, v.name]))}
+            <div><label class="lbl">FPS de proyectos nuevos</label><select id="aFps">${opt([[24, '24'], [30, '30'], [60, '60']], S.defaultFps || 30)}</select></div></div>
+          <label class="check"><input type="checkbox" data-g="auto" data-k="exportAfter" ${au.exportAfter ? 'checked' : ''}> Exportar el MP4 automáticamente al terminar</label></div>
+      </div>
+      <div class="split even" style="margin-top:16px">
+        <div class="card"><h3>${I('film')} Exportación y publicación</h3><p class="desc">Cómo se exporta el video y cómo se sube a YouTube.</p>
+          <div class="grid2">${sel('pub', 'format', 'Formato de archivo', [['mp4', 'MP4' + (F.Engine.supportsMp4() ? '' : ' (no compatible)')], ['webm', 'WebM']])}${sel('pub', 'quality', 'Calidad', [['high', 'Alta'], ['medium', 'Media'], ['low', 'Ligera']])}
+            ${sel('pub', 'privacy', 'Visibilidad en YouTube', [['private', 'Privado'], ['unlisted', 'No listado'], ['public', 'Público']])}</div>
+          <p class="hint">La exportación se graba en tiempo real: un video de 3 minutos tarda unos 3 minutos. Usa Chrome o Edge.</p></div>
+        <div class="card"><h3>${I('bot')} Agentes de IA</h3><p class="desc">Preferencias de los agentes que escriben, dibujan y narran. Las claves y los modelos están en <a href="#/integraciones">Integraciones API</a>.</p>
+          <label class="lbl">Proveedor de texto preferido</label><div class="seg" id="aTp"><button data-v="anthropic">Claude (Anthropic)</button><button data-v="openai">OpenAI</button></div>
+          <div class="grid2" style="margin-top:12px">${txt('script', 'language', 'Idioma de los guiones', 'español')}${sel('script', 'tone', 'Tono', TONES.map((t) => [t, t[0].toUpperCase() + t.slice(1)]))}
+            ${sel('script', 'voice', 'Voz por defecto (OpenAI)', [['', 'Sin voz'], ...F.api.OPENAI_VOICES.map((v) => [v, v])])}${sel('img', 'quality', 'Calidad de imágenes', [['low', 'Baja'], ['medium', 'Media'], ['high', 'Alta']])}
+            ${sel('img', 'size', 'Tamaño de imágenes', [['1536x1024', 'Horizontal'], ['1024x1536', 'Vertical'], ['1024x1024', 'Cuadrado']])}</div></div>
+      </div>
+      <div class="split even" style="margin-top:16px">
+        <div class="card"><h3>${I('folder')} Datos y copia de seguridad</h3><p class="desc" id="aUse">Calculando almacenamiento…</p>
+          <div class="row" style="flex-wrap:wrap"><button class="btn" id="aExport">${I('download')} Descargar mis proyectos</button><button class="btn" id="aImport">${I('upload')} Importar proyectos</button></div>
+          <p class="hint">El archivo guarda tus proyectos. Las imágenes y los audios viajan con tu cuenta, no en el archivo.</p>
+          <div class="row" style="flex-wrap:wrap;margin-top:10px"><button class="btn danger" id="dClrM">${I('trash')} Vaciar biblioteca</button><button class="btn danger" id="dClrAll">${I('trash')} Borrar todo de este dispositivo</button></div></div>
+        <div class="card"><h3>${I('script')} Ayuda y acerca de</h3><p class="desc">FRAMALY Studio · versión ${VERSION}</p>
+          <div class="row" style="flex-wrap:wrap"><button class="btn" id="aTour">${I('play')} Ver el tutorial de bienvenida</button><button class="btn" id="aHelp">${I('eye')} Mostrar todas las instrucciones</button></div>
+          <p class="hint">Tus claves de IA se guardan solo en este navegador y no se suben a la nube.</p></div>
+      </div></div>`;
+    const q = (s) => el.querySelector(s);
+
+    /* ----- cuenta ----- */
+    const C = F.cloud;
+    const renderCuenta = () => {
+      const on = C?.configured();
+      q('#aCuenta').innerHTML = `<h3>${I('shield')} Mi cuenta</h3>` + (!on
+        ? `<p class="desc">Estás en modo local: tus proyectos se guardan solo en este dispositivo.</p>`
+        : C.user
+          ? `<div class="who" style="display:flex;align-items:center;gap:12px;margin:6px 0 14px"><span class="av" style="width:42px;height:42px;border-radius:50%;background:var(--grad);color:#fff;display:grid;place-items:center;font-weight:800">${F.esc((C.user.email || '?')[0].toUpperCase())}</span><div style="min-width:0"><b style="display:block;overflow:hidden;text-overflow:ellipsis">${F.esc(C.user.email || 'Sesión iniciada')}</b><span class="small muted">${C.status === 'syncing' ? F.esc(C.progress || 'Sincronizando…') : C.status === 'error' ? F.esc(C.error) : C.last ? 'Guardado en la nube · ' + F.ago(C.last) : 'Conectado'}</span></div></div>
+             <div class="row" style="flex-wrap:wrap"><button class="btn primary" id="aSync" ${C.status === 'syncing' ? 'disabled' : ''}>${I('upload')} Sincronizar ahora</button><button class="btn" id="aOut">Cerrar sesión</button></div><p class="hint">Se sincroniza solo mientras trabajas. Lo más reciente gana.</p>`
+          : `<p class="desc">Inicia sesión para guardar tus proyectos en la nube.</p>`);
+    };
+    renderCuenta();
+    const offCloud = F.on('cloud', renderCuenta);
+    q('#aCuenta').addEventListener('click', async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.id === 'aSync') { F.busy(b, true, 'Sincronizando…'); try { await C.sync({ manual: true }); } catch (err) { F.toast(err.message, 'error'); } if (b.isConnected) F.busy(b, false); }
+      if (b.id === 'aOut') await C.signOut();
+    });
+
+    /* ----- opciones sueltas: se guardan al cambiar ----- */
+    el.addEventListener('change', (e) => {
+      const t = e.target, g = t.dataset.g, k = t.dataset.k;
+      if (g && k) {
+        const v = t.type === 'checkbox' ? t.checked : t.value;
+        groups[g][k] = k === 'duration' ? +v : v;
+        store(g, groups[g]); F.toast('Ajuste guardado', 'ok', 1400);
+      }
+      if (t.id === 'aFps') { S.defaultFps = +t.value; F.saveSettings(); F.toast('Ajuste guardado', 'ok', 1400); }
+    });
+    const tp = () => q('#aTp').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === S.textProvider));
+    tp();
+    q('#aTp').addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (b) { S.textProvider = b.dataset.v; F.saveSettings(); tp(); F.toast('Ajuste guardado', 'ok', 1400); } });
+
+    /* ----- datos ----- */
+    navigator.storage?.estimate?.().then((x) => (q('#aUse').textContent = `${F.media.list.length} archivos y ${F.projects.list.length} proyectos · ${F.bytes(x.usage || 0)} usados de ${F.bytes(x.quota || 0)}`)).catch(() => (q('#aUse').textContent = `${F.media.list.length} archivos y ${F.projects.list.length} proyectos`));
+    q('#aExport').onclick = () => {
+      if (!F.projects.list.length) return F.toast('Todavía no tienes proyectos');
+      F.download(new Blob([JSON.stringify({ app: 'framaly', version: 1, date: new Date().toISOString(), projects: F.projects.list }, null, 1)], { type: 'application/json' }), 'framaly-proyectos-' + new Date().toISOString().slice(0, 10) + '.json');
+      F.toast('Copia descargada', 'ok');
+    };
+    q('#aImport').onclick = async () => {
+      const [f] = await F.pickFiles('.json,application/json', false); if (!f) return;
+      try {
+        const j = JSON.parse(await f.text());
+        const list = (j.projects || []).filter((p) => p && p.id && Array.isArray(p.clips));
+        if (j.app !== 'framaly' || !list.length) throw new Error('Ese archivo no es una copia de FRAMALY.');
+        for (const p of list) { p.updated = Math.max(p.updated || 0, Date.now()); await F.db.put('projects', p); }
+        await F.projects.load(); F.emit('projects');
+        F.toast(`${list.length} proyecto(s) importados`, 'ok'); F.router.reload();
+      } catch (err) { F.toast(err.message || 'No se pudo leer el archivo', 'error'); }
+    };
+    q('#dClrM').onclick = async () => { if (!(await F.confirm('Vaciar biblioteca', 'Se eliminarán todas las imágenes y audios. Si usas la nube, también se borrarán de tu cuenta. No se puede deshacer.', 'Vaciar'))) return; F.media.list.forEach((m) => F.cloud?.tomb('media', m.id)); await F.db.clear('media'); F.media.list = []; F.emit('media'); F.toast('Biblioteca vaciada'); F.router.reload(); };
+    q('#dClrAll').onclick = async () => { if (!(await F.confirm('Borrar todo de este dispositivo', 'Se eliminarán proyectos, biblioteca y ajustes de este dispositivo (incluidas tus API keys y la sesión). La copia que ya esté en la nube no se borra. No se puede deshacer.', 'Borrar todo'))) return; await F.db.clear('media'); await F.db.clear('projects'); Object.keys(localStorage).filter((k) => k.startsWith('framaly.')).forEach((k) => localStorage.removeItem(k)); location.reload(); };
+
+    /* ----- ayuda ----- */
+    q('#aTour').onclick = () => F.onboarding();
+    q('#aHelp').onclick = () => { localStorage.removeItem('framaly.helpHidden'); Object.keys(localStorage).filter((k) => k.startsWith('framaly.seenHelp.')).forEach((k) => localStorage.removeItem(k)); F.toast('Las instrucciones vuelven a mostrarse en cada sección', 'ok'); };
+    return offCloud;
+  };
+})();

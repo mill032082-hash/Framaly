@@ -592,7 +592,6 @@
       </div>
       <div class="split even" style="margin-top:16px">
         <div class="card"><h3>${I('bot')} Preferencias de agentes</h3><label class="lbl">Proveedor de texto preferido</label><div class="seg" id="tp"><button data-v="anthropic">Claude (Anthropic)</button><button data-v="openai">OpenAI</button></div><p class="hint">Si el preferido no tiene clave, se usa el otro automáticamente.</p></div>
-        <div class="card"><h3>${I('folder')} Datos</h3><p class="desc" id="dUse">Calculando almacenamiento…</p><div class="row"><button class="btn danger" id="dClrM">${I('trash')} Vaciar biblioteca</button><button class="btn danger" id="dClrAll">${I('trash')} Borrar todo</button></div></div>
       </div></div>`;
     const q = (s) => el.querySelector(s);
     const tp = () => q('#tp').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === S.textProvider));
@@ -613,8 +612,5 @@
         F.busy(t, false);
       }
     });
-    navigator.storage?.estimate?.().then((x) => (q('#dUse').textContent = `${F.media.list.length} archivos y ${F.projects.list.length} proyectos · ${F.bytes(x.usage || 0)} usados de ${F.bytes(x.quota || 0)}`)).catch(() => {});
-    q('#dClrM').onclick = async () => { if (!(await F.confirm('Vaciar biblioteca', 'Se eliminarán todas las imágenes y audios. No se puede deshacer.', 'Vaciar'))) return; F.media.list.forEach((m) => F.cloud?.tomb('media', m.id)); await F.db.clear('media'); F.media.list = []; F.emit('media'); F.toast('Biblioteca vaciada'); F.router.reload(); };
-    q('#dClrAll').onclick = async () => { if (!(await F.confirm('Borrar todo', 'Se eliminarán proyectos, biblioteca y ajustes de este dispositivo (incluidas tus API keys y la sesión de la nube). La copia que ya esté en Supabase no se borra. No se puede deshacer.', 'Borrar todo'))) return; await F.db.clear('media'); await F.db.clear('projects'); Object.keys(localStorage).filter((k) => k.startsWith('framaly.')).forEach((k) => localStorage.removeItem(k)); location.reload(); };
   };
 })();

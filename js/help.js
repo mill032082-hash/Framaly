@@ -64,6 +64,13 @@
       '<b>ElevenLabs</b> (opcional): elevenlabs.io → tu perfil → API key.',
       '<b>YouTube</b> (opcional): sigue los pasos de la tarjeta de Google para subir videos directamente.',
     ], tip: 'Recarga saldo en OpenAI (Billing) o las imágenes darán error. Un video de 1 minuto cuesta aprox. US$0,60–1.' },
+    ajustes: { t: 'Qué puedes cambiar aquí', s: [
+      '<b>Mi cuenta</b>: mira con qué correo estás conectado, sincroniza tus proyectos o cierra sesión.',
+      '<b>Ejecución de videos</b>: elige el formato, la duración y el estilo con los que arranca el modo automático.',
+      '<b>Exportación y publicación</b>: formato del archivo, calidad y visibilidad en YouTube.',
+      '<b>Agentes de IA</b>: idioma, tono, voz e imágenes por defecto.',
+      '<b>Datos</b>: descarga una copia de tus proyectos o limpia este dispositivo.',
+    ], tip: 'Cada cambio se guarda solo, en cuanto lo haces.' },
   };
 
   const hidden = () => { try { return JSON.parse(localStorage.getItem('framaly.helpHidden') || '{}'); } catch (e) { return {}; } };
