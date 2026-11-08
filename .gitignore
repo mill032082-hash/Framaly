@@ -1,0 +1,13 @@
+# Configuración local de Claude Code
+.claude/
+
+# Sistema
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Exportaciones y archivos temporales
+*.mp4
+*.webm
+*.log
+node_modules/
