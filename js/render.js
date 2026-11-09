@@ -76,8 +76,10 @@
       const ws = String(clip.text).split(/\s+/).filter(Boolean), groups = [];
       for (let i = 0; i < ws.length; i += 3) groups.push(ws.slice(i, i + 3).join(' ').toUpperCase());
       if (!groups.length) return;
-      const per = (clip.duration || 1) / groups.length, gi = Math.min(groups.length - 1, Math.floor(lt / per));
-      return R.drawText(cx, { ...clip, text: groups[gi], textAnim: 'pop' }, lt - gi * per, W, H);
+      let per = (clip.duration || 1) / groups.length, gi = Math.min(groups.length - 1, Math.floor(lt / per)), t0 = gi * per;
+      const ct = clip.capTimes;   // tiempos exactos desde la transcripción
+      if (ct && ct.length === groups.length) { gi = 0; for (let k = 0; k < ct.length; k++) if (lt >= ct[k]) gi = k; t0 = ct[gi]; }
+      return R.drawText(cx, { ...clip, text: groups[gi], textAnim: 'pop' }, lt - t0, W, H);
     }
     const base = Math.min(W, H);
     const st = clip.textStyle || 'subtitulo', an = clip.textAnim || 'fade';

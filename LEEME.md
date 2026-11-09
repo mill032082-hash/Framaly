@@ -35,7 +35,10 @@ Cada sección tiene instrucciones paso a paso arriba y en el botón **Instruccio
 ## Método Golden en el editor (sin IA, todo local)
 En el editor, pestaña **Golden** del panel izquierdo. Funciona en el navegador, sin Claude ni claves de API. Sigue la ley de orden: **Cortar → Subtitular → Ilustrar → Sonorizar**.
 - **Intake:** destino (anuncio 9:16 / YouTube / reel), producto, **claims prohibidos y permitidos** y duración objetivo.
-- **Quitar silencios de la voz:** analiza el audio, adapta el umbral al ruido de fondo, deja 200 ms de aire y no toca el inicio ni el final de las palabras. Crea una voz nueva en la biblioteca y conserva la original.
+- **Transcripción de la voz:** dos motores a elegir en la pestaña Golden. **Local** (Whisper dentro del navegador, gratis y sin claves; la primera vez descarga el modelo, necesita internet) o **Whisper de OpenAI** con tu clave propia de Integraciones API.
+- **Cortar con transcripción:** quita muletillas (eh, em, mm), pausas largas y tomas repetidas (te quedas con la segunda), y lista en el reporte las frases descartadas.
+- **Subtítulos desde el audio:** sincronizados palabra por palabra, máx. 3 palabras en pantalla.
+- **Quitar silencios de la voz (por volumen):** analiza el audio, adapta el umbral al ruido de fondo, deja 200 ms de aire y no toca el inicio ni el final de las palabras. Crea una voz nueva en la biblioteca y conserva la original.
 - **Multicámara:** alterna encuadres (general, punch-in 113 %, tope 125 %). **Ajustar a duración objetivo.**
 - **Subtítulos:** pega el guion como se grabó y se reparte por clip, máx. 3 palabras en pantalla. **Limpiar textos** quita ¿ y ¡.
 - **Revisión Golden:** claims prohibidos, CTA en inglés, signos de apertura, gancho en 3 s, prueba del sonido apagado, formato y duración, ritmo y ducking, más el **reporte de cortes** (en qué segundo quedó cada clip y qué silencios se quitaron).

@@ -51,41 +51,107 @@
     return new Blob([out], { type: 'audio/wav' });
   }
 
-  /** Quita silencios largos de una pista de voz: deja 200 ms de aire, nunca toca el inicio/fin de una palabra. */
-  G.cleanSilence = async (E, audioId, minSil) => {
-    const p = E.p, a = p.audio.find((x) => x.id === audioId);
-    if (!a) return F.toast('Selecciona una pista de voz en el timeline');
-    const buf = await F.media.decode(a.mediaId), sr = buf.sampleRate, AIR = 0.2;
-    const { sil, thr } = G.findSilences(buf, { minSil });
-    const keep = []; let pos = 0;
-    const cuts = [];
-    for (const [s, e] of sil) {
-      const lead = s < 0.05, tail = e >= buf.duration - 0.05;
-      const air = lead ? 0.1 : tail ? 0.3 : AIR;           // aire que se conserva
-      const rmStart = s + air / 2, rmEnd = lead ? e - air : tail ? e : e - air / 2;
-      if (rmEnd - rmStart < 0.15) continue;
-      keep.push([pos, rmStart]); pos = rmEnd; cuts.push([rmStart, rmEnd]);
-    }
-    keep.push([pos, buf.duration]);
-    if (!cuts.length) return F.toast(`No se encontraron silencios de más de ${minSil} s. Si el audio tiene ruido de fondo, no se pueden detectar.`);
+  /** Aplica cortes [[ini,fin],...] (segundos del audio) a una pista: crea una voz nueva, conserva la original y reubica la transcripción. */
+  async function applyCuts(E, a, buf, cuts, info = {}) {
+    const p = E.p, sr = buf.sampleRate, keep = []; let pos = 0;
+    cuts = cuts.filter(([s, e]) => e - s >= 0.12).sort((x, y) => x[0] - y[0]);
+    for (const [s, e] of cuts) { if (s > pos) keep.push([pos, s]); pos = Math.max(pos, e); }
+    if (pos < buf.duration) keep.push([pos, buf.duration]);
     const total = keep.reduce((t, [s, e]) => t + Math.round((e - s) * sr), 0), out = [];
     for (let c = 0; c < Math.min(2, buf.numberOfChannels); c++) {
       const src = buf.getChannelData(c), dst = new Float32Array(total); let o = 0;
       for (const [s, e] of keep) {
         const i0 = Math.round(s * sr), i1 = Math.round(e * sr); dst.set(src.subarray(i0, i1), o);
-        const f = Math.min(Math.round(0.005 * sr), i1 - i0 >> 1);   // microfundido anti-clic
+        const f = Math.min(Math.round(0.005 * sr), (i1 - i0) >> 1);   // microfundido anti-clic
         for (let k = 0; k < f; k++) { dst[o + k] *= k / f; dst[o + (i1 - i0) - 1 - k] *= k / f; }
         o += i1 - i0;
       }
       out.push(dst);
     }
     const old = F.media.byId(a.mediaId);
-    const m = await F.media.add({ type: 'audio', name: `${old?.name || 'Voz'} (sin silencios)`, blob: wavBlob(out, sr), source: old?.source || 'upload' });
+    const m = await F.media.add({ type: 'audio', name: `${old?.name || 'Voz'} (editada)`, blob: wavBlob(out, sr), source: old?.source || 'upload' });
+    const g = gd(p), tr = (g.tr ||= {});
+    if (tr[a.mediaId]) {   // reubica las palabras que se quedan
+      const shift = (t) => t - cuts.reduce((d, [s, e]) => d + (t >= e ? e - s : t > s ? t - s : 0), 0);
+      tr[m.id] = tr[a.mediaId].filter((w) => !cuts.some(([s, e]) => w.s >= s - 0.01 && w.e <= e + 0.01)).map((w) => ({ ...w, s: shift(w.s), e: shift(w.e) }));
+    }
     E.api.commit(); a.mediaId = m.id;
     const removed = cuts.reduce((t, [s, e]) => t + (e - s), 0);
-    gd(p).lastCut = { audio: old?.name || 'voz', cuts: cuts.map(([s, e]) => [F.round1(s), F.round1(e)]), removed: F.round1(removed), before: F.round1(buf.duration), after: F.round1(m.duration || buf.duration - removed) };
+    g.lastCut = { audio: old?.name || 'voz', cuts: cuts.map(([s, e]) => [F.round1(s), F.round1(e)]), removed: F.round1(removed), before: F.round1(buf.duration), after: F.round1(buf.duration - removed), dropped: info.dropped || [] };
     E.api.after({ insp: true });
-    F.toast(`${cuts.length} silencios cortados · ${F.round1(removed)} s menos. Revisa el reporte de cortes.`, 'ok', 4000);
+    F.toast(`${cuts.length} cortes · ${F.round1(removed)} s menos. Revisa el reporte de cortes.`, 'ok', 4000);
+  }
+
+  /** Quita silencios por energía del audio: deja 200 ms de aire y no toca el inicio/fin de una palabra. */
+  G.cleanSilence = async (E, audioId, minSil) => {
+    const a = E.p.audio.find((x) => x.id === audioId);
+    if (!a) return F.toast('Selecciona una pista de voz en el timeline');
+    const buf = await F.media.decode(a.mediaId), { sil } = G.findSilences(buf, { minSil }), AIR = 0.2, cuts = [];
+    for (const [s, e] of sil) {
+      const lead = s < 0.05, tail = e >= buf.duration - 0.05, air = lead ? 0.1 : tail ? 0.3 : AIR;
+      const a0 = lead ? s : s + air / 2, a1 = lead ? e - air : tail ? e : e - air / 2;
+      if (a1 - a0 >= 0.15) cuts.push([a0, a1]);
+    }
+    if (!cuts.length) return F.toast(`No se encontraron silencios de más de ${minSil} s. Si el audio tiene ruido de fondo, no se pueden detectar.`);
+    await applyCuts(E, a, buf, cuts);
+  };
+
+  /* ---------- con transcripción: pausas exactas, muletillas y tomas repetidas ---------- */
+  const FILLER = /^(eh+|em+|mm+|hm+|ah+|uh+|um+|ehm+)$/;
+  const wkey = (w) => norm(w).replace(/[^a-z0-9ñ]/g, '');
+  function mergeCuts(c) { c.sort((a, b) => a[0] - b[0]); const o = []; for (const x of c) { const l = o[o.length - 1]; if (l && x[0] <= l[1] + 0.02) l[1] = Math.max(l[1], x[1]); else o.push([...x]); } return o; }
+  G.cutsFromWords = (words, minSil = 0.6) => {
+    const cuts = [], dropped = [], AIR = 0.2, n = words.length, gone = new Array(n).fill(false);
+    words.forEach((w, i) => { if (FILLER.test(wkey(w.w))) gone[i] = true; });
+    /* toma repetida: frase de 3+ palabras dicha dos veces seguidas -> te quedas con la SEGUNDA */
+    for (let len = 6; len >= 3; len--) for (let i = 0; i + 2 * len <= n; i++) {
+      if (gone.slice(i, i + len).some(Boolean)) continue;
+      let same = true; for (let k = 0; k < len; k++) if (wkey(words[i + k].w) !== wkey(words[i + len + k].w)) { same = false; break; }
+      if (same) for (let k = 0; k < len; k++) gone[i + k] = true;
+    }
+    let i = 0;
+    while (i < n) {      // tramos de palabras descartadas -> corte
+      if (!gone[i]) { i++; continue; }
+      let j = i; while (j < n && gone[j]) j++;
+      const s = words[i].s, e = j < n ? words[j].s : words[j - 1].e;
+      if (e - s > 0.12) { cuts.push([s, Math.max(s, e - 0.05)]); dropped.push(words.slice(i, j).map((x) => x.w).join(' ')); }
+      i = j;
+    }
+    for (let k = 0; k + 1 < n; k++) {      // pausas largas entre palabras (deja 200 ms de aire)
+      const a0 = words[k].e, a1 = words[k + 1].s;
+      if (!gone[k] && !gone[k + 1] && a1 - a0 >= minSil) cuts.push([a0 + AIR / 2, a1 - AIR / 2]);
+    }
+    return { cuts: mergeCuts(cuts), dropped };
+  };
+
+  G.transcribe = async (E, audioId, onProgress) => {
+    const a = E.p.audio.find((x) => x.id === audioId); if (!a) return F.toast('Selecciona una pista de voz');
+    const words = await F.transcribe.run(a.mediaId, onProgress);
+    (gd(E.p).tr ||= {})[a.mediaId] = words; E.api.save();
+    F.toast(`Transcripción lista: ${words.length} palabras`, 'ok'); return words;
+  };
+  G.cleanByTranscript = async (E, audioId, minSil, onProgress) => {
+    const a = E.p.audio.find((x) => x.id === audioId); if (!a) return F.toast('Selecciona una pista de voz');
+    const words = gd(E.p).tr?.[a.mediaId] || await G.transcribe(E, audioId, onProgress); if (!words) return;
+    const { cuts, dropped } = G.cutsFromWords(words, minSil);
+    if (!cuts.length) return F.toast('Nada que cortar: no hay muletillas, repeticiones ni pausas largas.');
+    await applyCuts(E, a, await F.media.decode(a.mediaId), cuts, { dropped });
+  };
+
+  /** Subtítulos desde el audio: cada clip recibe las palabras que se dicen mientras está en pantalla, con tiempos exactos. */
+  G.captionsFromAudio = async (E, audioId, onProgress) => {
+    const p = E.p, a = p.audio.find((x) => x.id === audioId); if (!a) return F.toast('Selecciona una pista de voz');
+    if (!p.clips.length) return F.toast('Añade imágenes al timeline');
+    const words = gd(p).tr?.[a.mediaId] || await G.transcribe(E, audioId, onProgress); if (!words) return;
+    const { items } = R.layout(p); E.api.commit();
+    items.forEach((it) => {
+      const ws = words.filter((w) => { const mid = (a.start || 0) + (w.s + w.e) / 2; return mid >= it.start && mid < it.end; });
+      const c = it.clip; if (!ws.length) return;   // sin voz en este clip: se respeta su texto
+      c.text = G.cleanText(ws.map((w) => w.w).join(' ')); c.textStyle = 'subtitulo'; c.textAnim = 'words';
+      c.capTimes = [];
+      for (let k = 0; k < ws.length; k += 3) c.capTimes.push(Math.max(0, (a.start || 0) + ws[k].s - it.start));
+    });
+    E.api.after({ insp: true }); F.toast('Subtítulos sincronizados con la voz: máx. 3 palabras', 'ok');
   };
 
   /** Multicámara con una sola imagen: alterna encuadres (general, punch-in 113 %, punch-in 125 % tope). */
@@ -187,7 +253,7 @@
   G.cutReport = (p) => {
     const { items } = R.layout(p), g = gd(p);
     let h = `<table class="gtab"><tr><th>#</th><th>Entra</th><th>Sale</th><th>Texto</th></tr>${items.map((it, i) => `<tr><td>${i + 1}</td><td>${fmt(it.start)}</td><td>${fmt(it.end)}</td><td>${F.esc(it.clip.text || '—')}</td></tr>`).join('')}</table>`;
-    if (g.lastCut) h += `<p class="small" style="margin-top:10px"><b>Silencios quitados de «${F.esc(g.lastCut.audio)}»</b>: ${g.lastCut.cuts.length} cortes · ${g.lastCut.removed} s menos (de ${g.lastCut.before} s a ~${g.lastCut.after} s).</p><div class="small muted">${g.lastCut.cuts.map(([s, e]) => `${fmt(s)}–${fmt(e)}`).join(' · ')}</div>`;
+    if (g.lastCut) h += `<p class="small" style="margin-top:10px"><b>Silencios quitados de «${F.esc(g.lastCut.audio)}»</b>: ${g.lastCut.cuts.length} cortes · ${g.lastCut.removed} s menos (de ${g.lastCut.before} s a ~${g.lastCut.after} s).</p><div class="small muted">${g.lastCut.cuts.map(([s, e]) => `${fmt(s)}–${fmt(e)}`).join(' · ')}</div>${g.lastCut.dropped?.length ? `<p class="small" style="margin-top:8px"><b>Frases descartadas:</b> ${g.lastCut.dropped.map((x) => '«' + F.esc(x) + '»').join(' · ')}</p>` : ''}`;
     else h += `<p class="small muted" style="margin-top:10px">No se han cortado silencios de la voz todavía.</p>`;
     return h;
   };
@@ -230,12 +296,14 @@
         <label class="lbl">Claims prohibidos (uno por línea)</label><textarea rows="3" data-gf="claimsNo" placeholder="Ej: cura, garantizado, elimina la calvicie">${F.esc(g.claimsNo)}</textarea>
         <label class="lbl">Claims permitidos</label><textarea rows="2" data-gf="claimsOk" placeholder="Lo que sí se puede decir">${F.esc(g.claimsOk)}</textarea>
         <label class="lbl">Duración objetivo (s)</label><input type="number" min="0" step="1" data-gf="target" value="${g.target || ''}">`)}
-      ${step('1', 'Cortar', `<button class="btn sm" data-g="silence" ${vozSel ? '' : 'disabled'}>${I('scissors')} Quitar silencios de la voz</button>
+      ${step('1', 'Cortar', `<label class="lbl">Motor de transcripción</label><select data-gf="engine" id="gEng"><option value="local">Local en el navegador (gratis, sin claves)</option><option value="openai">Whisper de OpenAI (clave propia)</option></select>
+        <button class="btn sm primary" data-g="tcut" ${vozSel ? '' : 'disabled'}>${I('scissors')} Cortar con transcripción (pausas, muletillas, repetidas)</button>
+        <button class="btn sm" data-g="silence" ${vozSel ? '' : 'disabled'}>${I('scissors')} Solo silencios (por volumen)</button>
         <div class="small muted">${vozSel ? 'Voz: ' + F.esc(F.media.byId(vozSel.mediaId)?.name || '') : 'Añade una pista de voz'} · deja 200 ms de aire</div>
         <label class="lbl">Silencio mínimo a cortar</label><select data-gf="minSil" id="gMinSil"><option value="0.4">0,4 s (agresivo)</option><option value="0.6">0,6 s (recomendado)</option><option value="1">1 s (suave)</option></select>
         <button class="btn sm" data-g="multicam">${I('film')} Multicámara (alternar encuadres)</button>
         <button class="btn sm" data-g="fit">${I('clock')} Ajustar a duración objetivo</button>`)}
-      ${step('2', 'Subtitular', `<label class="lbl">Guion como se grabó</label><textarea rows="4" data-gf="script" placeholder="Pega aquí el guion tal como lo dijiste">${F.esc(g.script)}</textarea>
+      ${step('2', 'Subtitular', `<button class="btn sm primary" data-g="acap" ${vozSel ? '' : 'disabled'}>${I('type')} Subtítulos desde el audio (sincronizados)</button><div class="small muted">O sin audio, desde el guion:</div><label class="lbl">Guion como se grabó</label><textarea rows="4" data-gf="script" placeholder="Pega aquí el guion tal como lo dijiste">${F.esc(g.script)}</textarea>
         <button class="btn sm" data-g="captions">${I('type')} Repartir como subtítulos (máx. 3 palabras)</button>
         <button class="btn sm" data-g="clean">${I('wand')} Limpiar textos (sin ¿ ¡)</button>`)}
       ${step('3', 'Ilustrar', `<div class="small muted" style="line-height:1.5">Pon una imagen cada vez que el guion NOMBRE algo: objeto sobre fondo negro, no stock, menos de 1 s. Usa el producto real, nunca redibujado. Arrastra la imagen al timeline y divide con <kbd>S</kbd>.</div>`)}
@@ -244,13 +312,14 @@
     G.afterPanel(bin); G.bind(bin, E);
   };
 
-  G.afterPanel = (bin) => { const s = bin.querySelector('#gMinSil'); if (s) s.value = String(G.minSil || 0.6); };
+  G.afterPanel = (bin) => { const s = bin.querySelector('#gMinSil'); if (s) s.value = String(G.minSil || 0.6); const en = bin.querySelector('#gEng'); if (en) en.value = F.transcribe?.engine() || 'local'; };
   G.bind = (bin, E) => {
     if (bin._gb) return; bin._gb = true;
     bin.addEventListener('change', (e) => {
       const f = e.target.dataset.gf; if (!f || !E.p) return;
       const p = E.p, g = gd(p);
       if (f === 'minSil') return void (G.minSil = +e.target.value);
+      if (f === 'engine') return void F.transcribe.setEngine(e.target.value);
       if (f === 'duck') { E.api.commit(); p.duck = e.target.checked; E.api.after({ insp: true }); return; }
       g[f] = f === 'target' ? +e.target.value || 0 : e.target.value;
       if (f === 'destino') {
@@ -264,6 +333,12 @@
       if (a === 'review') G.openReview(E);
       else if (a === 'guide') G.openGuide();
       else if (a === 'silence') { const v = E.selType === 'audio' ? E.sel : p.audio.find((x) => x.kind !== 'musica')?.id; b.disabled = true; G.cleanSilence(E, v, G.minSil || 0.6).catch((er) => F.toast('No se pudo analizar el audio: ' + er.message, 'error')).finally(() => (b.disabled = false)); }
+      else if (a === 'tcut' || a === 'acap') {
+        const v = E.selType === 'audio' ? E.sel : p.audio.find((x) => x.kind !== 'musica')?.id, label = b.innerHTML; b.disabled = true;
+        const prog = (t) => { b.textContent = t; };
+        (a === 'tcut' ? G.cleanByTranscript(E, v, G.minSil || 0.6, prog) : G.captionsFromAudio(E, v, prog))
+          .catch((er) => F.toast(er.message || String(er), 'error', 6000)).finally(() => { b.innerHTML = label; b.disabled = false; });
+      }
       else if (a === 'multicam') G.multicam(E);
       else if (a === 'fit') G.fitTarget(E, g.target);
       else if (a === 'captions') G.scriptToCaptions(E, g.script);
