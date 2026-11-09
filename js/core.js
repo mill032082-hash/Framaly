@@ -38,9 +38,9 @@
 
   /* ---------- ajustes ---------- */
   const DEF = {
-    keys: { openai: '', anthropic: '', elevenlabs: '', googleClientId: '' },
+    keys: { openai: '', anthropic: '', elevenlabs: '', gemini: '', minimax: '', googleClientId: '' },
     textProvider: 'anthropic',
-    models: { anthropic: 'claude-sonnet-5-5', openai: 'gpt-4.1-mini', image: 'gpt-image-1', tts: 'gpt-4o-mini-tts', eleven: 'eleven_multilingual_v2' },
+    models: { anthropic: 'claude-sonnet-5-5', openai: 'gpt-4.1-mini', image: 'gpt-image-1', tts: 'gpt-4o-mini-tts', eleven: 'eleven_multilingual_v2', gemini: 'gemini-2.5-flash', geminiImage: 'gemini-2.5-flash-image', geminiTts: 'gemini-2.5-flash-preview-tts', minimax: 'MiniMax-M2', minimaxTts: 'speech-2.8-hd', minimaxImage: 'image-01' },
     currentProject: null,
     defaultFps: 30,
     customFilters: [],

@@ -1,8 +1,21 @@
-/* FRAMALY — conectores de API: OpenAI, Anthropic (Claude), ElevenLabs, YouTube */
+/* FRAMALY — conectores de API: OpenAI, Anthropic (Claude), ElevenLabs, Gemini (Google), MiniMax, YouTube */
 (function () {
   'use strict';
   const key = (n) => (F.settings.keys[n] || '').trim();
-  const AI = ['anthropic', 'openai', 'elevenlabs'];
+  const AI = ['anthropic', 'openai', 'elevenlabs', 'gemini', 'minimax'];
+  const GEM = 'https://generativelanguage.googleapis.com', MM = 'https://api.minimax.io';
+  const GEMINI_VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Aoede', 'Zephyr', 'Leda', 'Orus', 'Callirrhoe', 'Enceladus'];
+  /** MiniMax avisa los fallos dentro de la respuesta (aunque el HTTP sea 200) */
+  const mmOk = (j) => { if (j?.base_resp && Number(j.base_resp.status_code) !== 0) throw new Error('MiniMax: ' + (j.base_resp.status_msg || 'error')); return j; };
+  const aspectOf = (size) => { const [w, h] = String(size).split('x').map(Number); return w > h ? '16:9' : h > w ? '9:16' : '1:1'; };
+  const hexBytes = (hex) => new Uint8Array((hex.match(/.{1,2}/g) || []).map((h) => parseInt(h, 16)));
+  /** Audio crudo (PCM 16 bits, mono) -> WAV */
+  const pcmToWav = (pcm, rate = 24000) => {
+    const h = new ArrayBuffer(44), v = new DataView(h), w = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    w(0, 'RIFF'); v.setUint32(4, 36 + pcm.length, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, pcm.length, true);
+    return new Blob([h, pcm], { type: 'audio/wav' });
+  };
   /** 'shared' (clave de FRAMALY en el servidor) · 'own' (clave propia de este navegador) · 'off' */
   const mode = (n) => (AI.includes(n) && F.cloud?.aiMode ? F.cloud.aiMode(n) : 'own');
   const need = (n, label) => {
@@ -13,7 +26,12 @@
   };
   /** Llamada a un proveedor: por la puerta segura si se usa la clave compartida, directa si es clave propia */
   const net = async (prov, url, init) => {
-    if (mode(prov) !== 'shared') return fetch(url, init);
+    if (mode(prov) !== 'shared') {
+      try { return await fetch(url, init); } catch (e) {
+        if (prov === 'minimax') throw new Error('MiniMax no permite llamadas directas desde el navegador. Pide a quien administra FRAMALY que te dé acceso a su clave.');
+        throw e;
+      }
+    }
     const r = await F.cloud.gateway(prov, url, init);
     if (r.status === 503 && key(prov)) return fetch(url, init); // clave compartida sin configurar: usa la propia si existe
     return r;
@@ -35,15 +53,14 @@
 
   F.api = {
     has: (n) => { const m = mode(n); return AI.includes(n) ? (m === 'shared' ? true : m === 'off' ? false : !!key(n)) : !!key(n); },
-    textReady() { return this.has('anthropic') || this.has('openai'); },
+    textReady() { return ['anthropic', 'openai', 'gemini', 'minimax'].some((p) => this.has(p)); },
 
     /** Elige el proveedor de texto: el preferido si tiene key, si no el otro */
     textProvider(pref) {
       const p = pref && pref !== 'auto' ? pref : F.settings.textProvider;
-      if (this.has(p)) return p;
-      const other = p === 'anthropic' ? 'openai' : 'anthropic';
-      if (this.has(other)) return other;
-      throw new Error('Necesitas una API key de Anthropic (Claude) u OpenAI para los agentes de texto. Ve a Integraciones API.');
+      const found = [p, 'anthropic', 'openai', 'gemini', 'minimax'].find((x) => this.has(x));
+      if (found) return found;
+      throw new Error('Necesitas una API de texto (Claude, OpenAI, Gemini o MiniMax) para los agentes. Ve a Integraciones API.');
     },
 
     /** Llamada a modelo de lenguaje. Devuelve texto. */
@@ -57,6 +74,26 @@
         });
         const j = await asJson(r);
         return (j.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+      }
+      if (prov === 'gemini') {
+        const mdl = F.settings.models.gemini;
+        const gc = { maxOutputTokens: maxTokens };
+        if (json) gc.responseMimeType = 'application/json';
+        if (/flash/.test(mdl) && !/pro/.test(mdl)) gc.thinkingConfig = { thinkingBudget: 0 };
+        const r = await net('gemini', `${GEM}/v1beta/models/${encodeURIComponent(mdl)}:generateContent`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key('gemini') },
+          body: JSON.stringify({ ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), contents: [{ role: 'user', parts: [{ text: prompt + (json ? '\n\nResponde solo con JSON.' : '') }] }], generationConfig: gc }),
+        });
+        const j = await asJson(r);
+        return (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+      }
+      if (prov === 'minimax') {
+        const r = await net('minimax', `${MM}/v1/text/chatcompletion_v2`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key('minimax') },
+          body: JSON.stringify({ model: F.settings.models.minimax, max_tokens: maxTokens, messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt + (json ? '\n\nResponde solo con JSON.' : '') }] }),
+        });
+        const j = mmOk(await asJson(r));
+        return String(j.choices?.[0]?.message?.content || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
       }
       const body = { model: F.settings.models.openai, messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt + (json ? '\n\nResponde solo con JSON.' : '') }] };
       if (json) body.response_format = { type: 'json_object' };
@@ -75,7 +112,40 @@
     async llmJSON(opts) { return this.parseJSON(await this.llm({ ...opts, json: true })); },
 
     /** Generación de imágenes (OpenAI). Devuelve Blob[] */
-    async image({ prompt, size = '1536x1024', quality = 'medium', n = 1, model }) {
+    imageProvider(pref) {
+      let saved; try { saved = JSON.parse(localStorage.getItem('framaly.img') || '{}').provider; } catch (e) { /* sin preferencia */ }
+      return [pref && pref !== 'auto' ? pref : saved, 'openai', 'gemini', 'minimax'].find((x) => x && x !== 'auto' && this.has(x)) || 'openai';
+    },
+    async image(o) {
+      const p = this.imageProvider(o.provider);
+      return p === 'gemini' ? this.imageGemini(o) : p === 'minimax' ? this.imageMinimax(o) : this.imageOpenAI(o);
+    },
+    async imageGemini({ prompt, size = '1536x1024', n = 1 }) {
+      need('gemini', 'Gemini');
+      const one = async () => {
+        const r = await net('gemini', `${GEM}/v1beta/models/${encodeURIComponent(F.settings.models.geminiImage)}:generateContent`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key('gemini') },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'], imageConfig: { aspectRatio: aspectOf(size) } } }),
+        });
+        const j = await asJson(r);
+        const d = (j.candidates?.[0]?.content?.parts || []).map((p) => p.inlineData || p.inline_data).find(Boolean);
+        if (!d?.data) throw new Error(j.candidates?.[0]?.finishReason ? `Gemini no devolvió una imagen (${j.candidates[0].finishReason}). Prueba con otra descripción.` : 'Gemini no devolvió una imagen. Prueba con otra descripción.');
+        return F.b64ToBlob(d.data, d.mimeType || d.mime_type || 'image/png');
+      };
+      return Promise.all(Array.from({ length: Math.min(4, Math.max(1, n)) }, one));
+    },
+    async imageMinimax({ prompt, size = '1536x1024', n = 1 }) {
+      need('minimax', 'MiniMax');
+      const r = await net('minimax', `${MM}/v1/image_generation`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key('minimax') },
+        body: JSON.stringify({ model: F.settings.models.minimaxImage, prompt, aspect_ratio: aspectOf(size), response_format: 'base64', n: Math.min(4, Math.max(1, n)) }),
+      });
+      const j = mmOk(await asJson(r));
+      const list = j.data?.image_base64 || [];
+      if (!list.length) throw new Error('MiniMax no devolvió imágenes. Prueba con otra descripción.');
+      return list.map((b) => F.b64ToBlob(b, 'image/jpeg'));
+    },
+    async imageOpenAI({ prompt, size = '1536x1024', quality = 'medium', n = 1, model }) {
       need('openai', 'OpenAI');
       const mdl = model || F.settings.models.image;
       const body = { model: mdl, prompt, size, n };
@@ -118,9 +188,57 @@
       return asBlob(r);
     },
 
+    /** Gemini: voz (devuelve audio crudo que se envuelve como WAV). No admite velocidad. */
+    async ttsGemini({ text, voice }) {
+      need('gemini', 'Gemini');
+      const r = await net('gemini', `${GEM}/v1beta/models/${encodeURIComponent(F.settings.models.geminiTts)}:generateContent`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key('gemini') },
+        body: JSON.stringify({ contents: [{ parts: [{ text }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: GEMINI_VOICES.includes(voice) ? voice : 'Kore' } } } } }),
+      });
+      const j = await asJson(r);
+      const d = (j.candidates?.[0]?.content?.parts || []).map((p) => p.inlineData || p.inline_data).find(Boolean);
+      if (!d?.data) throw new Error('Gemini no devolvió audio. Inténtalo de nuevo con un texto más corto.');
+      const rate = +(/rate=(\d+)/.exec(d.mimeType || d.mime_type || '') || [])[1] || 24000;
+      const bin = atob(d.data), pcm = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) pcm[i] = bin.charCodeAt(i);
+      return pcmToWav(pcm, rate);
+    },
+    GEMINI_VOICES,
+    /** MiniMax: voz (el audio llega como texto hexadecimal dentro del JSON) */
+    async ttsMinimax({ text, voiceId, speed = 1 }) {
+      need('minimax', 'MiniMax');
+      if (!voiceId) throw new Error('Elige una voz de MiniMax.');
+      const r = await net('minimax', `${MM}/v1/t2a_v2`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key('minimax') },
+        body: JSON.stringify({ model: F.settings.models.minimaxTts, text, stream: false, voice_setting: { voice_id: voiceId, speed: +speed || 1, vol: 1, pitch: 0 }, audio_setting: { sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 1 } }),
+      });
+      const j = mmOk(await asJson(r));
+      if (!j.data?.audio) throw new Error('MiniMax no devolvió audio.');
+      return new Blob([hexBytes(j.data.audio)], { type: 'audio/mpeg' });
+    },
+    async minimaxVoices() {
+      need('minimax', 'MiniMax');
+      const r = await net('minimax', `${MM}/v1/get_voice`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key('minimax') }, body: JSON.stringify({ voice_type: 'system' }) });
+      const j = mmOk(await asJson(r));
+      return (j.system_voice || []).map((v) => ({ id: v.voice_id, name: v.voice_name || v.voice_id }));
+    },
+    /** Une varias partes de audio en una sola (WAV con WAV; el resto como MP3) */
+    async joinAudio(blobs) {
+      if (blobs.length === 1) return blobs[0];
+      if (blobs.every((b) => b.type === 'audio/wav')) {
+        const parts = await Promise.all(blobs.map(async (b) => new Uint8Array((await b.arrayBuffer()).slice(44))));
+        const all = new Uint8Array(parts.reduce((a, p) => a + p.length, 0)); let o = 0; parts.forEach((p) => { all.set(p, o); o += p.length; });
+        return pcmToWav(all, 24000);
+      }
+      return new Blob(blobs, { type: 'audio/mpeg' });
+    },
+
     /** TTS genérico según proveedor */
     async tts(o) {
-      return o.provider === 'elevenlabs' ? this.ttsEleven({ ...o, voiceId: o.voiceId || o.voice }) : this.ttsOpenAI(o);
+      if (o.provider === 'elevenlabs') return this.ttsEleven({ ...o, voiceId: o.voiceId || o.voice });
+      if (o.provider === 'gemini') return this.ttsGemini(o);
+      if (o.provider === 'minimax') return this.ttsMinimax({ ...o, voiceId: o.voiceId || o.voice });
+      return this.ttsOpenAI(o);
     },
 
     /** Pruebas de conexión */
@@ -128,6 +246,8 @@
       if (n === 'openai') { await asJson(await net('openai', 'https://api.openai.com/v1/models', { headers: { Authorization: 'Bearer ' + key('openai') } })); return 'Conexión correcta con OpenAI'; }
       if (n === 'anthropic') { await asJson(await net('anthropic', 'https://api.anthropic.com/v1/models', { headers: { 'x-api-key': key('anthropic'), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' } })); return 'Conexión correcta con Anthropic'; }
       if (n === 'elevenlabs') { const v = await this.elevenVoices(); return `ElevenLabs conectado · ${v.length} voces disponibles`; }
+      if (n === 'gemini') { await asJson(await net('gemini', `${GEM}/v1beta/models`, { headers: { 'x-goog-api-key': key('gemini') } })); return 'Conexión correcta con Gemini'; }
+      if (n === 'minimax') { const v = await this.minimaxVoices(); return `MiniMax conectado · ${v.length} voces disponibles`; }
       if (n === 'googleClientId') { await this.youtubeToken(); return 'Cuenta de YouTube autorizada'; }
     },
 

@@ -119,7 +119,7 @@
   function closeGate() { clearInterval(gate.timer); gateEl?.remove(); gateEl = null; gate.keep.p = ''; }
   function dots() {
     const el = F.$('#apiDots'); if (!el) return;
-    el.innerHTML = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['googleClientId', 'YouTube']].map(([k, n]) => `<a href="#/integraciones" style="color:var(--muted);text-decoration:none"><span class="dot ${F.api.has(k) ? 'ok' : ''}"></span>${n}</a>`).join('');
+    el.innerHTML = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini'], ['minimax', 'MiniMax'], ['googleClientId', 'YouTube']].map(([k, n]) => `<a href="#/integraciones" style="color:var(--muted);text-decoration:none"><span class="dot ${F.api.has(k) ? 'ok' : ''}"></span>${n}</a>`).join('');
   }
   /** Menú lateral deslizable en celular */
   function menu(open) {

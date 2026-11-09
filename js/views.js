@@ -74,7 +74,7 @@
       </div>
       <div class="flowviz">${[['zap', 'Idea', 'Tu tema en una frase'], ['script', 'Guion', 'Escenas con gancho y llamada a la acción'], ['image', 'Imágenes', 'Una por escena, con estilo coherente'], ['mic', 'Voz', 'Narración natural sincronizada'], ['film', 'Montaje', 'Transiciones, movimiento y subtítulos'], ['youtube', 'YouTube', 'MP4 + SEO + miniatura']].map(([ic, b, s], i) => `<div class="fv-step" style="animation-delay:${i * 0.08}s"><div class="ic">${I(ic)}</div><div><b>${b}</b><small>${s}</small></div><span class="st">${I('check')}</span></div>`).join('')}</div></section>
       <div class="stats">${[['film', ps.length, 'Proyectos'], ['image', F.media.images().length, 'Imágenes'], ['mic', F.media.audios().length, 'Audios'], ['sparkles', F.media.list.filter((m) => m.source === 'ai').length, 'Creados con IA']].map(([ic, n, l]) => `<div class="stat"><div class="ic">${I(ic)}</div><div><b>${n}</b><span>${l}</span></div></div>`).join('')}</div>
-      ${canInt && !F.api.has('openai') && !F.api.has('anthropic') ? `<div class="notice" style="margin-top:18px">${I('key')}<div><b>Conecta tus APIs para activar la IA.</b> Añade tu key de OpenAI (imágenes y voz) y de Anthropic o OpenAI (guiones). El editor funciona sin ellas con tus propias imágenes. <a href="#/integraciones">Configurar ahora →</a></div></div>` : ''}
+      ${canInt && !F.api.textReady() ? `<div class="notice" style="margin-top:18px">${I('key')}<div><b>Conecta tus APIs para activar la IA.</b> Añade tu key de OpenAI (imágenes y voz) y de Anthropic o OpenAI (guiones). El editor funciona sin ellas con tus propias imágenes. <a href="#/integraciones">Configurar ahora →</a></div></div>` : ''}
       <h2 class="sec-t">Módulos <span class="line"></span></h2>
       <div class="mods">${mods2.map(([id, ic, b, p]) => `<a class="mod" href="#/${id}"><div class="ic">${I(ic)}</div><b>${b}</b><p>${p}</p></a>`).join('')}</div>
       <h2 class="sec-t">Proyectos recientes <span class="line"></span><button class="btn sm" data-new>${I('plus')} Nuevo</button></h2>
@@ -114,7 +114,7 @@
         <div class="grid2"><div><label class="lbl">Duración (segundos)</label><input type="number" id="gDur" min="10" max="900" step="5" value="${st.duration}"></div><div><label class="lbl">Escenas (0 = auto)</label><input type="number" id="gSc" min="0" max="40" value="${st.scenes}"></div></div>
         <label class="lbl">Tono</label><select id="gTone">${opt(tones.map((t) => [t, t[0].toUpperCase() + t.slice(1)]), st.tone)}</select>
         <div class="grid2"><div><label class="lbl">Público</label><input type="text" id="gAud" value="${F.esc(st.audience)}"></div><div><label class="lbl">Idioma</label><input type="text" id="gLang" value="${F.esc(st.language)}"></div></div>
-        <label class="lbl">Modelo de texto</label><select id="gProv">${opt([['auto', 'Según Integraciones'], ['anthropic', 'Claude (Anthropic)'], ['openai', 'OpenAI GPT']], st.provider)}</select>
+        <label class="lbl">Modelo de texto</label><select id="gProv">${opt([['auto', 'Según Integraciones'], ['anthropic', 'Claude (Anthropic)'], ['openai', 'OpenAI GPT'], ['gemini', 'Gemini (Google)'], ['minimax', 'MiniMax']], st.provider)}</select>
         <button class="btn primary block lg" id="gGo" style="margin-top:18px">${I('sparkles')} Escribir guion</button>
       </div>
       <div id="gOut"></div></div></div>`;
@@ -171,12 +171,13 @@
 
   /* =================== IMÁGENES =================== */
   V.imagenes = (el) => {
-    const st = load('img', { prompt: '', style: 'cine', size: '1536x1024', quality: 'medium', n: 1 });
+    const st = load('img', { prompt: '', style: 'cine', size: '1536x1024', quality: 'medium', n: 1, provider: 'openai' });
     const save = () => store('img', st);
     el.innerHTML = `<div class="page"><div class="split">
       <div class="card sticky"><h2>${I('image')} Generador de imágenes</h2><p class="desc">Crea escenas, fondos y recursos para tus videos con <b>${F.esc(F.settings.models.image)}</b>.</p>
         <label class="lbl">Describe la imagen</label><textarea id="iPrompt" rows="5" placeholder="Ej: un faro solitario en un acantilado durante una tormenta al atardecer">${F.esc(st.prompt)}</textarea>
         <div class="row" style="margin-top:8px"><button class="btn sm outline" id="iEnh">${I('wand')} Mejorar prompt con IA</button></div>
+        <label class="lbl">Generador</label><div class="seg" id="iProv">${[['openai', 'OpenAI'], ['gemini', 'Gemini'], ['minimax', 'MiniMax']].map(([k, n]) => `<button data-p="${k}" class="${k === st.provider ? 'on' : ''}">${n}</button>`).join('')}</div>
         <label class="lbl">Estilo</label><div class="chips" id="iSty">${Object.entries(F.STYLES).map(([k, v]) => `<button class="chip ${k === st.style ? 'on' : ''}" data-s="${k}">${v.name}</button>`).join('')}</div>
         <div class="grid3"><div><label class="lbl">Formato</label><select id="iSize">${opt([['1536x1024', 'Horizontal'], ['1024x1536', 'Vertical'], ['1024x1024', 'Cuadrado']], st.size)}</select></div>
         <div><label class="lbl">Calidad</label><select id="iQ">${opt([['low', 'Baja'], ['medium', 'Media'], ['high', 'Alta']], st.quality)}</select></div>
@@ -187,13 +188,14 @@
       <div><div class="card"><h3>${I('sparkles')} Resultados</h3><div class="img-grid" id="iRes"><div class="empty" style="grid-column:1/-1">${I('image')}<p class="small">Las imágenes nuevas aparecerán aquí y se guardan automáticamente en la biblioteca.</p></div></div></div>
       <div class="card"><h3>${I('grid')} Galería IA <span class="grow"></span><a class="btn sm ghost" href="#/biblioteca">Ver biblioteca</a></h3><div class="img-grid" id="iGal"></div></div></div>
     </div></div>`;
-    const cost = () => { const per = { low: 0.016, medium: 0.063, high: 0.25 }[st.quality]; el.querySelector('#iCost').textContent = `Costo aproximado: US$${(per * st.n).toFixed(2)} · se guardan en tu biblioteca`; };
+    const cost = () => { const per = st.provider === 'gemini' ? 0.039 : st.provider === 'minimax' ? 0.0035 : { low: 0.016, medium: 0.063, high: 0.25 }[st.quality]; el.querySelector('#iCost').textContent = `Costo aproximado: US$${(per * st.n).toFixed(2)} · se guardan en tu biblioteca`; };
     const gal = () => { const ai = F.media.images().filter((m) => m.source === 'ai').slice(0, 24); el.querySelector('#iGal').innerHTML = ai.length ? ai.map((m) => V.tile(m)).join('') : '<div class="small dim">Aún no generaste imágenes.</div>'; };
     cost(); gal();
     const off = F.on('media', gal);
     V.mediaActions(el);
     el.querySelector('#iPrompt').addEventListener('input', (e) => { st.prompt = e.target.value; save(); });
     el.querySelector('#iSty').addEventListener('click', (e) => { const c = e.target.closest('[data-s]'); if (!c) return; st.style = c.dataset.s; save(); el.querySelectorAll('#iSty .chip').forEach((x) => x.classList.toggle('on', x === c)); });
+    el.querySelector('#iProv').addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (!b) return; st.provider = b.dataset.p; save(); el.querySelectorAll('#iProv button').forEach((x) => x.classList.toggle('on', x === b)); cost(); });
     for (const [id, k] of [['iSize', 'size'], ['iQ', 'quality'], ['iN', 'n']]) el.querySelector('#' + id).addEventListener('change', (e) => { st[k] = k === 'n' ? +e.target.value : e.target.value; save(); cost(); });
     el.querySelector('#iEnh').onclick = async (e) => {
       if (!st.prompt.trim()) return F.toast('Escribe primero una idea');
@@ -211,7 +213,7 @@
       const sk = Array.from({ length: st.n }, () => { const d = document.createElement('div'); d.className = 'tile wide skel'; d.innerHTML = '<span><span class="spin"></span> Creando…</span>'; res.prepend(d); return d; });
       try {
         const prompt = [st.prompt, F.STYLES[st.style]?.p].filter(Boolean).join('. ');
-        const blobs = await F.api.image({ prompt, size: st.size, quality: st.quality, n: st.n });
+        const blobs = await F.api.image({ prompt, size: st.size, quality: st.quality, n: st.n, provider: st.provider });
         for (let i = 0; i < sk.length; i++) {
           if (!blobs[i]) { sk[i].remove(); continue; }
           const m = await F.media.add({ type: 'image', name: st.prompt.slice(0, 48), blob: blobs[i], source: 'ai', meta: { prompt } });
@@ -226,13 +228,13 @@
 
   /* =================== VOCES =================== */
   V.voces = (el) => {
-    const st = load('voice', { provider: 'openai', text: '', voice: 'nova', instructions: 'Narrador profesional: voz cálida, clara, con ritmo dinámico y entonación natural.', speed: 1, elevenId: '', stability: 0.5, similarity: 0.75, name: '' });
+    const st = load('voice', { provider: 'openai', text: '', voice: 'nova', instructions: 'Narrador profesional: voz cálida, clara, con ritmo dinámico y entonación natural.', speed: 1, elevenId: '', stability: 0.5, similarity: 0.75, name: '', geminiVoice: 'Kore', minimaxId: '' });
     const tx = sessionStorage.getItem('framaly.voiceText'); if (tx) { st.text = tx; sessionStorage.removeItem('framaly.voiceText'); }
     const save = () => store('voice', st);
-    let elevenList = null;
+    let elevenList = null, minimaxList = null;
     el.innerHTML = `<div class="page"><div class="split">
       <div class="card sticky"><h2>${I('mic')} Estudio de voz</h2><p class="desc">Convierte texto en narraciones naturales para tus videos.</p>
-        <div class="seg" id="vProv"><button data-p="openai">OpenAI</button><button data-p="elevenlabs">ElevenLabs</button><button data-p="browser">Navegador (gratis)</button></div>
+        <div class="seg" id="vProv"><button data-p="openai">OpenAI</button><button data-p="elevenlabs">ElevenLabs</button><button data-p="gemini">Gemini</button><button data-p="minimax">MiniMax</button><button data-p="browser">Navegador (gratis)</button></div>
         <label class="lbl">Texto a narrar</label><textarea id="vText" rows="7" placeholder="Escribe o pega la narración de tu video…">${F.esc(st.text)}</textarea><div class="hint" id="vCount"></div>
         <div id="vOpts"></div>
         <label class="lbl">Nombre del audio</label><input type="text" id="vName" placeholder="Narración" value="${F.esc(st.name)}">
@@ -254,6 +256,10 @@
         <div class="hint">Voice ID: <code id="vElId">${F.esc(st.elevenId || '—')}</code> <button class="applyall" id="vElCopy">copiar</button></div>
         <div class="grid2"><div><label class="lbl">Estabilidad</label><input type="range" id="vStab" min="0" max="1" step="0.05" value="${st.stability}"></div><div><label class="lbl">Similitud</label><input type="range" id="vSim" min="0" max="1" step="0.05" value="${st.similarity}"></div></div>
         <label class="lbl">Velocidad</label><div class="rangeval"><input type="range" id="vSpd" min="0.7" max="1.2" step="0.05" value="${F.clamp(st.speed, 0.7, 1.2)}"><span>${(+st.speed).toFixed(2)}x</span></div>`;
+      else if (st.provider === 'gemini') o.innerHTML = `<label class="lbl">Voz de Gemini</label><div class="chips" id="vGem">${F.api.GEMINI_VOICES.map((v) => `<button class="chip ${v === st.geminiVoice ? 'on' : ''}" data-g="${v}">${v}</button>`).join('')}</div>
+        <p class="hint">Gemini no permite cambiar la velocidad. Los textos largos se generan por partes y se unen solos.</p>`;
+      else if (st.provider === 'minimax') o.innerHTML = `<label class="lbl">Voz de MiniMax</label><div class="keyrow"><input type="text" id="vMm" list="vMmList" value="${F.esc(st.minimaxId)}" placeholder="Pulsa Cargar y elige una voz"><datalist id="vMmList">${(minimaxList || []).map((v) => `<option value="${F.esc(v.id)}">${F.esc(v.name)}</option>`).join('')}</datalist><button class="btn" id="vMmLoad">${minimaxList ? 'Recargar' : 'Cargar'}</button></div>
+        <label class="lbl">Velocidad</label><div class="rangeval"><input type="range" id="vSpd" min="0.5" max="2" step="0.05" value="${st.speed}"><span>${(+st.speed).toFixed(2)}x</span></div>`;
       else {
         const vs = speechSynthesis.getVoices().filter((v) => /^es/i.test(v.lang));
         o.innerHTML = `<div class="notice" style="margin:14px 0 0">${I('zap')}<div>La voz del navegador es gratuita y sirve para <b>escuchar una prueba</b>, pero no se puede guardar ni exportar. Para tus videos usa OpenAI o ElevenLabs.</div></div>
@@ -272,6 +278,11 @@
     q('#vOpts').addEventListener('click', async (e) => {
       const c = e.target.closest('[data-v]'); if (c) { st.voice = c.dataset.v; save(); q('#vOpts').querySelectorAll('[data-v]').forEach((x) => x.classList.toggle('on', x === c)); }
       if (e.target.closest('#vElCopy') && st.elevenId) { navigator.clipboard.writeText(st.elevenId); F.toast('Voice ID copiado. Pégalo en el Agente Locutor de tus flujos.', 'ok'); }
+      const gv = e.target.closest('[data-g]'); if (gv) { st.geminiVoice = gv.dataset.g; save(); q('#vOpts').querySelectorAll('[data-g]').forEach((x) => x.classList.toggle('on', x === gv)); }
+      if (e.target.closest('#vMmLoad')) {
+        const b = e.target.closest('#vMmLoad'); F.busy(b, true, '');
+        try { minimaxList = await F.api.minimaxVoices(); if (!st.minimaxId && minimaxList[0]) st.minimaxId = minimaxList[0].id; save(); opts(); F.toast(`${minimaxList.length} voces cargadas`, 'ok'); } catch (err) { F.toast(err.message, 'error'); F.busy(b, false); }
+      }
       if (e.target.closest('#vElLoad')) {
         const b = e.target.closest('#vElLoad'); F.busy(b, true, '');
         try { elevenList = await F.api.elevenVoices(); if (!st.elevenId && elevenList[0]) st.elevenId = elevenList[0].id; save(); opts(); F.toast(`${elevenList.length} voces cargadas`, 'ok'); } catch (err) { F.toast(err.message, 'error'); F.busy(b, false); }
@@ -284,6 +295,7 @@
       if (id === 'vStab') st.stability = +e.target.value;
       if (id === 'vSim') st.similarity = +e.target.value;
       if (id === 'vEl') { st.elevenId = e.target.value; q('#vElId').textContent = st.elevenId; }
+      if (id === 'vMm') st.minimaxId = e.target.value.trim();
       save();
     });
     const chunks = (text, max) => {
@@ -301,13 +313,13 @@
       }
       const b = e.currentTarget; F.busy(b, true, 'Generando voz…');
       try {
-        const parts = chunks(text, st.provider === 'openai' ? 3800 : 4500);
+        const parts = chunks(text, st.provider === 'openai' ? 3800 : st.provider === 'gemini' ? 900 : 4500);
         const blobs = [];
         for (const [i, t] of parts.entries()) {
           if (parts.length > 1) b.innerHTML = `<span class="spin"></span> Parte ${i + 1} de ${parts.length}…`;
-          blobs.push(await F.api.tts({ provider: st.provider, text: t, voice: st.voice, instructions: st.instructions, speed: st.speed, voiceId: st.elevenId, stability: st.stability, similarity: st.similarity }));
+          blobs.push(await F.api.tts({ provider: st.provider, text: t, voice: st.provider === 'gemini' ? st.geminiVoice : st.voice, instructions: st.instructions, speed: st.speed, voiceId: st.provider === 'minimax' ? st.minimaxId : st.elevenId, stability: st.stability, similarity: st.similarity }));
         }
-        const blob = new Blob(blobs, { type: 'audio/mpeg' });
+        const blob = await F.api.joinAudio(blobs);
         const m = await F.media.add({ type: 'audio', name: st.name.trim() || `Voz · ${text.slice(0, 30)}`, blob, source: 'ai', meta: { text } });
         const a = q('#vPrev'); a.src = F.media.url(m); a.classList.remove('hidden'); a.play().catch(() => {});
         F.toast('Voz generada y guardada en la biblioteca', 'ok');

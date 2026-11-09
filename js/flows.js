@@ -75,10 +75,11 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     const { idea, montage: mt } = cfg;
     // Validaciones previas
     if (!cfg.presetScript || cfg.seo) F.api.textProvider(cfg.script?.provider);
-    if (!F.api.has('openai')) throw new Error('El Agente Director Visual necesita una API key de OpenAI para generar imágenes.');
+    if (!['openai', 'gemini', 'minimax'].some((p) => F.api.has(p))) throw new Error('El Agente Director Visual necesita una API de imágenes (OpenAI, Gemini o MiniMax). Ve a Integraciones API.');
     if (cfg.voice) {
-      if (cfg.voice.provider === 'elevenlabs' && !F.api.has('elevenlabs')) throw new Error('Falta la API key de ElevenLabs para el Agente Locutor.');
-      if (cfg.voice.provider === 'elevenlabs' && !cfg.voice.voiceId) throw new Error('Indica el Voice ID de ElevenLabs en el Agente Locutor.');
+      const vp = cfg.voice.provider || 'openai';
+      if (!F.api.has(vp)) throw new Error('El Agente Locutor usa ' + ({ elevenlabs: 'ElevenLabs', gemini: 'Gemini', minimax: 'MiniMax', openai: 'OpenAI' })[vp] + ', pero no está disponible. Cámbialo en el nodo Voz o conéctalo en Integraciones API.');
+      if ((vp === 'elevenlabs' || vp === 'minimax') && !cfg.voice.voiceId) throw new Error('Indica el Voice ID de ' + (vp === 'minimax' ? 'MiniMax' : 'ElevenLabs') + ' en el Agente Locutor.');
     }
     step('idea', 'done', idea.topic.slice(0, 50));
 
@@ -98,7 +99,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     const imgIds = await F.pool(script.scenes, 3, async (sc, i) => {
       const prompt = [sc.image_prompt, cfg.images.common, F.STYLES[cfg.images.style]?.p].filter(Boolean).join('. ');
       try {
-        const [blob] = await F.api.image({ prompt, size, quality: cfg.images.quality, n: 1 });
+        const [blob] = await F.api.image({ prompt, size, quality: cfg.images.quality, n: 1, provider: cfg.images.provider });
         const m = await F.media.add({ type: 'image', name: `${script.title.slice(0, 40)} · escena ${i + 1}`, blob, source: 'ai', meta: { prompt } });
         ok++; step('images', 'run', `${ok}/${n}`); log(`  · imagen ${i + 1}/${n} lista`);
         return m.id;
@@ -227,18 +228,19 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     ],
     script: [
       { k: 'scenes', l: 'Número de escenas (0 = automático)', t: 'number', min: 0, max: 40, step: 1 },
-      { k: 'provider', l: 'Modelo de texto', t: 'select', o: [['auto', 'Según Integraciones'], ['anthropic', 'Claude (Anthropic)'], ['openai', 'OpenAI GPT']] },
+      { k: 'provider', l: 'Modelo de texto', t: 'select', o: [['auto', 'Según Integraciones'], ['anthropic', 'Claude (Anthropic)'], ['openai', 'OpenAI GPT'], ['gemini', 'Gemini (Google)'], ['minimax', 'MiniMax']] },
       { k: 'extra', l: 'Instrucciones extra para el guionista', t: 'textarea', ph: 'Ej: menciona mi canal @MiCanal al final, usa datos con fuentes…' },
     ],
     images: [
+      { k: 'provider', l: 'Proveedor de imágenes', t: 'select', o: [['auto', 'Según Ajustes'], ['openai', 'OpenAI'], ['gemini', 'Gemini (Google)'], ['minimax', 'MiniMax']] },
       { k: 'style', l: 'Estilo visual', t: 'select', o: styleOpts },
       { k: 'quality', l: 'Calidad', t: 'select', o: [['low', 'Baja (rápida y económica)'], ['medium', 'Media (recomendada)'], ['high', 'Alta (máximo detalle)']] },
       { k: 'common', l: 'Descripción visual común (coherencia)', t: 'textarea', ph: 'Ej: protagonista: exploradora joven con chaqueta naranja; paleta cálida' },
     ],
     voice: [
-      { k: 'provider', l: 'Proveedor de voz', t: 'select', o: [['openai', 'OpenAI TTS'], ['elevenlabs', 'ElevenLabs']] },
-      { k: 'voice', l: 'Voz (OpenAI)', t: 'select', o: () => F.api.OPENAI_VOICES.map((v) => [v, v]) },
-      { k: 'voiceId', l: 'Voice ID (ElevenLabs)', t: 'text', ph: 'Cópialo desde la sección Voces' },
+      { k: 'provider', l: 'Proveedor de voz', t: 'select', o: [['openai', 'OpenAI TTS'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini (Google)'], ['minimax', 'MiniMax']] },
+      { k: 'voice', l: 'Voz (OpenAI o Gemini)', t: 'select', o: () => [...F.api.OPENAI_VOICES, ...F.api.GEMINI_VOICES].map((v) => [v, v]) },
+      { k: 'voiceId', l: 'Voice ID (ElevenLabs o MiniMax)', t: 'text', ph: 'Cópialo desde la sección Voces' },
       { k: 'instructions', l: 'Dirección de voz (OpenAI)', t: 'textarea' },
       { k: 'speed', l: 'Velocidad', t: 'number', min: 0.5, max: 2, step: 0.05 },
     ],
@@ -316,9 +318,9 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     const c = flow.cfg[id];
     switch (id) {
       case 'idea': return `${c.topic ? F.esc(c.topic.slice(0, 60)) : '<span style="color:var(--or2)">Escribe el tema…</span>'}<br><span class="dim">${c.duration}s · ${c.aspect}</span>`;
-      case 'script': return `${c.scenes || 'Auto (' + P.sceneCount(flow.cfg.idea, c) + ')'} escenas · ${c.provider === 'auto' ? (F.settings.textProvider === 'anthropic' ? 'Claude' : 'OpenAI') : c.provider === 'anthropic' ? 'Claude' : 'OpenAI'}`;
+      case 'script': return `${c.scenes || 'Auto (' + P.sceneCount(flow.cfg.idea, c) + ')'} escenas · ${({ anthropic: 'Claude', openai: 'OpenAI', gemini: 'Gemini', minimax: 'MiniMax' })[c.provider === 'auto' ? F.settings.textProvider : c.provider] || 'IA'}`;
       case 'images': return `${F.STYLES[c.style]?.name || c.style} · calidad ${c.quality}`;
-      case 'voice': return c.provider === 'elevenlabs' ? `ElevenLabs · ${c.voiceId ? c.voiceId.slice(0, 10) + '…' : 'sin voz'}` : `OpenAI · ${c.voice} · x${c.speed}`;
+      case 'voice': return c.provider === 'elevenlabs' || c.provider === 'minimax' ? `${c.provider === 'minimax' ? 'MiniMax' : 'ElevenLabs'} · ${c.voiceId ? c.voiceId.slice(0, 10) + '…' : 'sin voz'}` : `${c.provider === 'gemini' ? 'Gemini' : 'OpenAI'} · ${c.voice}${c.provider === 'gemini' ? '' : ' · x' + c.speed}`;
       case 'music': { const m = F.media.byId(c.mediaId); return m ? F.esc(m.name.slice(0, 30)) : 'Elige una pista'; }
       case 'montage': return `${c.transition === 'auto' ? 'Transiciones variadas' : R.TRANSITIONS.find((t) => t.id === c.transition)?.name} · ${R.filter(c.filter).name}`;
       case 'seo': return c.keywords ? F.esc(c.keywords.slice(0, 40)) : 'Título, descripción, tags y capítulos';
@@ -513,8 +515,9 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     /** Qué falta para poder trabajar en automático */
     missing() {
       const m = [];
-      if (!F.api.has('openai')) m.push('OpenAI (imágenes y voz)');
-      if (!F.api.textReady()) m.push('Claude u OpenAI (guiones)');
+      if (!['openai', 'gemini', 'minimax'].some((p) => F.api.has(p))) m.push('OpenAI, Gemini o MiniMax (imágenes)');
+      if (!['openai', 'gemini'].some((p) => F.api.has(p))) m.push('OpenAI o Gemini (voz)');
+      if (!F.api.textReady()) m.push('Claude, OpenAI, Gemini o MiniMax (guiones)');
       return m;
     },
     async run({ topic, aspect = '16:9', duration = 60, style = 'cine', exportAfter = true }) {
@@ -530,6 +533,8 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       const fl = makeFlow(aspect === '9:16' ? 'short' : 'youtube');
       Object.assign(fl.cfg.idea, { topic: topic.trim(), aspect, duration: +duration || 60 });
       fl.cfg.images.style = style;
+      fl.cfg.voice.provider = F.api.has('openai') ? 'openai' : 'gemini';
+      if (fl.cfg.voice.provider === 'gemini') fl.cfg.voice.voice = 'Kore';
       fl.on.voice = true; fl.on.seo = true;
       // Música automática: la última pista subida por el usuario
       const music = F.media.audios().find((m) => m.source === 'upload');

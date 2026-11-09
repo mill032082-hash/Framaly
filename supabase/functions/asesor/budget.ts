@@ -2,8 +2,8 @@
 // Esta copia debe ser IDÉNTICA en supabase/functions/ia/budget.ts y supabase/functions/asesor/budget.ts.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-export type Provider = "anthropic" | "openai" | "elevenlabs";
-export const LABEL: Record<Provider, string> = { anthropic: "Claude (Anthropic)", openai: "OpenAI", elevenlabs: "ElevenLabs" };
+export type Provider = "anthropic" | "openai" | "elevenlabs" | "gemini" | "minimax";
+export const LABEL: Record<Provider, string> = { anthropic: "Claude (Anthropic)", openai: "OpenAI", elevenlabs: "ElevenLabs", gemini: "Gemini (Google)", minimax: "MiniMax" };
 
 export const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -27,6 +27,13 @@ export const PRICE = {
     ttsPerChar: 0.0000167,
   },
   elevenlabs: { perChar: 0.0002 },
+  gemini: {
+    perMTok: { "gemini-2.5-pro": [1.25, 10], "gemini-2.5-flash-lite": [0.1, 0.4], "gemini-2.5-flash": [0.3, 2.5] } as Record<string, number[]>,
+    fallback: [0.3, 2.5],
+    ttsPerMTok: [0.5, 10],   // la voz se cobra por tokens de audio
+    imageEach: 0.039,
+  },
+  minimax: { perMTok: { "MiniMax-M2": [0.3, 1.2] } as Record<string, number[]>, fallback: [0.3, 1.2], ttsPerChar: 0.0001, imageEach: 0.0035 },
 };
 export const tokenCost = (table: Record<string, number[]>, fallback: number[], model: string, tin: number, tout: number) => {
   const key = Object.keys(table).find((k) => model.startsWith(k));

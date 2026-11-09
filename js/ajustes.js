@@ -14,9 +14,10 @@
     const au = load('auto', { topic: '', aspect: '16:9', duration: 60, style: 'cine', exportAfter: true });
     const pub = load('pub', { format: F.Engine.supportsMp4() ? 'mp4' : 'webm', quality: 'high', privacy: 'private', category: '22', thumbStyle: 'impacto', thumbUpload: true });
     const sc = load('script', { tone: TONES[0], audience: 'público general', language: 'español', provider: 'auto', voice: 'nova' });
-    const im = load('img', { prompt: '', style: 'cine', size: '1536x1024', quality: 'medium', n: 1 });
+    const im = load('img', { prompt: '', style: 'cine', size: '1536x1024', quality: 'medium', n: 1, provider: 'openai' });
     // cada formulario guarda su grupo; "data-g" dice a cuál pertenece
-    const groups = { auto: au, pub, script: sc, img: im };
+    const vz = load('voice', { provider: 'openai' });
+    const groups = { auto: au, pub, script: sc, img: im, voice: vz };
     const sel = (g, k, label, options, extra = '') => `<div><label class="lbl">${label}</label><select data-g="${g}" data-k="${k}" ${extra}>${opt(options, groups[g][k])}</select></div>`;
     const txt = (g, k, label, ph = '') => `<div><label class="lbl">${label}</label><input type="text" data-g="${g}" data-k="${k}" value="${F.esc(groups[g][k])}" placeholder="${F.esc(ph)}"></div>`;
 
@@ -36,9 +37,9 @@
             ${sel('pub', 'privacy', 'Visibilidad en YouTube', [['private', 'Privado'], ['unlisted', 'No listado'], ['public', 'Público']])}</div>
           <p class="hint">La exportación se graba en tiempo real: un video de 3 minutos tarda unos 3 minutos. Usa Chrome o Edge.</p></div>
         <div class="card"><h3>${I('bot')} Agentes de IA</h3><p class="desc">Preferencias de los agentes que escriben, dibujan y narran. Las claves y los modelos están en <a href="#/integraciones">Integraciones API</a>.</p>
-          <label class="lbl">Proveedor de texto preferido</label><div class="seg" id="aTp"><button data-v="anthropic">Claude (Anthropic)</button><button data-v="openai">OpenAI</button></div>
+          <label class="lbl">Proveedor de texto preferido</label><div class="seg" id="aTp"><button data-v="anthropic">Claude</button><button data-v="openai">OpenAI</button><button data-v="gemini">Gemini</button><button data-v="minimax">MiniMax</button></div>
           <div class="grid2" style="margin-top:12px">${txt('script', 'language', 'Idioma de los guiones', 'español')}${sel('script', 'tone', 'Tono', TONES.map((t) => [t, t[0].toUpperCase() + t.slice(1)]))}
-            ${sel('script', 'voice', 'Voz por defecto (OpenAI)', [['', 'Sin voz'], ...F.api.OPENAI_VOICES.map((v) => [v, v])])}${sel('img', 'quality', 'Calidad de imágenes', [['low', 'Baja'], ['medium', 'Media'], ['high', 'Alta']])}
+            ${sel('script', 'voice', 'Voz por defecto (OpenAI)', [['', 'Sin voz'], ...F.api.OPENAI_VOICES.map((v) => [v, v])])}${sel('img', 'provider', 'Generador de imágenes', [['openai', 'OpenAI'], ['gemini', 'Gemini'], ['minimax', 'MiniMax']])}${sel('voice', 'provider', 'Proveedor de voz', [['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini'], ['minimax', 'MiniMax']])}${sel('img', 'quality', 'Calidad de imágenes', [['low', 'Baja'], ['medium', 'Media'], ['high', 'Alta']])}
             ${sel('img', 'size', 'Tamaño de imágenes', [['1536x1024', 'Horizontal'], ['1024x1536', 'Vertical'], ['1024x1024', 'Cuadrado']])}</div></div>
       </div>
       <div class="split even" style="margin-top:16px">
@@ -75,7 +76,7 @@
     let people = [], invites = [];
     const open = new Set();
     const SECS = [['editor', 'Editor de video'], ['flujos', 'Flujos y agentes'], ['guiones', 'Guiones'], ['imagenes', 'Imágenes'], ['voces', 'Voces'], ['efectos', 'Efectos y transiciones'], ['biblioteca', 'Biblioteca'], ['publicar', 'Publicar'], ['integraciones', 'Integraciones API'], ['ajustes', 'Ajustes']];
-    const AIS = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs']];
+    const AIS = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini'], ['minimax', 'MiniMax']];
     const MODES = [['shared', 'Clave de FRAMALY'], ['own', 'Que ponga la suya'], ['off', 'Sin IA']];
     const ST = { pending: ['Pendiente', 'or'], approved: ['Aprobada', 'ok'], blocked: ['Rechazada', 'err'], invited: ['Preparado', 'or'] };
     const everyone = () => [...invites.map((i) => ({ user_id: 'inv:' + i.email, email: i.email, status: 'invited', role: 'user', perms: i.perms, ai: i.ai, daily_usd: i.daily_usd, created_at: i.created_at })), ...people];
@@ -134,7 +135,7 @@
           if (t.checked) delete perms[t.dataset.pk]; else perms[t.dataset.pk] = false;
           await C.setPerson(id, { perms }); p.perms = perms;
         } else if (t.dataset.pai) {
-          const ai = { anthropic: 'own', openai: 'own', elevenlabs: 'own', ...(p.ai || {}), [t.dataset.pak]: t.value };
+          const ai = { anthropic: 'own', openai: 'own', elevenlabs: 'own', gemini: 'own', minimax: 'own', ...(p.ai || {}), [t.dataset.pak]: t.value };
           // quien pega su propia clave necesita ver Integraciones; quien no, no
           const perms = { ...(p.perms || {}) };
           if (Object.values(ai).includes('own')) delete perms.integraciones; else perms.integraciones = false;

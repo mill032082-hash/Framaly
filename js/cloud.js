@@ -81,7 +81,7 @@
   async function loadAccess(s, uid) {
     const { data, error } = await s.from('framaly_access').select('status,role,perms,ai,daily_usd').eq('user_id', uid).maybeSingle();
     if (error) throw error;
-    st.access = data || { status: 'pending', role: 'user', perms: { integraciones: false }, ai: { anthropic: 'own', openai: 'own', elevenlabs: 'own' }, daily_usd: 2 };
+    st.access = data || { status: 'pending', role: 'user', perms: { integraciones: false }, ai: { anthropic: 'own', openai: 'own', elevenlabs: 'own', gemini: 'own', minimax: 'own' }, daily_usd: 2 };
   }
   /** Entra una sesión: primero se consulta su permiso, después se muestra la app */
   async function enter(u) {

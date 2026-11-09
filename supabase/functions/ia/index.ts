@@ -5,8 +5,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { CORS, LABEL, PRICE, Provider, checkBudget, db, fail, getKey, logError, notify, record, tokenCost, whoIs } from "./budget.ts";
 
-const HOST: Record<Provider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", elevenlabs: "https://api.elevenlabs.io" };
-const SECRET: Record<Provider, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", elevenlabs: "ELEVENLABS_API_KEY" };
+const HOST: Record<Provider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", elevenlabs: "https://api.elevenlabs.io", gemini: "https://generativelanguage.googleapis.com", minimax: "https://api.minimax.io" };
+const SECRET: Record<Provider, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", elevenlabs: "ELEVENLABS_API_KEY", gemini: "GEMINI_API_KEY", minimax: "MINIMAX_API_KEY" };
 // Solo se permiten estas llamadas, nada más
 const ROUTES: { p: Provider; m: string; re: RegExp; kind: string }[] = [
   { p: "anthropic", m: "POST", re: /^\/v1\/messages$/, kind: "texto" },
@@ -17,12 +17,20 @@ const ROUTES: { p: Provider; m: string; re: RegExp; kind: string }[] = [
   { p: "openai", m: "GET", re: /^\/v1\/models$/, kind: "prueba" },
   { p: "elevenlabs", m: "POST", re: /^\/v1\/text-to-speech\/[A-Za-z0-9_-]{5,40}$/, kind: "voz" },
   { p: "elevenlabs", m: "GET", re: /^\/v1\/voices$/, kind: "prueba" },
+  // Gemini: el tipo de uso (texto, imagen o voz) se deduce del nombre del modelo
+  { p: "gemini", m: "POST", re: /^\/v1beta\/models\/[A-Za-z0-9._-]{3,60}:generateContent$/, kind: "gemini" },
+  { p: "gemini", m: "GET", re: /^\/v1beta\/models$/, kind: "prueba" },
+  { p: "minimax", m: "POST", re: /^\/v1\/text\/chatcompletion_v2$/, kind: "texto" },
+  { p: "minimax", m: "POST", re: /^\/v1\/t2a_v2$/, kind: "voz" },
+  { p: "minimax", m: "POST", re: /^\/v1\/image_generation$/, kind: "imagen" },
+  { p: "minimax", m: "POST", re: /^\/v1\/get_voice$/, kind: "prueba" },
 ];
 const MAX_BODY = 200_000, MAX_TOKENS = 8000, MAX_CHARS = 5000;
 
 const headersFor = (p: Provider, key: string): Record<string, string> =>
   p === "anthropic" ? { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" }
-  : p === "openai" ? { Authorization: `Bearer ${key}`, "content-type": "application/json" }
+  : p === "openai" || p === "minimax" ? { Authorization: `Bearer ${key}`, "content-type": "application/json" }
+  : p === "gemini" ? { "x-goog-api-key": key, "content-type": "application/json" }
   : { "xi-api-key": key, "content-type": "application/json" };
 
 Deno.serve(async (req: Request) => {
@@ -41,6 +49,8 @@ Deno.serve(async (req: Request) => {
     const [path, query = ""] = String(input.path ?? "").split("?");
     const route = ROUTES.find((r) => r.p === provider && r.m === method && r.re.test(path));
     if (!route) return fail(400, "bad_request", "Esa operación no está permitida.");
+    let kind = route.kind;
+    if (kind === "gemini") kind = /image/i.test(path) ? "imagen" : /tts/i.test(path) ? "voz" : "texto";
     if (query && !/^output_format=[a-z0-9_]{3,30}$/.test(query)) return fail(400, "bad_request", "Parámetros no permitidos.");
 
     // 2) ¿Esta persona usa la clave compartida de esta API?
@@ -56,7 +66,7 @@ Deno.serve(async (req: Request) => {
       return fail(503, "not_configured", `La clave compartida de ${LABEL[provider]} todavía no está configurada.`);
     }
     // 4) Límites (las pruebas de conexión no gastan)
-    if (route.kind !== "prueba") {
+    if (kind !== "prueba") {
       const stop = await checkBudget(client, provider, uid, acc);
       if (stop) return stop;
     }
@@ -69,8 +79,15 @@ Deno.serve(async (req: Request) => {
       delete body.stream;
       if (provider === "anthropic") body.max_tokens = Math.min(Number(body.max_tokens) || 1024, MAX_TOKENS);
       if (provider === "openai" && route.kind === "texto") { body.max_tokens = Math.min(Number(body.max_tokens) || 1024, MAX_TOKENS); delete body.max_completion_tokens; body.n = 1; }
-      if (route.kind === "imagen") body.n = Math.min(Math.max(Number(body.n) || 1, 1), 4);
-      if (String(body.input ?? body.text ?? "").length > MAX_CHARS) return fail(413, "too_large", `El texto supera los ${MAX_CHARS} caracteres. Pártelo en partes.`);
+      if (provider === "minimax" && kind === "texto") body.max_tokens = Math.min(Number(body.max_tokens) || 1024, MAX_TOKENS);
+      if (provider === "gemini") {
+        const gc = (body.generationConfig ||= {});
+        if (kind === "texto") gc.maxOutputTokens = Math.min(Number(gc.maxOutputTokens) || 1024, MAX_TOKENS);
+        body.contents = Array.isArray(body.contents) ? body.contents.slice(0, 6) : [];
+      }
+      if (kind === "imagen" && provider !== "gemini") body.n = Math.min(Math.max(Number(body.n) || 1, 1), 4);
+      const sent = provider === "gemini" ? String(body.contents?.[0]?.parts?.[0]?.text ?? "") : String(body.input ?? body.text ?? "");
+      if (kind === "voz" && sent.length > MAX_CHARS) return fail(413, "too_large", `El texto supera los ${MAX_CHARS} caracteres. Pártelo en partes.`);
     }
 
     // 6) Llamada al proveedor con la clave del servidor
@@ -91,8 +108,8 @@ Deno.serve(async (req: Request) => {
       return new Response(t, { status: up.status, headers: { ...CORS, "Content-Type": type } });
     }
 
-    // 7) Gasto (solo si salió bien)
-    if (route.kind === "voz") {
+    // 7) Gasto (solo si salió bien). Solo OpenAI y ElevenLabs devuelven audio directo; MiniMax y Gemini lo envían dentro de un JSON.
+    if (kind === "voz" && (provider === "elevenlabs" || provider === "openai")) {
       const buf = await up.arrayBuffer();
       if (up.ok) {
         const chars = String(body?.input ?? body?.text ?? "").length;
@@ -102,9 +119,44 @@ Deno.serve(async (req: Request) => {
       return new Response(buf, { status: up.status, headers: { ...CORS, "Content-Type": type } });
     }
     const text = await up.text();
-    if (up.ok && route.kind !== "prueba") {
-      let j: any = {}; try { j = JSON.parse(text); } catch { /* sin datos de uso */ }
-      if (route.kind === "imagen") {
+    let j: any = {}; try { j = JSON.parse(text); } catch { /* sin datos de uso */ }
+    // MiniMax responde 200 aunque falle: el error viene en base_resp
+    const bs = Number(j?.base_resp?.status_code ?? 0);
+    if (provider === "minimax" && bs !== 0) {
+      const bad = bs === 1004 || bs === 2049;
+      await logError(client, { provider, uid, email: acc.email, kind: bad ? "clave" : "proveedor", status: bs, message: String(j?.base_resp?.status_msg ?? "Error de MiniMax") });
+      if (bad) {
+        await notify(client, { dedupe: `${provider}:badkey:${new Date().toISOString().slice(0, 10)}`, level: "crit", provider, title: `La clave de ${LABEL[provider]} fue rechazada`, body: `MiniMax respondió "${j?.base_resp?.status_msg}": la clave no es válida o no tiene saldo.` });
+        return fail(502, "bad_key", `La clave compartida de ${LABEL[provider]} no es válida. Avisa a quien administra la plataforma.`);
+      }
+      return new Response(text, { status: 200, headers: { ...CORS, "Content-Type": type } });
+    }
+    if (up.ok && kind !== "prueba") {
+      if (provider === "gemini") {
+        const u = j.usageMetadata ?? {};
+        const tin = Number(u.promptTokenCount ?? 0), tout = Number(u.candidatesTokenCount ?? 0) + Number(u.thoughtsTokenCount ?? 0);
+        const model = path.split("/").pop()!.split(":")[0];
+        if (kind === "imagen") {
+          const n = (j.candidates?.[0]?.content?.parts ?? []).filter((p: any) => p.inlineData || p.inline_data).length || 1;
+          await record(client, { uid, acc, provider, kind: "imagen", units: { images: n, model }, cost: n * PRICE.gemini.imageEach });
+        } else if (kind === "voz") {
+          const chars = String(body?.contents?.[0]?.parts?.[0]?.text ?? "").length;
+          await record(client, { uid, acc, provider, kind: "voz", units: { chars, in_tokens: tin, out_tokens: tout, model }, cost: (tin * PRICE.gemini.ttsPerMTok[0] + tout * PRICE.gemini.ttsPerMTok[1]) / 1_000_000 });
+        } else {
+          await record(client, { uid, acc, provider, kind: "texto", units: { in_tokens: tin, out_tokens: tout, model }, cost: tokenCost(PRICE.gemini.perMTok, PRICE.gemini.fallback, model, tin, tout) });
+        }
+      } else if (provider === "minimax") {
+        if (kind === "voz") {
+          const chars = String(body?.text ?? "").length;
+          await record(client, { uid, acc, provider, kind: "voz", units: { chars }, cost: chars * PRICE.minimax.ttsPerChar });
+        } else if (kind === "imagen") {
+          const n = Array.isArray(j.data?.image_base64) ? j.data.image_base64.length : Number(body?.n ?? 1);
+          await record(client, { uid, acc, provider, kind: "imagen", units: { images: n }, cost: n * PRICE.minimax.imageEach });
+        } else {
+          const tin = Number(j.usage?.prompt_tokens ?? 0), tout = Number(j.usage?.completion_tokens ?? Math.max(0, Number(j.usage?.total_tokens ?? 0) - tin));
+          await record(client, { uid, acc, provider, kind: "texto", units: { in_tokens: tin, out_tokens: tout, model: String(body?.model ?? "") }, cost: tokenCost(PRICE.minimax.perMTok, PRICE.minimax.fallback, String(body?.model ?? ""), tin, tout) });
+        }
+      } else if (kind === "imagen") {
         const images = Array.isArray(j.data) ? j.data.length : Number(body?.n ?? 1);
         const q = /dall-e-3/.test(String(body?.model)) ? "dalle3" : String(body?.quality ?? "medium");
         await record(client, { uid, acc, provider, kind: "imagen", units: { images, quality: q }, cost: images * (PRICE.openai.image[q] ?? 0.063) });

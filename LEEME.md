@@ -53,6 +53,8 @@ Las claves de Claude, OpenAI y ElevenLabs pueden vivir **en el servidor** (Supab
 2. Despliega las funciones `supabase/functions/ia` y `supabase/functions/asesor` (cada una con su `budget.ts`, que es idéntico en las dos).
 3. En Supabase → Edge Functions → Secrets guarda: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` y `ELEVENLABS_API_KEY`. Usa claves creadas solo para FRAMALY y pon además un límite de gasto en cada proveedor como red de seguridad.
 
+**Proveedores:** Claude, OpenAI, ElevenLabs, **Gemini** y **MiniMax**. Secretos opcionales en Supabase: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, `GEMINI_API_KEY`, `MINIMAX_API_KEY`. Los modelos de Gemini y MiniMax se pueden cambiar en Integraciones API. Para activarlos en una base ya existente, ejecuta `supabase/gemini_minimax.sql`.
+
 **Dos formas de guardar las claves (las dos valen):** en la plataforma (**Integraciones API → Guardar clave**, se cifra en la bóveda de Supabase; requiere `supabase/secrets.sql`) o como secretos de la función en Supabase. Si hay una guardada en la plataforma, esa tiene prioridad. Los fallos de las APIs aparecen en **Integraciones API → Errores recientes**.
 
 **Cómo se usa (administrador):**

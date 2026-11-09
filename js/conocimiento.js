@@ -23,6 +23,13 @@
 2. Si tu cuenta tiene acceso a [[#/integraciones|Integraciones API]], conecta tu clave de **OpenAI** (imprescindible para imágenes y voz). **Claude** y **ElevenLabs** son opcionales.
 3. Ve a [[#/inicio|Inicio]], escribe la idea de tu video en **Modo automático** y pulsa **Crear video automático**.
 Sin ninguna clave, el [[#/editor|Editor]] funciona igual con tus propias imágenes y audios subidos.` },
+    { id: 'g.proveedores', sec: '', t: 'Qué IA usar para cada cosa (Claude, OpenAI, Gemini, MiniMax, ElevenLabs)', k: 'proveedores ia gemini minimax claude openai elevenlabs cual usar diferencia google que ia elegir texto imagen voz guion',
+      a: `FRAMALY trabaja con cinco proveedores, y no necesitas todos:
+- **Texto (guiones, SEO, asesor):** Claude, OpenAI, Gemini o MiniMax. Se elige en **Guiones → Modelo de texto** o en **Ajustes → Proveedor de texto preferido**.
+- **Imágenes:** OpenAI, Gemini o MiniMax. Se elige en [[#/imagenes|Imágenes]] con el selector **Generador**, o por defecto en Ajustes.
+- **Voces:** OpenAI, ElevenLabs, Gemini o MiniMax, en [[#/voces|Voces]]. En ElevenLabs y MiniMax eliges una voz con **Cargar**; en Gemini eliges entre sus voces. Gemini no permite cambiar la velocidad.
+- **Modo automático:** usa lo que tengas conectado: OpenAI o Gemini para la voz, y cualquiera de las tres para las imágenes.
+Con una sola de ellas ya puedes crear videos.` },
     { id: 'g.costos', sec: '', t: 'Cuánto cuesta crear un video', k: 'costo precio cuanto cuesta dinero gasto cobra pagar openai dolares barato caro',
       a: `El costo lo cobra el proveedor de IA (por ejemplo OpenAI) a quien puso la clave. Aproximado:
 - Un video de **1 minuto** cuesta entre **US$0,60 y US$1**.
@@ -208,8 +215,10 @@ Después, en [[#/publicar|Publicar]], pulsa **Conectar y subir**. Si no quieres 
     { id: 'integraciones.claves', sec: 'integraciones', t: 'Conectar las claves de IA (OpenAI, Claude, ElevenLabs)', k: 'integraciones claves api key openai claude anthropic elevenlabs conectar probar modelo token credencial',
       a: `1. En [[#/integraciones|Integraciones API]] busca la tarjeta del proveedor.
 2. **OpenAI** (imprescindible): en platform.openai.com → API keys → Create new secret key. Pega la clave y pulsa **Probar**.
-3. **Claude** (opcional, para guiones): en console.anthropic.com → API keys. Si no la pones, se usa OpenAI.
+3. **Claude** (opcional, para guiones): en console.anthropic.com → API keys. Si no la pones, se usa otra IA de texto conectada.
 4. **ElevenLabs** (opcional): elevenlabs.io → tu perfil → API key.
+5. **Gemini** (opcional): en aistudio.google.com → Get API key.
+6. **MiniMax** (opcional): en platform.minimax.io → API Keys. Funciona mejor con la clave de FRAMALY.
 5. Si quieres, cambia el **Modelo** de cada proveedor.
 Las claves propias se guardan **solo en este navegador** y se envían directo a cada proveedor. No se suben a la nube.
 Si tu cuenta usa la **clave de FRAMALY**, no necesitas ninguna: la IA ya viene conectada.` },

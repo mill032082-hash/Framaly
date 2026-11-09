@@ -9,14 +9,16 @@
   const usd = (n) => 'US$ ' + (+n || 0).toFixed(2).replace('.', ',');
   const num = (n) => { n = +n || 0; return n >= 1e6 ? (n / 1e6).toFixed(1).replace('.', ',') + ' M' : n >= 1e3 ? (n / 1e3).toFixed(1).replace('.', ',') + ' mil' : String(Math.round(n)); };
   const KIND = { clave: ['Clave rechazada', 'err', 'Cambia la clave en la tarjeta de esa API.'], sin_clave: ['Falta la clave', 'err', 'Pega la clave en la tarjeta de esa API.'], proveedor: ['Error del proveedor', 'or', 'Suele ser saldo, cuota o un dato rechazado por el proveedor. Revisa su panel.'], limite: ['Límite mensual', 'or', 'Sube el límite mensual de esa API si quieres seguir.'], tope: ['Tope diario', 'or', 'La persona llegó a su tope. Súbelo en Ajustes → Personas.'], modo: ['Sin permiso', '', 'Esa persona intentó usar una clave que no tiene habilitada. Revisa su modo en Ajustes → Personas.'], servidor: ['Error interno', 'err', 'Un fallo de la función segura. Si se repite, revisa los registros en Supabase.'] };
-  const SECRET = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', elevenlabs: 'ELEVENLABS_API_KEY' };
+  const SECRET = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', elevenlabs: 'ELEVENLABS_API_KEY', gemini: 'GEMINI_API_KEY', minimax: 'MINIMAX_API_KEY' };
   const AIS = [
     { k: 'anthropic', logo: 'A', bg: 'linear-gradient(135deg,#d97757,#b4532a)', name: 'Claude · Anthropic', sub: 'Agentes de texto: guiones, SEO, prompts y asesor', feats: ['Guionista', 'SEO YouTube', 'Mejorar prompts'] },
     { k: 'openai', logo: 'AI', bg: 'linear-gradient(135deg,#10a37f,#0b7a5e)', name: 'OpenAI', sub: 'Imágenes, voces y texto', feats: ['Imágenes', 'Voz TTS', 'Guionista', 'SEO'] },
     { k: 'elevenlabs', logo: 'XI', bg: 'linear-gradient(135deg,#2b2b2b,#000)', name: 'ElevenLabs', sub: 'Voces ultra realistas y clonadas', feats: ['Voces premium', 'Multilingüe', 'Voces clonadas'] },
+    { k: 'gemini', logo: 'G', bg: 'linear-gradient(135deg,#4285f4,#9b72cb)', name: 'Gemini · Google', sub: 'Texto, imágenes y voces con Gemini', feats: ['Guionista', 'Imágenes', 'Voz TTS', 'SEO'] },
+    { k: 'minimax', logo: 'M', bg: 'linear-gradient(135deg,#f23f5d,#7b2ff7)', name: 'MiniMax', sub: 'Texto, imágenes y voces con MiniMax', feats: ['Guionista', 'Imágenes', 'Voz TTS', 'SEO'] },
   ];
   const units = (k, u = {}) => k === 'anthropic' ? `${num((u.in_tokens || 0) + (u.out_tokens || 0))} tokens`
-    : k === 'openai' ? `${num(u.images)} imágenes · ${num((u.in_tokens || 0) + (u.out_tokens || 0))} tokens · ${num(u.chars)} caracteres de voz`
+    : k === 'openai' || k === 'gemini' || k === 'minimax' ? `${num(u.images)} imágenes · ${num((u.in_tokens || 0) + (u.out_tokens || 0))} tokens · ${num(u.chars)} caracteres de voz`
     : `${num(u.chars)} caracteres`;
 
   V.integraciones = (el) => {
@@ -27,6 +29,8 @@
     const model = (k, label, list) => `<label class="lbl">${label}</label><input type="text" data-model="${k}" value="${esc(S.models[k])}" list="dl-${k}"><datalist id="dl-${k}">${list.map((x) => `<option value="${x}">`).join('')}</datalist>`;
     const models = (k) => k === 'anthropic' ? model('anthropic', 'Modelo', ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5'])
       : k === 'openai' ? `<div class="grid3">${model('image', 'Imágenes', ['gpt-image-1', 'gpt-image-1-mini', 'dall-e-3'])}${model('tts', 'Voz', ['gpt-4o-mini-tts', 'tts-1-hd', 'tts-1'])}${model('openai', 'Texto', ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini'])}</div>`
+      : k === 'gemini' ? `<div class="grid3">${model('gemini', 'Texto', ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'])}${model('geminiImage', 'Imágenes', ['gemini-2.5-flash-image'])}${model('geminiTts', 'Voz', ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'])}</div>`
+      : k === 'minimax' ? `<div class="grid3">${model('minimax', 'Texto', ['MiniMax-M2'])}${model('minimaxImage', 'Imágenes', ['image-01'])}${model('minimaxTts', 'Voz', ['speech-2.8-hd', 'speech-2.8-turbo'])}</div>`
       : model('eleven', 'Modelo', ['eleven_multilingual_v2', 'eleven_turbo_v2_5', 'eleven_flash_v2_5', 'eleven_v3']);
     const head = (a, tag, cls) => `<div class="hd"><div class="lg" style="background:${a.bg}">${a.logo}</div><div style="flex:1"><b>${a.name}</b><small>${a.sub}</small></div><span class="tag ${cls}" data-st="${a.k}">${tag}</span></div>`;
     const feats = (a) => `<div class="feat">${a.feats.map((f) => `<span class="tag">${f}</span>`).join('')}</div>`;
@@ -35,7 +39,7 @@
     /* --- clave propia (modo clásico) --- */
     const ownCard = (a) => `<div class="card int-card">${head(a, F.api.has(a.k) ? 'Conectado' : 'Sin configurar', F.api.has(a.k) ? 'ok' : '')}
       <label class="lbl">API key</label><div class="keyrow"><input type="password" data-key="${a.k}" value="${esc(S.keys[a.k])}" placeholder="Pega tu clave aquí" autocomplete="off" spellcheck="false"><button class="icon-btn" data-eye="${a.k}" title="Mostrar">${I('eye')}</button><button class="btn" data-test="${a.k}">Probar</button></div>
-      ${models(a.k)}${feats(a)}</div>`;
+      ${a.k === 'minimax' ? '<p class="mini" style="margin:8px 0 0">MiniMax suele no permitir llamadas directas desde el navegador: funciona mejor con la clave de FRAMALY.</p>' : ''}${models(a.k)}${feats(a)}</div>`;
     /* --- clave de FRAMALY, vista del administrador --- */
     const adminCard = (a) => {
       const p = data.rep?.providers?.[a.k] || { cost: 0, units: {} }, l = (data.lims || []).find((x) => x.provider === a.k) || { monthly_usd: 0, alert_pct: 80 };
@@ -92,7 +96,7 @@
           : '<b>Tus claves se guardan solo en este navegador</b> (almacenamiento local de tu PC) y se envían directamente a cada proveedor, sin servidores intermedios. No uses FRAMALY en equipos compartidos con tus claves guardadas.'}</div></div>
         <div class="int-grid">${AIS.map(aiCard).join('')}${ytCard}</div>${people()}${errors()}
         <div class="split even" style="margin-top:16px">
-          <div class="card"><h3>${I('bot')} Preferencias de agentes</h3><label class="lbl">Proveedor de texto preferido</label><div class="seg" id="tp"><button data-v="anthropic">Claude (Anthropic)</button><button data-v="openai">OpenAI</button></div><p class="hint">Si el preferido no está disponible, se usa el otro automáticamente.</p></div>
+          <div class="card"><h3>${I('bot')} Preferencias de agentes</h3><label class="lbl">Proveedor de texto preferido</label><div class="seg" id="tp"><button data-v="anthropic">Claude</button><button data-v="openai">OpenAI</button><button data-v="gemini">Gemini</button><button data-v="minimax">MiniMax</button></div><p class="hint">Si el preferido no está disponible, se usa el otro automáticamente.</p></div>
         </div></div>`;
       const tp = () => el.querySelector('#tp').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === S.textProvider)); tp();
       el.querySelector('#tp').onclick = (e) => { const b = e.target.closest('[data-v]'); if (b) { S.textProvider = b.dataset.v; F.saveSettings(); tp(); } };
