@@ -143,11 +143,14 @@
   /** Claves guardadas desde la plataforma (cifradas en la bóveda de Supabase; nunca se pueden volver a ver) */
   st.secrets = async () => { const s = await sb(); return rows(s.from('framaly_secret_meta').select('provider,last4,updated_at')); };
   /** Limpia lo pegado: quita espacios, saltos de línea, comillas, "Bearer " y "NOMBRE=" del principio */
-  const cleanKey = (v) => String(v || '').trim().replace(/^bearer\s+/i, '').replace(/^[A-Z][A-Z0-9_]*\s*=\s*/, '').replace(/^["'`]+|["'`]+$/g, '').replace(/\s+/g, '');
+  const cleanKey = (v) => String(v || '').trim().replace(/^["'`]+|["'`]+$/g, '').trim().replace(/^bearer\s+/i, '').replace(/^[A-Z][A-Z0-9_]*\s*=\s*/, '').replace(/^["'`]+|["'`]+$/g, '').replace(/\s+/g, '');
   st.cleanKey = cleanKey;
   st.setSecret = async (provider, value) => {
     const s = await sb(), v = cleanKey(value);
     if (v.length < 10) throw new Error(`Lo que pegaste tiene solo ${v.length} caracteres: parece incompleto. Copia la clave completa desde el sitio del proveedor.`);
+    // Formato conocido de cada proveedor: evita guardar por error el «ID de la clave» u otro dato
+    const FMT = { elevenlabs: [/^sk_/, 'Las claves de ElevenLabs empiezan con «sk_». Lo que pegaste parece el ID de la clave, no la clave. La clave completa solo se muestra al crearla: en ElevenLabs crea una nueva (o pulsa «Rotar») y cópiala en ese momento.'], openai: [/^sk-/, 'Las claves de OpenAI empiezan con «sk-». Crea una en platform.openai.com → API keys y cópiala al crearla (después ya no se puede ver).'], anthropic: [/^sk-ant-/, 'Las claves de Claude (Anthropic) empiezan con «sk-ant-». Crea una en console.anthropic.com → API keys y cópiala al crearla.'], gemini: [/^AIza/, 'Las claves de Gemini empiezan con «AIza». Créala en aistudio.google.com → Get API key.'] };
+    if (FMT[provider] && !FMT[provider][0].test(v)) throw new Error(FMT[provider][1]);
     const { error } = await s.rpc('framaly_set_secret', { p_provider: provider, p_value: v });
     if (error) {
       const m = String(error.message || '');
