@@ -1,6 +1,6 @@
 // FRAMALY Studio · piezas puras del servidor MCP / API (sin red ni base de datos: se pueden probar solas).
 
-export const VERSION = "1.6.0";
+export const VERSION = "1.6.1";
 
 /** Modo de ejecución de una conexión: external = FRAMALY no genera nada · no_openai = puede generar, pero OpenAI queda bloqueado · all = todo permitido */
 export type ExecMode = "external" | "no_openai" | "all";
@@ -213,6 +213,10 @@ export function openapi(base: string) {
       requestBody: { required: true, content: { "application/json": { schema: t.inputSchema } } },
       responses: { "200": { description: "Resultado", content: { "application/json": { schema: { type: "object" } } } }, "401": { description: "Clave inválida" }, "429": { description: "Demasiadas llamadas o tope alcanzado" } } } };
   }
+  // Acciones de un GPT: ChatGPT entrega las imágenes de la conversación en openaiFileIdRefs (name, id, mime_type, download_link).
+  // Solo se declara aquí (API REST); el conector MCP usa el campo «image».
+  const imp: any = (paths["/api/framaly_import_image"] as any)?.post?.requestBody?.content?.["application/json"]?.schema;
+  if (imp?.properties) imp.properties = { openaiFileIdRefs: { ...fileRefs, description: "Imágenes de la conversación de ChatGPT (se rellena solo)." }, ...imp.properties };
   return { openapi: "3.1.0", info: { title: "FRAMALY Studio", version: VERSION, description: "Crea videos con IA desde otros agentes. " + INSTRUCTIONS },
     servers: [{ url: base }], paths, components: { securitySchemes: { bearer: { type: "http", scheme: "bearer", description: "Clave de conexión creada en FRAMALY → Ajustes (empieza con fmk_)." } } }, security: [{ bearer: [] }] };
 }

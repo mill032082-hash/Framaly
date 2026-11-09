@@ -102,6 +102,16 @@ ok('el esquema visible para ChatGPT NO contiene openaiFileIdRefs ni images', !('
 c = await call('framaly_import_image', { cosa_rara: 1 }, TX);
 ok('argumento desconocido → error que dice lo recibido', c.isError && /desconocido/.test(c.v), c.v);
 
+
+// Acciones de un GPT: el esquema OpenAPI SÍ declara openaiFileIdRefs (y el MCP no)
+r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp/openapi.json')); const spec = await r.json();
+const sch = spec.paths['/api/framaly_import_image'].post.requestBody.content['application/json'].schema;
+ok('OpenAPI (Acciones) declara openaiFileIdRefs con name, id, mime_type, download_link', sch.properties.openaiFileIdRefs?.items?.properties?.download_link && sch.properties.openaiFileIdRefs.type === 'array' && Object.keys(sch.properties)[0] === 'openaiFileIdRefs', sch.properties);
+ok('OpenAPI: descripciones ≤ 300 caracteres', Object.values(spec.paths).every((p) => p.post.description.length <= 300));
+const act = await handler(new Request('https://proj.supabase.co/functions/v1/mcp/api/framaly_import_image', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + TX }, body: JSON.stringify({ openaiFileIdRefs: [{ name: 'caballo_volador_andes.png', id: 'file-AbC', mime_type: 'image/png', download_link: F + 'accion.png?x=1' }] }) }));
+const aj = await act.json();
+ok('REST con el cuerpo exacto de una Acción de GPT → guardada en la biblioteca', act.status === 200 && aj.success && aj.provider === 'chatgpt_external' && aj.media.name === 'caballo_volador_andes.png' && aj.media.mime_type === 'image/png' && aj.credits_consumed === 0 && DB.tables.framaly_media.some((m) => m.id === aj.media.id), aj);
+
 // créditos y OpenAI
 ok('FRAMALY no llamó a OpenAI', openaiCalls() === o0);
 ok('no se descontó nada (framaly_usage intacto)', usage() === u0);
