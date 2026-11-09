@@ -741,3 +741,12 @@ body.resizing .flows { transition: none; }
 .gp-dur { position: relative; font-size: 11px; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,.04); overflow: hidden; }
 .gp-dur i { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--or); }
 .gp-dur.ok i { background: #3ddc97; } .gp-dur.warn i { background: var(--amber, #ffb23f); }
+
+.gchk { border: 1px solid rgba(245, 158, 11, .45); border-radius: 10px; background: var(--bg2); padding: 8px 10px; font-size: 13px; }
+.gchk.ok { border-color: rgba(34, 197, 94, .45); }
+.gchk summary { cursor: pointer; font-weight: 600; }
+.gchk .gc { display: flex; gap: 8px; align-items: flex-start; margin-top: 6px; }
+.gchk .gc.on b { opacity: .75; }
+.gguide .gg { margin: 8px 0; border-bottom: 1px solid var(--line2); padding-bottom: 6px; }
+.gguide .gg summary { cursor: pointer; }
+.gguide .gg ul, .gguide .gg ol { margin: 6px 0 4px; padding-left: 20px; line-height: 1.7; }

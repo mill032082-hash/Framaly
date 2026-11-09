@@ -138,3 +138,10 @@ Las claves se guardan solo en tu navegador.
 ## Notas
 - La exportación se hace en tiempo real: un video de 3 minutos tarda unos 3 minutos. No cambies de pestaña mientras se graba.
 - Los datos viven en el navegador: si borras los datos de navegación de Chrome, se borra la biblioteca.
+
+## Editor de video · complementos del método (js/golden-extra.js)
+- **Bloqueantes del Intake** (arriba del panel Golden): video/voz, claims prohibidos, guion tal como se grabó, destino y duración.
+- **Ajustar el primer corte**: «Reducir más los silencios» y «No tan estricto» deshacen el corte y lo repiten con otra sensibilidad.
+- **Copiar el contexto del proyecto** (la memoria del editor): producto, destino, claims, reglas fijas y guion.
+- **Revisión Golden ampliada**: número de control del corte (1:40 → ~58 s), guion sin pegar, música sin ducking, marca de agua.
+- **Guía completa** con «Si algo falla», multicámara con una cámara, replicar estilo y reglas de oro.
