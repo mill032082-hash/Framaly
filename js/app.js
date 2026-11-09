@@ -209,8 +209,9 @@
     let started = false;
     const sync = () => {
       acct(); nav();
-      if (needGate()) { openGate(); if (gate.view !== (F.cloud.user ? 'pending' : 'login')) drawGate(); F.$('#view').innerHTML = ''; return; }
+      if (needGate()) { F.asesor?.unmount(); openGate(); if (gate.view !== (F.cloud.user ? 'pending' : 'login')) drawGate(); F.$('#view').innerHTML = ''; return; }
       if (gateEl) closeGate();
+      F.asesor?.mount();
       if (F.cloud?.isAdmin()) F.cloud.people().catch(() => {});
       if (!started) { started = true; render().then(() => { if (!localStorage.getItem('framaly.onboarded')) F.onboarding(); }); }
       else if (F.cloud.user && gateOpened) { gateOpened = false; render(); }

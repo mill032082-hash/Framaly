@@ -45,6 +45,12 @@ Para cerrar el registro del todo, cuando ya estén tus personas, apaga **Allow n
 
 Cómo se sincroniza: automático, gana el cambio más reciente, y borrar algo en un dispositivo lo borra en los demás. Las claves de OpenAI, Claude y ElevenLabs **no se suben nunca**: siguen solo en cada navegador. Si `js/config.js` está vacío, la app funciona sin cuentas y guarda todo solo en el dispositivo.
 
+## Asesor IA (botón flotante)
+El botón **Asesor IA** (abajo a la derecha) explica paso a paso cómo hacer cualquier cosa en FRAMALY. Sabe en qué sección estás y respeta los permisos de tu cuenta. Responde de tres formas:
+1. **Con IA desde el servidor** (recomendada): la clave de Claude vive solo en Supabase y nadie la ve. Requiere ejecutar **`supabase/asesor.sql`**, desplegar la función **`supabase/functions/asesor`** y crear el secreto **`ANTHROPIC_API_KEY`** en Supabase (Edge Functions → Secrets). Cada persona tiene un límite diario de consultas (60 por defecto; se cambia con el secreto `ASESOR_DAILY_LIMIT`, y el modelo con `ASESOR_MODEL`).
+2. **Con una clave propia** guardada en el navegador, si la persona tiene una en Integraciones API.
+3. **Guía integrada** (`js/conocimiento.js`): funciona siempre y sin costo. Para que el asesor sepa algo nuevo, se agrega una entrada en ese archivo.
+
 ## Configuración (sección «Integraciones API»)
 | Servicio | Para qué | Dónde se consigue |
 |---|---|---|

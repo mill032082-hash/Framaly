@@ -110,6 +110,13 @@
     const { error } = await s.from('framaly_access').update({ perms }).eq('user_id', userId);
     if (error) throw new Error(explain(error));
   };
+  /** Pregunta al Asesor IA (función segura del servidor; la clave nunca llega al navegador) */
+  st.ask = async (body) => {
+    const s = await sb();
+    const { data, error } = await s.functions.invoke('asesor', { body });
+    if (error) throw error;
+    return data;
+  };
   st.decide = async (userId, status) => {
     const s = await sb();
     const { error } = await s.from('framaly_access').update({ status, decided_at: new Date().toISOString() }).eq('user_id', userId);
