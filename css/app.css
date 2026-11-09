@@ -750,3 +750,19 @@ body.resizing .flows { transition: none; }
 .gguide .gg { margin: 8px 0; border-bottom: 1px solid var(--line2); padding-bottom: 6px; }
 .gguide .gg summary { cursor: pointer; }
 .gguide .gg ul, .gguide .gg ol { margin: 6px 0 4px; padding-left: 20px; line-height: 1.7; }
+
+.skill-btn { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; border-color: var(--or2, #ff8a2b); }
+.skill-btn small { color: var(--muted); font-weight: 400; font-size: 11.5px; }
+.skill { display: grid; grid-template-columns: 230px 1fr; gap: 18px; max-height: 72vh; }
+.skill .sk-side { position: sticky; top: 0; align-self: start; display: flex; flex-direction: column; gap: 8px; max-height: 72vh; }
+.skill .sk-q { width: 100%; }
+.skill .sk-tocs { overflow: auto; display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; }
+.skill .sk-toc { color: var(--muted); padding: 3px 6px; border-radius: 6px; text-decoration: none; }
+.skill .sk-toc.top { color: var(--text); font-weight: 700; margin-top: 6px; }
+.skill .sk-toc:hover { background: var(--bg2); }
+.skill .sk-main { overflow: auto; padding-right: 8px; line-height: 1.65; }
+.skill .sk-main h2, .skill .sk-main h3 { margin: 18px 0 6px; }
+.skill .sk-main ul, .skill .sk-main ol { padding-left: 22px; }
+.skill .sk-main blockquote { border-left: 3px solid var(--or2, #ff8a2b); margin: 8px 0; padding: 4px 12px; color: var(--muted); }
+.skill .sk-main hr { border: 0; border-top: 1px solid var(--line2); margin: 20px 0; }
+@media (max-width: 760px) { .skill { grid-template-columns: 1fr; } .skill .sk-side { position: static; max-height: none; } .skill .sk-tocs { max-height: 120px; } }

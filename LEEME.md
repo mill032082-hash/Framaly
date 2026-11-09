@@ -145,3 +145,4 @@ Las claves se guardan solo en tu navegador.
 - **Copiar el contexto del proyecto** (la memoria del editor): producto, destino, claims, reglas fijas y guion.
 - **Revisión Golden ampliada**: número de control del corte (1:40 → ~58 s), guion sin pegar, música sin ducking, marca de agua.
 - **Guía completa** con «Si algo falla», multicámara con una cámara, replicar estilo y reglas de oro.
+- **Todo el conocimiento de la skill dentro del editor**: botón «Todo el conocimiento de la skill» arriba de la pestaña Golden. Abre el documento completo (método, multicámara con una cámara, dónde está cada regla en la app, zona honesta y límites) con índice y buscador. Datos en `js/golden-skill-data.js`, visor en `js/golden-skill.js`.
