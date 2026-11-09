@@ -452,6 +452,38 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     if (!quiet) { selNode = id; saveDraft(); renderNodes(); renderInsp(); }
     else saveDraft();
   }
+  /* ---------- paneles laterales: arrastrar el borde o pulsar la flechita para ampliar / achicar ---------- */
+  const PK = 'framaly.flowPanels';
+  let panels = {}; try { panels = JSON.parse(localStorage.getItem(PK) || '{}') || {}; } catch (e) { panels = {}; }
+  const savePanels = () => { try { localStorage.setItem(PK, JSON.stringify(panels)); } catch (e) { /* sin memoria */ } };
+  const curL = () => (panels.l != null ? panels.l : innerWidth > 1250 ? 230 : 0), curR = () => (panels.r != null ? panels.r : innerWidth > 1250 ? 320 : 300);
+  function applyPanels() {
+    const f = root?.querySelector('.flows'); if (!f) return;
+    if (panels.l != null) f.style.setProperty('--fl-l', panels.l + 'px'); else f.style.removeProperty('--fl-l');
+    if (panels.r != null) f.style.setProperty('--fl-r', panels.r + 'px'); else f.style.removeProperty('--fl-r');
+    const bl = root.querySelector('#flSplL .chev'), br = root.querySelector('#flSplR .chev');
+    if (bl) { bl.innerHTML = I(curL() > 0 ? 'chevL' : 'chevR'); bl.title = curL() > 0 ? 'Ocultar la lista de plantillas' : 'Mostrar la lista de plantillas'; }
+    if (br) { br.innerHTML = I(curR() > 0 ? 'chevR' : 'chevL'); br.title = curR() > 0 ? 'Ocultar el panel de ajustes (más espacio para la pizarra)' : 'Mostrar el panel de ajustes'; }
+    setTimeout(renderEdges, 30);
+  }
+  function togglePanel(side) {
+    if (side === 'l') { const c = curL(); if (c > 0) { panels.lastL = c; panels.l = 0; } else panels.l = panels.lastL >= 180 ? panels.lastL : 230; }
+    else { const c = curR(); if (c > 0) { panels.lastR = c; panels.r = 0; } else panels.r = panels.lastR >= 180 ? panels.lastR : 320; }
+    savePanels(); applyPanels();
+  }
+  function dragPanel(side, e) {
+    const f = root?.querySelector('.flows'); if (!f) return;
+    const box = f.getBoundingClientRect(), x0 = e.clientX; let moved = false;
+    const mv = (ev) => {
+      if (!moved && Math.abs(ev.clientX - x0) < 4) return; moved = true;
+      let w = side === 'l' ? ev.clientX - box.left : box.right - ev.clientX;
+      w = Math.round(Math.min(side === 'l' ? 420 : 560, Math.max(0, w))); if (w < 70) w = 0;
+      panels[side] = w; if (w >= 180) panels[side === 'l' ? 'lastL' : 'lastR'] = w; applyPanels();
+    };
+    const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); document.body.classList.remove('resizing'); if (moved) savePanels(); };
+    document.body.classList.add('resizing'); window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+  }
+
   /* ---------- pizarra: zoom y ampliar ---------- */
   const clampZ = (z) => Math.min(1.6, Math.max(0.4, Math.round(z * 100) / 100));
   function applyZoom() {
@@ -541,6 +573,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
           <div class="fl-area" id="fla"><svg class="edges" id="edges"></svg></div>
         </div>
         <aside class="fl-insp" id="fli"></aside>
+        <div class="fl-split l" id="flSplL" title="Arrastra para cambiar el ancho"><button class="chev"></button></div><div class="fl-split r" id="flSplR" title="Arrastra para cambiar el ancho"><button class="chev"></button></div>
         <div class="fl-log"><div class="row"><b class="small">Registro de ejecución</b><span class="grow"></span><span id="flCost" class="muted small"></span><button class="btn sm ghost" id="flClear">Limpiar</button></div><div class="logbox" id="flLog"></div></div>
       </div>`;
       el.querySelector('#flName').value = flow.name;
@@ -560,7 +593,12 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       const onKey = (e) => { if (e.key === 'Escape' && el.querySelector('.flows.max') && !document.querySelector('.modal-bg')) toggleMax(false); };
       document.addEventListener('keydown', onKey);
       el.querySelector('#flc').addEventListener('wheel', (e) => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); setZoom(flow.zoom + (e.deltaY < 0 ? 0.08 : -0.08)); }, { passive: false });
-      applyZoom();
+      applyZoom(); applyPanels();
+      for (const side of ['l', 'r']) {
+        const h = el.querySelector(side === 'l' ? '#flSplL' : '#flSplR');
+        h.addEventListener('pointerdown', (e) => { if (e.target.closest('.chev')) return; e.preventDefault(); dragPanel(side, e); });
+        h.querySelector('.chev').addEventListener('click', () => togglePanel(side));
+      }
       el.querySelector('#flHelp').onclick = openGuide;
       el.querySelector('#flAutoGo').onclick = async () => { const t = el.querySelector('#flAutoTopic').value; if (!t.trim()) { el.querySelector('#flAutoTopic').focus(); return F.toast('Escribe primero de qué trata tu video'); } await F.auto.run({ topic: t, aspect: flow.cfg.idea.aspect, duration: flow.cfg.idea.duration }); };
       el.querySelector('#flAutoTopic').addEventListener('keydown', (e) => { if (e.key === 'Enter') el.querySelector('#flAutoGo').click(); });
