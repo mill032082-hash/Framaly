@@ -26,7 +26,7 @@
 
   V.integraciones = (el) => {
     const S = F.settings, C = F.cloud, cloudOn = !!(C?.configured() && C.user);
-    const data = { rep: null, lims: null, secrets: [], errors: null, ov: {} };
+    const data = { rep: null, lims: null, secrets: [], errors: null, ov: {}, acc: [], inv: [] };
     let dead = false;
     const mode = (k) => (cloudOn ? C.aiMode(k) : 'own');
     const model = (k, label, list) => `<label class="lbl">${label}</label><input type="text" data-model="${k}" value="${esc(S.models[k])}" list="dl-${k}"><datalist id="dl-${k}">${list.map((x) => `<option value="${x}">`).join('')}</datalist>`;
@@ -59,12 +59,25 @@
         <div class="sep"></div>${real}
         ${a.k === 'elevenlabs' ? `<button class="btn sm" data-bal="elevenlabs" style="margin-top:8px">Actualizar saldo</button>` : ''}${evs}`;
     };
+    /* --- con quién está compartida cada API (administrador) --- */
+    const sharedWith = (k) => {
+      const ok = (ai) => ai?.[k] === 'shared';
+      const a = (data.acc || []).filter((p) => p.status === 'approved' && p.role !== 'admin' && ok(p.ai)).map((p) => ({ e: p.email, w: false }));
+      const have = new Set(a.map((x) => (x.e || '').toLowerCase()));
+      const i = (data.inv || []).filter((p) => ok(p.ai) && !have.has((p.email || '').toLowerCase())).map((p) => ({ e: p.email, w: true }));
+      return [...a, ...i];
+    };
+    const sharedLine = (a) => {
+      const l = sharedWith(a.k);
+      return `<div class="shared-line"><b>Conectado</b> · ${l.length ? 'compartido con ' + l.map((x) => `<span class="tag ok">${esc(x.e || 'Sin correo')}${x.w ? ' (invitado)' : ''}</span>`).join(' ') : '<span class="mini">sin compartir con nadie todavía (Ajustes → Personas con acceso)</span>'}</div>`;
+    };
     /* --- clave de FRAMALY, vista del administrador --- */
     const adminCard = (a) => {
       const p = data.rep?.providers?.[a.k] || { cost: 0, units: {} }, l = (data.lims || []).find((x) => x.provider === a.k) || { monthly_usd: 0, alert_pct: 80 };
       const sec = (data.secrets || []).find((x) => x.provider === a.k);
       const pct = l.monthly_usd > 0 ? Math.round((p.cost / l.monthly_usd) * 100) : 0;
       return `<div class="card int-card">${head(a, 'Clave compartida activa', 'ok')}
+        ${sharedLine(a)}
         <div class="big">${usd(p.cost)}<span class="mini"> de ${usd(l.monthly_usd)} este mes</span></div>${bar(pct, pct >= l.alert_pct)}
         <div class="row2"><span>${pct}% usado</span><span>${units(a.k, p.units)}</span></div>
         <div class="sep"></div>
@@ -83,6 +96,7 @@
     const personCard = (a) => {
       const cap = +C.access?.daily_usd || 0, used = +data.rep?.mine_today || 0, pct = cap > 0 ? Math.round((used / cap) * 100) : 0;
       return `<div class="card int-card">${head(a, 'Listo para usar', 'ok')}
+        <div class="shared-line"><b>Conectado</b> · compartido contigo por el administrador</div>
         <p class="mini" style="margin:0 0 8px">Usas la clave de FRAMALY. No necesitas configurar nada.</p>
         ${data.rep ? `${bar(pct, pct >= 80)}<div class="row2"><span>Hoy llevas ${usd(used)} de ${usd(cap)}</span><span>${pct}% de tu cupo</span></div>` : '<div class="mini">Cargando tu cupo…</div>'}
         ${feats(a)}</div>`;
@@ -125,7 +139,7 @@
     draw();
     if (cloudOn) {
       (async () => {
-        try { data.rep = await C.report(); if (C.isAdmin()) { [data.lims, data.secrets, data.errors, data.ov] = await Promise.all([C.limits(), C.secrets(), C.errors(), C.overview()]); } } catch (e) { F.toast(e.message, 'error'); }
+        try { data.rep = await C.report(); if (C.isAdmin()) { [data.lims, data.secrets, data.errors, data.ov] = await Promise.all([C.limits(), C.secrets(), C.errors(), C.overview()]); [data.acc, data.inv] = await Promise.all([C.people().catch(() => []), C.invites().catch(() => [])]); } } catch (e) { F.toast(e.message, 'error'); }
         draw();
       })();
     }

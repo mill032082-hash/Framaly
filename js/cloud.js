@@ -99,7 +99,7 @@
   /** Solo administradores: lista de personas y sus permisos */
   st.people = async () => {
     const s = await sb();
-    const { data, error } = await s.from('framaly_access').select('user_id,email,status,role,perms,created_at').order('created_at', { ascending: false });
+    const { data, error } = await s.from('framaly_access').select('user_id,email,status,role,perms,ai,created_at').order('created_at', { ascending: false });
     if (error) throw new Error(explain(error));
     const n = data.filter((p) => p.status === 'pending').length;
     if (n !== st.pendingCount) { st.pendingCount = n; F.emit('cloud'); }
