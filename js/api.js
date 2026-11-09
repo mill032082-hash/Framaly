@@ -25,6 +25,8 @@
     if (!key(n)) throw new Error(`Falta la API key de ${label}. Configúrala en Integraciones API.`);
   };
   /** Llamada a un proveedor: por la puerta segura si se usa la clave compartida, directa si es clave propia */
+  /** ¿Se permite usar esta API para texto (prompts), imágenes o voz en este navegador? Por defecto sí. */
+  const canUse = (p, cap) => F.settings.uses?.[p]?.[cap] !== false;
   const net = async (prov, url, init) => {
     if (mode(prov) !== 'shared') {
       try { return await fetch(url, init); } catch (e) {
@@ -34,6 +36,11 @@
     }
     const r = await F.cloud.gateway(prov, url, init);
     if (r.status === 503 && key(prov)) return fetch(url, init); // clave compartida sin configurar: usa la propia si existe
+    if (r.status === 503 && !key(prov)) {
+      const lab = { openai: 'OpenAI', anthropic: 'Claude', elevenlabs: 'ElevenLabs', gemini: 'Gemini', minimax: 'MiniMax' }[prov] || prov;
+      const msg = F.cloud?.isAdmin?.() ? `Todavía no hay clave de ${lab} guardada. Ve a Integraciones API → ${lab}, pega la clave y pulsa «Guardar clave».` : `${lab} todavía no está disponible: el administrador aún no ha guardado su clave.`;
+      return new Response(JSON.stringify({ error: { message: msg } }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+    }
     return r;
   };
 
@@ -52,13 +59,14 @@
   }
 
   F.api = {
+    canUse,
     has: (n) => { const m = mode(n); return AI.includes(n) ? (m === 'shared' ? true : m === 'off' ? false : !!key(n)) : !!key(n); },
     textReady() { return ['anthropic', 'openai', 'gemini', 'minimax'].some((p) => this.has(p)); },
 
     /** Elige el proveedor de texto: el preferido si tiene key, si no el otro */
     textProvider(pref) {
       const p = pref && pref !== 'auto' ? pref : F.settings.textProvider;
-      const found = [p, 'anthropic', 'openai', 'gemini', 'minimax'].find((x) => this.has(x));
+      const found = [p, 'anthropic', 'openai', 'gemini', 'minimax'].find((x) => this.has(x) && canUse(x, 'text'));
       if (found) return found;
       throw new Error('Necesitas una API de texto (Claude, OpenAI, Gemini o MiniMax) para los agentes. Ve a Integraciones API.');
     },
@@ -114,11 +122,19 @@
     /** Generación de imágenes (OpenAI). Devuelve Blob[] */
     imageProvider(pref) {
       let saved; try { saved = JSON.parse(localStorage.getItem('framaly.img') || '{}').provider; } catch (e) { /* sin preferencia */ }
-      return [pref && pref !== 'auto' ? pref : saved, 'openai', 'gemini', 'minimax'].find((x) => x && x !== 'auto' && this.has(x)) || 'openai';
+      return [pref && pref !== 'auto' ? pref : saved, 'openai', 'gemini', 'minimax'].find((x) => x && x !== 'auto' && this.has(x) && canUse(x, 'image')) || 'openai';
     },
     async image(o) {
       const p = this.imageProvider(o.provider);
-      return p === 'gemini' ? this.imageGemini(o) : p === 'minimax' ? this.imageMinimax(o) : this.imageOpenAI(o);
+      if (p === 'gemini') return this.imageGemini(o);
+      if (p === 'minimax') return this.imageMinimax(o);
+      try { return await this.imageOpenAI(o); } catch (e) {
+        // OpenAI puede no dejar generar imágenes (verificación de organización, saldo…): se prueba con otra IA si hay
+        const alt = ['gemini', 'minimax'].find((x) => this.has(x) && canUse(x, 'image'));
+        if (o.provider === 'openai' || !alt) throw new Error(/verif|organization/i.test(e.message) ? 'OpenAI no permite generar imágenes con esta cuenta (pide verificar la organización). Usa Gemini o MiniMax para las imágenes y deja OpenAI para los prompts.' : e.message);
+        F.toast(`OpenAI no pudo generar la imagen; se usó ${alt === 'gemini' ? 'Gemini' : 'MiniMax'}.`, 'info', 5000);
+        return alt === 'gemini' ? this.imageGemini(o) : this.imageMinimax(o);
+      }
     },
     async imageGemini({ prompt, size = '1536x1024', n = 1 }) {
       need('gemini', 'Gemini');
@@ -147,9 +163,11 @@
     },
     async imageOpenAI({ prompt, size = '1536x1024', quality = 'medium', n = 1, model }) {
       need('openai', 'OpenAI');
+      if (!canUse('openai', 'image')) throw new Error('OpenAI está configurada solo para textos y prompts. Elige Gemini o MiniMax como generador de imágenes.');
       const mdl = model || F.settings.models.image;
       const body = { model: mdl, prompt, size, n };
       if (quality && /gpt-image/.test(mdl)) body.quality = quality;
+      if (/dall-e-2/.test(mdl)) { body.response_format = 'b64_json'; body.size = '1024x1024'; body.n = Math.min(4, n); }
       if (/dall-e-3/.test(mdl)) { body.n = 1; body.response_format = 'b64_json'; body.size = size === '1536x1024' ? '1792x1024' : size === '1024x1536' ? '1024x1792' : '1024x1024'; }
       const r = await net('openai', 'https://api.openai.com/v1/images/generations', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key('openai') }, body: JSON.stringify(body),
@@ -161,6 +179,7 @@
     /** Texto a voz con OpenAI. Devuelve Blob mp3 */
     async ttsOpenAI({ text, voice = 'nova', instructions = '', speed = 1 }) {
       need('openai', 'OpenAI');
+      if (!canUse('openai', 'voice')) throw new Error('OpenAI está configurada sin voz. Elige otro proveedor de voz.');
       const model = F.settings.models.tts;
       const body = { model, voice, input: text, response_format: 'mp3' };
       if (instructions && /gpt-4o/.test(model)) body.instructions = instructions;

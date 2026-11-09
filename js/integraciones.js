@@ -30,11 +30,14 @@
     let dead = false;
     const mode = (k) => (cloudOn ? C.aiMode(k) : 'own');
     const model = (k, label, list) => `<label class="lbl">${label}</label><input type="text" data-model="${k}" value="${esc(S.models[k])}" list="dl-${k}"><datalist id="dl-${k}">${list.map((x) => `<option value="${x}">`).join('')}</datalist>`;
-    const models = (k) => k === 'anthropic' ? model('anthropic', 'Modelo', ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5'])
-      : k === 'openai' ? `<div class="grid3">${model('image', 'Imágenes', ['gpt-image-1', 'gpt-image-1-mini', 'dall-e-3'])}${model('tts', 'Voz', ['gpt-4o-mini-tts', 'tts-1-hd', 'tts-1'])}${model('openai', 'Texto', ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini'])}</div>`
-      : k === 'gemini' ? `<div class="grid3">${model('gemini', 'Texto', ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'])}${model('geminiImage', 'Imágenes', ['gemini-2.5-flash-image'])}${model('geminiTts', 'Voz', ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'])}</div>`
-      : k === 'minimax' ? `<div class="grid3">${model('minimax', 'Texto', ['MiniMax-M2'])}${model('minimaxImage', 'Imágenes', ['image-01'])}${model('minimaxTts', 'Voz', ['speech-2.8-hd', 'speech-2.8-turbo'])}</div>`
-      : model('eleven', 'Modelo', ['eleven_multilingual_v2', 'eleven_turbo_v2_5', 'eleven_flash_v2_5', 'eleven_v3']);
+    /* Para qué se usa cada API en este navegador (por defecto, todo) */
+    const USES = { openai: [['text', 'Prompts y textos'], ['image', 'Imágenes'], ['voice', 'Voz']], gemini: [['text', 'Prompts y textos'], ['image', 'Imágenes'], ['voice', 'Voz']], minimax: [['text', 'Prompts y textos'], ['image', 'Imágenes'], ['voice', 'Voz']], anthropic: [['text', 'Prompts y textos']] };
+    const usesRow = (k) => USES[k] ? `<label class="lbl">Usar esta API para</label><div class="chips">${USES[k].map(([c, l]) => `<button class="chip ${F.api.canUse(k, c) ? 'on' : ''}" data-use="${k}:${c}">${l}</button>`).join('')}</div><p class="mini" style="margin:4px 0 0">Apaga «Imágenes» si tu cuenta no puede generarlas: seguirá sirviendo para los prompts.</p>` : '';
+    const models = (k) => usesRow(k) + (k === 'anthropic' ? model('anthropic', 'Modelo', ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5', 'claude-fable-5-1'])
+      : k === 'openai' ? `<div class="grid3">${model('openai', 'Prompts y textos', ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini', 'o4-mini', 'o3-mini'])}${model('image', 'Imágenes', ['gpt-image-1', 'gpt-image-1-mini', 'dall-e-3', 'dall-e-2'])}${model('tts', 'Voz', ['gpt-4o-mini-tts', 'tts-1-hd', 'tts-1'])}</div>`
+      : k === 'gemini' ? `<div class="grid3">${model('gemini', 'Prompts y textos', ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'])}${model('geminiImage', 'Imágenes', ['gemini-2.5-flash-image', 'gemini-2.0-flash-preview-image-generation'])}${model('geminiTts', 'Voz', ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'])}</div>`
+      : k === 'minimax' ? `<div class="grid3">${model('minimax', 'Prompts y textos', ['MiniMax-M2', 'MiniMax-M1', 'MiniMax-Text-01'])}${model('minimaxImage', 'Imágenes', ['image-01', 'image-01-live'])}${model('minimaxTts', 'Voz', ['speech-2.8-hd', 'speech-2.8-turbo', 'speech-2.6-hd', 'speech-2.6-turbo', 'speech-02-hd', 'speech-02-turbo'])}</div>`
+      : model('eleven', 'Modelo', ['eleven_multilingual_v2', 'eleven_turbo_v2_5', 'eleven_flash_v2_5', 'eleven_v3', 'eleven_turbo_v2', 'eleven_multilingual_v1']));
     const head = (a, tag, cls) => `<div class="hd"><div class="lg" style="background:${a.bg}">${a.logo}</div><div style="flex:1"><b>${a.name}</b><small>${a.sub}</small></div><span class="tag ${cls}" data-st="${a.k}">${tag}</span></div>`;
     const feats = (a) => `<div class="feat">${a.feats.map((f) => `<span class="tag">${f}</span>`).join('')}</div>`;
     const bar = (pct, warn) => `<div class="bar ${warn ? 'warn' : ''}"><i style="width:${Math.min(100, pct)}%"></i></div>`;
@@ -162,6 +165,8 @@
       if (m) { S.models[m] = e.target.value.trim(); F.saveSettings(); }
     });
     el.addEventListener('click', async (e) => {
+      const us = e.target.closest('[data-use]');
+      if (us) { const [p, c] = us.dataset.use.split(':'); (S.uses[p] ||= {})[c] = !F.api.canUse(p, c); F.saveSettings(); draw(); return; }
       const eye = e.target.closest('[data-eye]'); if (eye) { const i = q(`[data-key="${eye.dataset.eye}"]`); i.type = i.type === 'password' ? 'text' : 'password'; return; }
       const t = e.target.closest('[data-test]');
       if (t) {
