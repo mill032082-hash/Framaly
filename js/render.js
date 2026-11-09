@@ -155,8 +155,8 @@
     if (img && img.width) {
       const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
       const ir = iw / ih, cr = W / H, k = clip.motionAmt ?? 0.15, m = clip.motion || 'none';
-      const cover = clip.fit !== 'contain';
-      if (!cover) {
+      const cover = clip.fit !== 'contain' && clip.fit !== 'black';   // black: objeto sobre fondo negro (b-roll)
+      if (clip.fit === 'contain') {
         let bw, bh; if (ir > cr) { bh = H; bw = H * ir; } else { bw = W; bh = W / ir; }
         cx.filter = `blur(${Math.round(Math.min(W, H) * 0.035)}px) brightness(.55)`;
         cx.drawImage(img, (W - bw * 1.15) / 2, (H - bh * 1.15) / 2, bw * 1.15, bh * 1.15);
@@ -315,7 +315,7 @@
     const ac = F.actx(), nodes = [];
     const endAt = when + (total - fromT);
     /* intervalos donde habla la voz (para bajar la música 12 dB) */
-    const voices = duck ? tracks.filter((x) => x.a.kind !== 'musica' && !x.a.loop).map((x) => [x.a.start || 0, (x.a.start || 0) + x.buf.duration]) : [];
+    const voices = duck ? tracks.filter((x) => x.a.kind === 'voz' && !x.a.loop).map((x) => [x.a.start || 0, (x.a.start || 0) + x.buf.duration]) : [];
     for (const { a, buf } of tracks) {
       const rel = fromT - (a.start || 0);
       if (!a.loop && rel >= buf.duration) continue;

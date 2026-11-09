@@ -19,6 +19,9 @@
   const terms = (s) => String(s || '').split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean);
   const wordsOf = (s) => String(s || '').split(/\s+/).filter(Boolean);
   const EN_CTA = /\b(buy now|shop now|order now|click here|learn more|sign up|swipe up|get yours|limited time|free shipping)\b/i;
+  G.gd = gd; G.norm = norm;
+  /** Marca dónde empieza una idea nueva (pausa larga o fin de frase) ANTES de cortar, para que el reparto de cámaras la siga viendo */
+  G.markBreaks = (words) => { if (words?.length > 1 && words.some((w) => w.brk !== undefined)) return words; (words || []).forEach((w, i) => { w.brk = i > 0 && (w.s - words[i - 1].e >= 0.5 || /[.!?…]$/.test(words[i - 1].w)); }); return words; };
   const fmt = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
 
   /* =========================================================
@@ -31,7 +34,10 @@
     if (!rms.length) return { sil: [], thr: 0 };
     const sorted = [...rms].sort((a, b) => a - b);
     const floor = sorted[Math.floor(sorted.length * 0.1)] || 0, peak = sorted[Math.floor(sorted.length * 0.98)] || 0;
-    const thr = Math.max(floor * 2.5, peak * 0.04, 0.003);   // umbral adaptativo al ruido de fondo
+    let ref = floor;
+    const n3 = Math.min(rms.length, Math.round(3 / win));            // 3 s en silencio al inicio: miden el ruido ambiente
+    if (n3 >= 100) { const mx = Math.max(...rms.slice(0, n3)); if (mx < peak * 0.15) ref = Math.max(floor, mx); }
+    const thr = Math.max(ref * 2.5, peak * 0.04, 0.003);   // umbral adaptativo al ruido de fondo
     const sil = []; let st = -1;
     rms.forEach((v, i) => {
       if (v < thr) { if (st < 0) st = i; }
@@ -41,6 +47,7 @@
     return { sil, thr, noise: floor };
   };
 
+  G.wav = (chs, sr) => wavBlob(chs, sr);
   function wavBlob(chs, sr) {
     const len = chs[0].length, nc = chs.length, out = new DataView(new ArrayBuffer(44 + len * nc * 2));
     const w = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
@@ -73,6 +80,7 @@
     const m = await F.media.add({ type: 'audio', name: `${old?.name || 'Voz'} (editada)`, blob: wavBlob(out, sr), source: old?.source || 'upload' });
     const g = gd(p), tr = (g.tr ||= {});
     if (tr[a.mediaId]) {   // reubica las palabras que se quedan
+      G.markBreaks(tr[a.mediaId]);
       const shift = (t) => t - cuts.reduce((d, [s, e]) => d + (t >= e ? e - s : t > s ? t - s : 0), 0);
       tr[m.id] = tr[a.mediaId].filter((w) => !cuts.some(([s, e]) => w.s >= s - 0.01 && w.e <= e + 0.01)).map((w) => ({ ...w, s: shift(w.s), e: shift(w.e) }));
     }
@@ -128,7 +136,7 @@
   G.transcribe = async (E, audioId, onProgress) => {
     const a = E.p.audio.find((x) => x.id === audioId); if (!a) return F.toast('Selecciona una pista de voz');
     const words = await F.transcribe.run(a.mediaId, onProgress);
-    (gd(E.p).tr ||= {})[a.mediaId] = words; E.api.save();
+    (gd(E.p).tr ||= {})[a.mediaId] = G.markBreaks(words); E.api.save();
     F.toast(`Transcripción lista: ${words.length} palabras`, 'ok'); return words;
   };
   G.cleanByTranscript = async (E, audioId, minSil, onProgress) => {
@@ -177,8 +185,8 @@
   G.auto = async (E) => {
     const p = E.p, g = gd(p);
     if (!p.clips.length) return F.toast('Añade al menos una imagen (y tu voz grabada) para editar en automático');
-    const voice = () => p.audio.find((a) => a.kind !== 'musica' && !a.loop);
-    const steps = [['cut', 'Cortar silencios, muletillas y repeticiones'], ['fit', 'Ajustar las imágenes a la voz'], ['rhythm', 'Ritmo y encuadres'], ['subs', 'Subtítulos (máx. 3 palabras)'], ['sound', 'Sonido'], ['review', 'Revisión Golden']];
+    const voice = () => p.audio.find((a) => a.kind === 'voz' && !a.loop);
+    const steps = [['cut', 'Cortar silencios, muletillas y repeticiones'], ['fit', 'Ajustar las imágenes a la voz'], ['rhythm', 'Cámaras por ideas (frontal, lateral, closeup)'], ['broll', 'B-roll donde se nombra algo'], ['subs', 'Subtítulos (máx. 3 palabras)'], ['sound', 'Sonido'], ['review', 'Revisión Golden']];
     const undoStart = E.undo.length; let cancelled = false;
     const m = F.modal({ title: 'Editando en automático', wide: true, locked: true,
       body: `<div class="auto-steps">${steps.map(([k, t]) => `<div class="as" id="as-${k}"><span class="si">·</span><div><b>${t}</b><div class="small muted" data-n></div></div></div>`).join('')}</div>`,
@@ -211,9 +219,11 @@
       E.api.after({ insp: true }); return { note: `Imágenes ajustadas a ${F.fmtS(end)} de voz` };
     });
     await run('rhythm', async () => {
-      E.api.commit(); const n = G.splitLong(E, 4); G.multicamQuiet(p); E.api.after({ insp: true });
-      return { note: (n ? `${n} ${n === 1 ? 'corte nuevo' : 'cortes nuevos'} (planos de ~4 s) · ` : '') + 'encuadres alternados: general, 113 %, 125 %' };
+      if (!G.assignCameras) { E.api.commit(); G.splitLong(E, 4); G.multicamQuiet(p); E.api.after({ insp: true }); return { note: 'Encuadres alternados' }; }
+      const r = await G.assignCameras(E);
+      return { note: `${r.blocks} ${r.blocks === 1 ? 'idea' : 'ideas'} (desde ${r.source}): frontal en hook y CTA, lateral en la narración${r.closeups ? ', 1 closeup' : ''}` };
     });
+    await run('broll', async (prog) => G.brollRun ? G.brollRun(E, prog) : { st: 'skip' });
     await run('subs', async (prog) => {
       const v = voice();
       if (v) { try { await G.captionsFromAudio(E, v.id, prog); G.cleanQuiet(p); return { note: 'Sincronizados con la voz' }; } catch (e) { if (!g.script) return { st: 'warn', note: e.message + ' Pega el guion en la pestaña Golden para subtitular sin transcripción.' }; } }
@@ -222,8 +232,11 @@
     });
     await run('sound', async () => {
       const mus = p.audio.some((a) => a.kind === 'musica'), v = !!voice();
-      if (mus && v) { E.api.commit(); p.duck = true; E.api.after({ insp: true }); return { note: 'La música baja 12 dB cuando habla la voz' }; }
-      return { st: 'skip', note: mus ? 'Sin voz: la música queda igual.' : 'No hay música. Súbela en Audio para activar el ducking.' };
+      const notes = [];
+      if (mus && v) { E.api.commit(); p.duck = true; E.api.after({ insp: true }); notes.push('la música baja 12 dB cuando habla la voz'); }
+      else notes.push(mus ? 'sin voz: la música queda igual' : 'sin música (súbela en Audio para activar el ducking)');
+      if (G.placeSfx) { const n = await G.placeSfx(E); notes.push(`${n} efectos desacoplados del corte`); }
+      return { note: notes.join(' · ') };
     });
     let res = [];
     await run('review', async () => {
@@ -379,9 +392,10 @@
     const hi = p.clips.filter((c) => (c.motionAmt || 0) > 0.25 && c.motion !== 'none');
     hi.length && add('warn', 'Punch-in sobre el tope de 125 %', `${hi.length} clip(s) con intensidad mayor a 25%.`);
     /* audio */
-    const voz = p.audio.filter((a) => a.kind !== 'musica'), mus = p.audio.filter((a) => a.kind === 'musica');
+    const voz = p.audio.filter((a) => a.kind === 'voz'), mus = p.audio.filter((a) => a.kind === 'musica');
     !voz.length ? add('warn', 'Sin voz ni narración', 'El audio de cámara define el 80% del resultado.') : add('ok', 'Hay pista de voz');
     voz.length && mus.length && !p.duck ? add('warn', 'La música puede tapar la voz', 'Activa «Bajar la música cuando habla la voz» (−12 dB).') : mus.length && add('ok', 'Música con ducking');
+    G.plusReview?.(p, add);
     return res;
   };
 
@@ -412,8 +426,9 @@
     <ol><li><b>Cortar</b> fija la línea de tiempo; todo lo demás se ubica contra esos cortes.</li><li><b>Subtitular</b> va contra el video ya cortado. Al revés se rehace el trabajo y los subtítulos quedan desfasados (el error más caro).</li><li><b>Ilustrar (b-roll)</b> donde se NOMBRA algo: escena de objeto, no stock genérico, menos de 1 s.</li><li><b>Sonorizar</b> al final: el sonido reacciona a lo ya montado y no cae justo donde cae el corte.</li></ol>
     <h4>Antes de editar</h4><ul><li>Audio de cámara o micrófono, no de celular a 3 metros: define el 80% del resultado.</li><li>El guion <b>como se grabó</b>, no el que se escribió.</li><li>Look fijado (color, tipografía, color del resaltado) para que la grilla no se vea desprolija.</li><li>Truco al grabar: 3 segundos de silencio al inicio para medir el ruido ambiente.</li><li>Claims permitidos y prohibidos del producto: jamás se edita a ciegas. Un claim malo tumba el anuncio en Meta.</li></ul>
     <h4>Reglas de corte</h4><ul><li>El corte cae en el silencio; si no hay silencio, no se corta.</li><li>Nunca cortes la primera ni la última palabra de una frase.</li><li>Deja 200 ms de aire entre frases (cortar de más suena robótico).</li><li>Si dudas entre cortar o dejar, deja. De las tomas repetidas, quédate con la segunda.</li><li>Un crudo de 1:40 baja a ~58 s. Si queda en 1:20, el ruido de fondo impidió detectar silencios.</li><li>Plano fijo largo: cambia el encuadre cuando cambia la idea (punch-in al 113%, tope 125%). Cada 10 s no es ritmo, es ruido.</li></ul>
+    <h4>Multicámara con una sola cámara</h4><ul><li>Las 3 cámaras son posiciones, no equipos: <b>frontal</b> (habla al espectador: hook, promesa, CTA), <b>lateral</b> (la narración, nunca mira al lente) y <b>closeup</b> (la frase corta que quieres que repitan).</li><li>El reparto va sobre el GUION: un bloque = una idea; cuando termina la idea, cambia el encuadre. El frontal se guarda para cuando te habla a ti. El closeup se pide: uno cada ~3 minutos.</li><li>Punch-in al 113 %, tope duro 125 %. Cada 10 s no es ritmo, es ruido.</li><li>El corte cae en el silencio más cercano (ventana de 1,5 s). Si no hay silencio, no se corta.</li><li>Trampas: nunca un cutaway a pantalla completa justo encima de un cambio de cámara, y si el editor ya hace zooms, apaga los otros.</li><li>Honestidad: sin fotos por cámara no hay cambio de cámara, hay reencuadre. Y un plano fijo aburrido, cortado, sigue aburrido.</li><li>Cómo saber si funcionó: el minuto en el que la gente se iba antes. Si ese minuto se corre hacia adelante, sirve en ese canal; si no, el problema estaba en el guion.</li></ul>
     <h4>Subtítulos</h4><ul><li>Palabra por palabra, máximo 3 palabras en pantalla, mayúsculas, alto contraste.</li><li>Español de Colombia. Sin signos de apertura (¿ ¡), solo de cierre. Sin CTA en inglés.</li></ul>
-    <h4>Sonido</h4><ul><li>Música con ducking: 12 dB abajo cuando hay voz.</li><li>Efectos desacoplados del corte.</li></ul>
+    <h4>Ilustrar y sonido</h4><ul><li>B-roll donde se NOMBRA algo: objeto sobre fondo negro, menos de 1 s, nunca stock.</li><li>Música con ducking: 12 dB abajo cuando hay voz.</li><li>Efectos desacoplados del corte: caen un poco después, no sobre el tijeretazo.</li><li>Prueba del sonido apagado con el botón de sonido del reproductor.</li></ul>
     <h4>Verificación (botón «Revisión Golden»)</h4><ul><li>Prueba del sonido apagado: el 85% ve sin sonido. Si necesitas el audio para entender, faltan cortes o b-roll.</li><li>El primer segundo frena el scroll; el gancho pega en los primeros 3 s.</li><li>Ningún claim prohibido en subtítulos ni textos. Formato y duración correctos (anuncio COD: 25–40 s).</li></ul>
     <h4>Lo que la máquina no decide</h4><p>Qué se dice y en qué orden, dónde va el silencio que incomoda y si la pieza merecía existir. La herramienta baja el costo de producir, no el de tener algo que decir.</p></div>`,
   });
@@ -423,10 +438,10 @@
      ========================================================= */
   G.panel = (bin, E) => {
     const p = E.p, g = gd(p), D = DESTINOS[g.destino] || DESTINOS.meta;
-    const vozSel = E.selType === 'audio' ? p.audio.find((a) => a.id === E.sel) : p.audio.find((a) => a.kind !== 'musica');
+    const vozSel = E.selType === 'audio' ? p.audio.find((a) => a.id === E.sel) : p.audio.find((a) => a.kind === 'voz');
     const step = (n, t, inner) => `<div class="gstep"><div class="gh"><span class="gn">${n}</span><b>${t}</b></div>${inner}</div>`;
     bin.innerHTML = `<div class="gold">
-      <button class="btn primary auto-btn" data-g="auto">${I('wand')} Editar automático<small>Corta, subtitula, da ritmo y revisa con un clic</small></button>
+      <button class="btn primary auto-btn" data-g="auto">${I('wand')} Editar automático<small>Todo el método en un clic</small></button>
       <div class="small muted" style="text-align:center">o hazlo a mano, paso a paso:</div>
       <div class="row" style="gap:6px;margin-bottom:8px"><button class="btn sm primary" data-g="review" style="flex:1">${I('check')} Revisión Golden</button><button class="btn sm" data-g="guide" title="Reglas y método">${I('eye')} Guía</button></div>
       ${step('0', 'Intake', `<label class="lbl">Productos guardados</label><div class="row" style="gap:6px"><select data-gf="prodPick" id="gProd" style="flex:1"><option value="">— elegir producto —</option>${prods().map((x) => `<option value="${x.id}">${F.esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-g="prodDel" title="Borrar el producto elegido">${I('trash')}</button></div>
@@ -441,13 +456,15 @@
         <button class="btn sm" data-g="silence" ${vozSel ? '' : 'disabled'}>${I('scissors')} Solo silencios (por volumen)</button>
         <div class="small muted">${vozSel ? 'Voz: ' + F.esc(F.media.byId(vozSel.mediaId)?.name || '') : 'Añade una pista de voz'} · deja 200 ms de aire</div>
         <label class="lbl">Silencio mínimo a cortar</label><select data-gf="minSil" id="gMinSil"><option value="0.4">0,4 s (agresivo)</option><option value="0.6">0,6 s (recomendado)</option><option value="1">1 s (suave)</option></select>
-        <button class="btn sm" data-g="multicam">${I('film')} Multicámara (alternar encuadres)</button>
+        ${G.plusCam ? G.plusCam() : ''}
+        <button class="btn sm" data-g="multicam">${I('film')} Alternar encuadres (rápido)</button>
         <button class="btn sm" data-g="fit">${I('clock')} Ajustar a duración objetivo</button>`)}
       ${step('2', 'Subtitular', `<button class="btn sm primary" data-g="acap" ${vozSel ? '' : 'disabled'}>${I('type')} Subtítulos desde el audio (sincronizados)</button><div class="small muted">O sin audio, desde el guion:</div><label class="lbl">Guion como se grabó</label><textarea rows="4" data-gf="script" placeholder="Pega aquí el guion tal como lo dijiste">${F.esc(g.script)}</textarea>
         <button class="btn sm" data-g="captions">${I('type')} Repartir como subtítulos (máx. 3 palabras)</button>
         <button class="btn sm" data-g="clean">${I('wand')} Limpiar textos (sin ¿ ¡)</button>`)}
-      ${step('3', 'Ilustrar', `<div class="small muted" style="line-height:1.5">Pon una imagen cada vez que el guion NOMBRE algo: objeto sobre fondo negro, no stock, menos de 1 s. Usa el producto real, nunca redibujado. Arrastra la imagen al timeline y divide con <kbd>S</kbd>.</div>`)}
-      ${step('4', 'Sonorizar', `<label class="check"><input type="checkbox" data-gf="duck" ${p.duck ? 'checked' : ''}> Bajar la música 12 dB cuando habla la voz</label><div class="small muted">Los efectos van desacoplados del corte.</div>`)}
+      ${step('3', 'Ilustrar (b-roll)', `${G.plusBroll ? G.plusBroll(p) : ''}<div class="small muted" style="line-height:1.5">Usa el producto real, nunca redibujado.</div>`)}
+      ${step('4', 'Sonorizar', `<label class="check"><input type="checkbox" data-gf="duck" ${p.duck ? 'checked' : ''}> Bajar la música 12 dB cuando habla la voz</label>${G.plusSfx ? G.plusSfx() : ''}`)}
+      ${step('+', 'Referencia y fondos', G.plusExtra ? G.plusExtra() : '')}
       ${step('6', 'Empaquetar el estilo', `<div class="small muted">Cuando el resultado te guste, guárdalo con el nombre del cliente. La próxima vez, un clic.</div>
         <button class="btn sm" data-g="styleSave">${I('save')} Guardar el estilo de este video</button>
         <div class="row" style="gap:6px"><select id="gStyle" style="flex:1"><option value="">— estilos guardados —</option>${styles().map((x) => `<option value="${x.id}">${F.esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-g="styleDel" title="Borrar el estilo elegido">${I('trash')}</button></div>
@@ -475,6 +492,7 @@
     });
     bin.addEventListener('click', (e) => {
       const b = e.target.closest('[data-g]'); if (!b || !E.p) return; const a = b.dataset.g, p = E.p, g = gd(p);
+      if (G.plusClick?.(a, b, E)) return;
       const sel = (id) => bin.querySelector(id)?.value || '';
       if (a === 'auto') G.auto(E);
       else if (a === 'prodSave') G.saveProduct(E).then(() => E.api.renderBin());
@@ -484,9 +502,9 @@
       else if (a === 'styleDel') { const v = sel('#gStyle'); if (!v) return F.toast('Elige un estilo guardado'); G.delStyle(v); E.api.renderBin(); }
       else if (a === 'review') G.openReview(E);
       else if (a === 'guide') G.openGuide();
-      else if (a === 'silence') { const v = E.selType === 'audio' ? E.sel : p.audio.find((x) => x.kind !== 'musica')?.id; b.disabled = true; G.cleanSilence(E, v, G.minSil || 0.6).catch((er) => F.toast('No se pudo analizar el audio: ' + er.message, 'error')).finally(() => (b.disabled = false)); }
+      else if (a === 'silence') { const v = E.selType === 'audio' ? E.sel : p.audio.find((x) => x.kind === 'voz')?.id; b.disabled = true; G.cleanSilence(E, v, G.minSil || 0.6).catch((er) => F.toast('No se pudo analizar el audio: ' + er.message, 'error')).finally(() => (b.disabled = false)); }
       else if (a === 'tcut' || a === 'acap') {
-        const v = E.selType === 'audio' ? E.sel : p.audio.find((x) => x.kind !== 'musica')?.id, label = b.innerHTML; b.disabled = true;
+        const v = E.selType === 'audio' ? E.sel : p.audio.find((x) => x.kind === 'voz')?.id, label = b.innerHTML; b.disabled = true;
         const prog = (t) => { b.textContent = t; };
         (a === 'tcut' ? G.cleanByTranscript(E, v, G.minSil || 0.6, prog) : G.captionsFromAudio(E, v, prog))
           .catch((er) => F.toast(er.message || String(er), 'error', 6000)).finally(() => { b.innerHTML = label; b.disabled = false; });

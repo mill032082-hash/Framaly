@@ -49,6 +49,14 @@ En el editor, pestaña **Golden** del panel izquierdo. Funciona en el navegador,
 - **Productos guardados:** guarda el nombre y los claims prohibidos y permitidos de un producto y cárgalos en cualquier video con un clic (así nunca se edita a ciegas).
 - **Empaquetar el estilo:** cuando un video te guste, guarda su estilo (filtro, transición, texto, encuadres, barras, marca de agua y ducking) con el nombre del cliente y aplícalo a otros videos en un clic.
 - Productos y estilos se guardan en este dispositivo, junto a los ajustes de la app.
+- **Cámaras por ideas (multicámara con una sola cámara):** reparte el encuadre según las ideas del guion o de la transcripción: **frontal** en el gancho, la promesa y el cierre; **lateral** en la narración (punch-in al 113 %); **closeup** en la frase corta (tope 125 %). Los cortes caen en el silencio más cercano (ventana de 1,5 s); si no hay silencio, no se corta.
+- **Dividir (`S`) en el silencio:** el corte manual salta al silencio más cercano; si no hay uno a menos de 1,5 s, te avisa antes de cortar a mitad de palabra.
+- **B-roll donde se nombra algo:** define palabra + imagen del objeto, y se coloca en cada mención (objeto sobre fondo negro, menos de 1 s, sin mover la voz). También hay «B-roll aquí» en el cursor.
+- **Efectos de sonido:** pop, whoosh y ding generados en la app, colocados un poco *después* del corte (desacoplados). Se editan como cualquier pista.
+- **Prueba del sonido apagado:** botón de sonido junto al reproductor. Reproduce sin audio para ver si el video se entiende solo.
+- **Replicar estilo desde capturas:** sube capturas de un video de referencia y la app toma la paleta y elige el filtro más parecido (se destila, no se clona). **Prompts de fondos:** genera los 3 prompts (frontal, lateral, closeup) para crear la misma habitación con IA.
+- **Revisión:** además avisa de las dos trampas de montaje (cutaway sobre un cambio de cámara y zoom encima de zoom), de demasiados closeups y de b-roll de más de 1 s.
+- **Ruido de fondo:** los 3 s iniciales en silencio se usan para medir el ruido y detectar mejor los silencios.
 - **Guía:** el método completo, dentro de la app.
 Lo que la herramienta no decide: qué se dice, dónde va el silencio que incomoda y si la pieza merece existir.
 
