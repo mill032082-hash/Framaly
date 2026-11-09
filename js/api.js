@@ -203,7 +203,11 @@
     },
     /** Variantes de imagen de OpenAI (ChatGPT) para los selectores */
     OPENAI_IMAGE_MODELS: [
-      ['gpt-image-2', 'GPT Image 2 — el mejor (requiere verificar organización)'],
+      ['gpt-image-2.6-flare', 'GPT Image 2.6 Flare — el más nuevo, rápido (requiere verificación)'],
+      ['gpt-image-2.6-sunburst', 'GPT Image 2.6 Sunburst — el más nuevo, más detalle (requiere verificación)'],
+      ['gpt-image-2.5-flare', 'GPT Image 2.5 Flare — rápido (requiere verificación)'],
+      ['gpt-image-2.5-sunburst', 'GPT Image 2.5 Sunburst — más detalle (requiere verificación)'],
+      ['gpt-image-2', 'GPT Image 2 (requiere verificar organización)'],
       ['gpt-image-1.5', 'GPT Image 1.5 (requiere verificación)'],
       ['gpt-image-1', 'GPT Image 1 (requiere verificación)'],
       ['gpt-image-1-mini', 'GPT Image 1 mini — barato (requiere verificación)'],
@@ -212,6 +216,10 @@
     ],
     /** US$ por imagen (cuadrada / horizontal-vertical) y calidad. Estimados de OpenAI; solo los modelos con precio conocido. */
     IMAGE_PRICE: {
+      'gpt-image-2.6-flare': { name: 'GPT Image 2.6 Flare', sq: { low: 0.025, medium: 0.043, high: 0.053 }, wide: { low: 0.02, medium: 0.034, high: 0.041 } },
+      'gpt-image-2.6-sunburst': { name: 'GPT Image 2.6 Sunburst', sq: { low: 0.025, medium: 0.043, high: 0.053 }, wide: { low: 0.02, medium: 0.034, high: 0.041 } },
+      'gpt-image-2.5-flare': { name: 'GPT Image 2.5 Flare', sq: { low: 0.006, medium: 0.013, high: 0.053 }, wide: { low: 0.005, medium: 0.01, high: 0.041 } },
+      'gpt-image-2.5-sunburst': { name: 'GPT Image 2.5 Sunburst', sq: { low: 0.006, medium: 0.013, high: 0.053 }, wide: { low: 0.005, medium: 0.01, high: 0.041 } },
       'gpt-image-2': { name: 'GPT Image 2', sq: { low: 0.006, medium: 0.053, high: 0.211 }, wide: { low: 0.005, medium: 0.041, high: 0.165 } },
       'gpt-image-1.5': { name: 'GPT Image 1.5', sq: { low: 0.009, medium: 0.034, high: 0.133 }, wide: { low: 0.013, medium: 0.05, high: 0.2 } },
     },
