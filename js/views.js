@@ -135,7 +135,7 @@
         <button class="btn sm" id="sCopy">${I('copy')} Copiar</button><button class="btn sm" id="sVoice">${I('mic')} Enviar a Voces</button></div></div>
         <div class="card" id="sScenes">${s.scenes.map((x, i) => `<div class="scene" data-i="${i}"><span class="n">${i + 1}</span><button class="icon-btn" data-rm="${i}" style="position:absolute;right:8px;top:8px" title="Quitar escena">${I('x')}</button>
           <label class="lbl">Narración</label><textarea data-k="narration" rows="3">${F.esc(x.narration)}</textarea>
-          <div class="grid2"><div><label class="lbl">Prompt de imagen (inglés)</label><textarea data-k="image_prompt" rows="2">${F.esc(x.image_prompt)}</textarea></div><div><label class="lbl">Texto en pantalla</label><textarea data-k="on_screen_text" rows="2">${F.esc(x.on_screen_text)}</textarea></div></div></div>`).join('')}
+          <div class="grid2"><div><label class="lbl">Prompt de imagen (español)</label><textarea data-k="image_prompt" rows="2">${F.esc(x.image_prompt)}</textarea></div><div><label class="lbl">Texto en pantalla</label><textarea data-k="on_screen_text" rows="2">${F.esc(x.on_screen_text)}</textarea></div></div></div>`).join('')}
           <button class="btn sm" id="sAdd" style="margin-top:12px">${I('plus')} Añadir escena</button></div>
         <div class="card"><h3>${I('film')} Producir video con este guion</h3><p class="desc">Los agentes generarán una imagen y una narración por escena y montarán el timeline con transiciones.</p>
           <div class="grid2"><div><label class="lbl">Formato</label><select id="pAsp">${opt(R.ASPECTS, st.aspect)}</select></div><div><label class="lbl">Estilo visual</label><select id="pSty">${opt(Object.entries(F.STYLES).map(([k, v]) => [k, v.name]), st.style)}</select></div>
@@ -217,7 +217,7 @@
       if (!st.prompt.trim()) return F.toast('Escribe primero una idea');
       const b = e.currentTarget; F.busy(b, true, 'Mejorando…');
       try {
-        const t = await F.api.llm({ system: 'Eres un experto en prompts para generación de imágenes.', prompt: `Convierte esta idea en un prompt de imagen excelente, en inglés, de 40-70 palabras: sujeto, entorno, composición, iluminación, lente y atmósfera. Sin texto ni letras en la imagen. Devuelve SOLO el prompt.\nIdea: ${st.prompt}`, maxTokens: 400 });
+        const t = await F.api.llm({ system: 'Eres un experto en prompts para generación de imágenes.', prompt: `Convierte esta idea en un prompt de imagen excelente, escrito totalmente EN ESPAÑOL (ninguna palabra en inglés), de 40-70 palabras: sujeto, entorno, composición, iluminación, lente y atmósfera. Sin texto ni letras en la imagen. Devuelve SOLO el prompt.\nIdea: ${st.prompt}`, maxTokens: 400 });
         st.prompt = t.trim().replace(/^"|"$/g, ''); el.querySelector('#iPrompt').value = st.prompt; save(); F.toast('Prompt mejorado', 'ok');
       } catch (err) { F.toast(err.message, 'error'); }
       F.busy(b, false);
@@ -579,7 +579,7 @@
     q('#uThAi').onclick = async (e) => {
       const b = e.currentTarget; F.busy(b, true, 'Generando…');
       try {
-        const [blob] = await F.api.image({ prompt: `YouTube thumbnail background about "${p.meta.title || p.name}". Bold, high contrast, dramatic lighting, vivid colors, clear focal subject on the right side, empty space on the left for text. No text, no letters.`, size: '1536x1024', quality: 'medium' });
+        const [blob] = await F.api.image({ prompt: `Fondo de miniatura de YouTube sobre "${p.meta.title || p.name}". Imagen llamativa y de alto contraste, iluminación dramática, colores vivos, sujeto principal claro en el lado derecho y espacio libre a la izquierda para el texto. Sin texto ni letras.`, size: '1536x1024', quality: 'medium' });
         const m = await F.media.add({ type: 'image', name: 'Miniatura · ' + (p.meta.title || p.name).slice(0, 30), blob, source: 'ai' });
         thumbImg = m.id; pick(); drawThumb(); F.toast('Fondo generado', 'ok');
       } catch (err) { F.toast(err.message, 'error'); }

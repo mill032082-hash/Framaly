@@ -29,7 +29,7 @@
       'Pulsa <b>Generar video completo</b>: se crean las imágenes y la voz, se monta y se exporta en automático.',
     ], tip: '“Enviar a Voces” lleva toda la narración al estudio de voz.' },
     imagenes: { t: 'Cómo generar imágenes', s: [
-      'Describe la imagen en español o en inglés. Pulsa <b>Mejorar prompt con IA</b> para que quede más detallada.',
+      'Describe la imagen en español. Pulsa <b>Mejorar prompt con IA</b> para que quede más detallada.',
       'Elige estilo, formato (horizontal para YouTube, vertical para Shorts), calidad y cantidad.',
       'Pulsa <b>Generar</b>. Las imágenes se guardan solas en la Biblioteca.',
       'Pasa el ratón por encima y pulsa <b>+ Editor</b> para añadirla al video actual.',
