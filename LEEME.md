@@ -146,3 +146,6 @@ Las claves se guardan solo en tu navegador.
 - **Revisión Golden ampliada**: número de control del corte (1:40 → ~58 s), guion sin pegar, música sin ducking, marca de agua.
 - **Guía completa** con «Si algo falla», multicámara con una cámara, replicar estilo y reglas de oro.
 - **Todo el conocimiento de la skill dentro del editor**: botón «Todo el conocimiento de la skill» arriba de la pestaña Golden. Abre el documento completo (método, multicámara con una cámara, dónde está cada regla en la app, zona honesta y límites) con índice y buscador. Datos en `js/golden-skill-data.js`, visor en `js/golden-skill.js`.
+
+## Pestaña «Plantillas» (editor de video)
+Reúne el material reutilizable de la skill: formato del video (Meta/TikTok, reel, YouTube), archivo de contexto, intake, instrucciones para la máquina, reparto multicámara, b-roll y sonido, reporte de cortes, checklist antes de exportar, replicar/empaquetar estilo, fallos y reglas de oro. Cada una se copia con un clic; los formatos y los estilos guardados se aplican al proyecto. Código: `js/plantillas.js`.

@@ -37,7 +37,7 @@
   };
 
   /* pestañas del panel izquierdo: archivos y herramientas para editar */
-  const TABS = [['image', 'Imágenes'], ['video', 'Videos'], ['audio', 'Audio'], ['motion', 'Animaciones'], ['fx', 'Efectos'], ['trans', 'Transiciones'], ['text', 'Texto'], ['golden', 'Golden'], ['more', 'Más']];
+  const TABS = [['image', 'Imágenes'], ['video', 'Videos'], ['audio', 'Audio'], ['motion', 'Animaciones'], ['fx', 'Efectos'], ['trans', 'Transiciones'], ['text', 'Texto'], ['golden', 'Golden'], ['plantillas', 'Plantillas'], ['more', 'Más']];
   const GLYPH = { none: '■', kenburns: '⤢', zoomIn: '⊕', zoomOut: '⊖', panL: '←', panR: '→', panU: '↑', panD: '↓', fade: '◐', black: '●', flash: '✦', slideL: '⇠', slideR: '⇢', slideU: '⇡', zoom: '⌖', wipe: '▌', circle: '◯', blur: '≋', spin: '↻', blinds: '☰', glitch: '▚' };
 
   function tpl() {
@@ -141,6 +141,7 @@
   /* ---------- herramientas: animaciones, efectos, transiciones, texto y más ---------- */
   function renderTools(bin) {
     if (E.binTab === 'golden' && F.golden) return F.golden.panel(bin, E);
+    if (E.binTab === 'plantillas' && F.plantillas) return F.plantillas.panel(bin, E);
     const c = E.selType === 'clip' ? clipById(E.sel) : null, i = c ? p.clips.indexOf(c) : -1, tab = E.binTab;
     const cur = (k) => (c ? c[k] : null);
     const item = (k, o, glyph, extra = '') => `<button class="pre-item ${cur(k) === o.id ? 'on' : ''}" data-pre="${k}:${o.id}" title="${F.esc(o.name)}">${extra || `<span class="g">${glyph}</span>`}<span class="n">${F.esc(o.name)}</span></button>`;

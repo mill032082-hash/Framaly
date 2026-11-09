@@ -770,3 +770,10 @@ body.resizing .flows { transition: none; }
 .bin-item.vid { position: relative; }
 .bin-item.vid::after { content: '\25B6'; position: absolute; left: 6px; bottom: 5px; font-size: 11px; color: #fff; background: rgba(0,0,0,.55); border-radius: 4px; padding: 1px 5px; }
 .bin-item .vdur { position: absolute; right: 6px; bottom: 5px; font-size: 11px; color: #fff; background: rgba(0,0,0,.55); border-radius: 4px; padding: 1px 5px; }
+
+.plant { display: flex; flex-direction: column; gap: 8px; grid-column: 1 / -1; }
+.pl-card { border: 1px solid var(--line2); border-radius: 10px; background: var(--bg2); padding: 8px 10px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+.pl-card summary { cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.pl-fmt { display: flex; flex-wrap: wrap; gap: 6px; }
+.pl-fmt .btn small { display: block; font-size: 10px; opacity: .7; font-weight: 400; }
+.pl-txt { max-height: 260px; overflow: auto; white-space: pre-wrap; font-size: 12px; margin: 6px 0; }
