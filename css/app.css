@@ -715,3 +715,11 @@ body.resizing .flows { transition: none; }
 .gtab { width: 100%; border-collapse: collapse; font-size: 12px; }
 .gtab th, .gtab td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
 .gguide h4 { margin: 14px 0 4px; color: var(--or2); } .gguide ul, .gguide ol { margin: 0; padding-left: 20px; line-height: 1.6; font-size: 13px; }
+
+.auto-btn { width: 100%; flex-direction: column; gap: 2px; padding: 12px; font-size: 14px; height: auto; }
+.auto-btn small { font-weight: 400; opacity: .85; font-size: 11px; }
+.auto-top { border-color: var(--or-line); color: var(--or2); }
+.auto-steps { display: flex; flex-direction: column; gap: 8px; }
+.as { display: flex; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg2); }
+.as .si { width: 22px; text-align: center; } .as.ok { border-color: rgba(34, 197, 94, .4); } .as.bad { border-color: rgba(239, 68, 68, .5); } .as.warn { border-color: rgba(245, 158, 11, .45); } .as.run { border-color: var(--or); }
+.editor.dropping { outline: 2px dashed var(--or); outline-offset: -6px; }

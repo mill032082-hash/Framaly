@@ -33,6 +33,10 @@ Cada sección tiene instrucciones paso a paso arriba y en el botón **Instruccio
 - **Proyecto → «Bajar la música cuando habla la voz»**: baja la música 12 dB mientras suena la narración (también en el MP4 exportado).
 
 ## Método Golden en el editor (sin IA, todo local)
+**Editar automático (un solo botón):** en el editor pulsa **Automático** (arriba) o **Editar automático** (pestaña Golden). Con tus imágenes y tu voz hace todo en orden y muestra cada paso: corta silencios, muletillas y repeticiones; ajusta las imágenes a la voz; parte los planos largos y alterna encuadres; subtitula con máx. 3 palabras; baja la música cuando habla la voz; y corre la revisión. Si la transcripción no está disponible, corta por volumen y te avisa. **Deshacer todo** devuelve el proyecto a como estaba.
+
+**Manual y fácil:** botones **Texto** (o tecla `T`), **Duplicar** y **Dividir** (`S`) sobre el timeline. Puedes **arrastrar imágenes o audios desde tu PC** a cualquier parte del editor. Todo se puede retocar a mano después.
+
 En el editor, pestaña **Golden** del panel izquierdo. Funciona en el navegador, sin Claude ni claves de API. Sigue la ley de orden: **Cortar → Subtitular → Ilustrar → Sonorizar**.
 - **Intake:** destino (anuncio 9:16 / YouTube / reel), producto, **claims prohibidos y permitidos** y duración objetivo.
 - **Transcripción de la voz:** dos motores a elegir en la pestaña Golden. **Local** (Whisper dentro del navegador, gratis y sin claves; la primera vez descarga el modelo, necesita internet) o **Whisper de OpenAI** con tu clave propia de Integraciones API.

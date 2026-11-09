@@ -13,7 +13,8 @@
     yt: { n: 'YouTube (16:9)', aspect: '16:9', target: 0, ad: false },
     reel: { n: 'Reel orgánico (9:16)', aspect: '9:16', target: 30, ad: false },
   };
-  const gd = (p) => (p.golden = Object.assign({ destino: 'meta', target: 35, producto: '', claimsNo: '', claimsOk: '', script: '', lastCut: null }, p.golden || {}));
+  const GD0 = { destino: 'meta', destinoSet: false, target: 35, producto: '', claimsNo: '', claimsOk: '', script: '', lastCut: null };
+  const gd = (p) => { const o = p.golden || (p.golden = {}); for (const k in GD0) if (!(k in o)) o[k] = GD0[k]; return o; };   // siempre el mismo objeto
   const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const terms = (s) => String(s || '').split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean);
   const wordsOf = (s) => String(s || '').split(/\s+/).filter(Boolean);
@@ -154,6 +155,93 @@
     E.api.after({ insp: true }); F.toast('Subtítulos sincronizados con la voz: máx. 3 palabras', 'ok');
   };
 
+
+  /* =========================================================
+     EDITAR AUTOMÁTICO — todo el método con un solo botón
+     Orden de la skill: Cortar → Ajustar → Ritmo → Subtitular → Sonorizar → Revisar
+     ========================================================= */
+  G.splitLong = (E, maxLen = 4) => {
+    const p = E.p; let n = 0;
+    for (let i = 0; i < p.clips.length; i++) {
+      const c = p.clips[i];
+      if (c.duration <= maxLen * 1.25) continue;
+      const k = Math.ceil(c.duration / maxLen), part = F.round1(c.duration / k), last = c.transition;
+      const extra = [];
+      for (let j = 1; j < k; j++) extra.push({ ...c, id: F.uid(), duration: j === k - 1 ? Math.max(0.5, F.round1(c.duration - part * (k - 1))) : part, transition: j === k - 1 ? last : 'none', text: '' });
+      c.duration = part; c.transition = 'none';
+      p.clips.splice(i + 1, 0, ...extra); i += extra.length; n += extra.length;
+    }
+    return n;
+  };
+
+  G.auto = async (E) => {
+    const p = E.p, g = gd(p);
+    if (!p.clips.length) return F.toast('Añade al menos una imagen (y tu voz grabada) para editar en automático');
+    const voice = () => p.audio.find((a) => a.kind !== 'musica' && !a.loop);
+    const steps = [['cut', 'Cortar silencios, muletillas y repeticiones'], ['fit', 'Ajustar las imágenes a la voz'], ['rhythm', 'Ritmo y encuadres'], ['subs', 'Subtítulos (máx. 3 palabras)'], ['sound', 'Sonido'], ['review', 'Revisión Golden']];
+    const undoStart = E.undo.length; let cancelled = false;
+    const m = F.modal({ title: 'Editando en automático', wide: true, locked: true,
+      body: `<div class="auto-steps">${steps.map(([k, t]) => `<div class="as" id="as-${k}"><span class="si">·</span><div><b>${t}</b><div class="small muted" data-n></div></div></div>`).join('')}</div>`,
+      actions: [{ label: 'Detener', danger: true, onClick: () => { cancelled = true; return false; } }] });
+    const set = (k, st, note = '') => { const el = m.q('#as-' + k); if (!el) return; el.querySelector('.si').textContent = { run: '⏳', ok: '✅', skip: '➖', warn: '⚠️', bad: '❌' }[st]; el.querySelector('[data-n]').textContent = note; el.className = 'as ' + st; };
+    const run = async (k, fn) => {
+      if (cancelled) return set(k, 'skip', 'Detenido');
+      set(k, 'run', 'Trabajando…');
+      try { const r = await fn((t) => set(k, 'run', t)); set(k, r?.st || 'ok', r?.note || ''); }
+      catch (e) { set(k, 'bad', e.message || String(e)); }
+    };
+    const vid = () => voice()?.id;
+
+    await run('cut', async (prog) => {
+      if (!voice()) return { st: 'skip', note: 'No hay voz. Sube tu grabación en Audio para cortar silencios.' };
+      const before = voice().mediaId;
+      try { await G.cleanByTranscript(E, vid(), G.minSil || 0.6, prog); }
+      catch (e) {
+        prog('La transcripción no está disponible; corto por volumen…');
+        await G.cleanSilence(E, vid(), G.minSil || 0.6);
+        return { st: voice().mediaId === before ? 'warn' : 'ok', note: voice().mediaId === before ? 'Sin silencios que cortar. (' + e.message + ')' : 'Cortado por volumen. ' + e.message };
+      }
+      return voice().mediaId === before ? { st: 'ok', note: 'La voz ya estaba limpia.' } : { note: `${g.lastCut.cuts.length} cortes · ${g.lastCut.removed} s menos` + (g.lastCut.dropped?.length ? ` · descartado: «${g.lastCut.dropped.join('», «')}»` : '') };
+    });
+    await run('fit', async () => {
+      const v = voice(); if (!v) return { st: 'skip', note: 'Sin voz: se respetan las duraciones actuales.' };
+      const end = (v.start || 0) + (F.media.byId(v.mediaId)?.duration || 0) + 0.5, tot = E.api.total();
+      if (!end || !tot) return { st: 'skip' };
+      E.api.commit(); const f = end / tot; p.clips.forEach((c) => (c.duration = Math.max(0.5, F.round1(c.duration * f))));
+      E.api.after({ insp: true }); return { note: `Imágenes ajustadas a ${F.fmtS(end)} de voz` };
+    });
+    await run('rhythm', async () => {
+      E.api.commit(); const n = G.splitLong(E, 4); G.multicamQuiet(p); E.api.after({ insp: true });
+      return { note: (n ? `${n} ${n === 1 ? 'corte nuevo' : 'cortes nuevos'} (planos de ~4 s) · ` : '') + 'encuadres alternados: general, 113 %, 125 %' };
+    });
+    await run('subs', async (prog) => {
+      const v = voice();
+      if (v) { try { await G.captionsFromAudio(E, v.id, prog); G.cleanQuiet(p); return { note: 'Sincronizados con la voz' }; } catch (e) { if (!g.script) return { st: 'warn', note: e.message + ' Pega el guion en la pestaña Golden para subtitular sin transcripción.' }; } }
+      if (g.script) { G.scriptToCaptions(E, g.script); return { st: v ? 'warn' : 'ok', note: 'Repartidos desde el guion pegado' }; }
+      return { st: 'skip', note: 'Sin voz ni guion. Escribe textos con el botón «Texto».' };
+    });
+    await run('sound', async () => {
+      const mus = p.audio.some((a) => a.kind === 'musica'), v = !!voice();
+      if (mus && v) { E.api.commit(); p.duck = true; E.api.after({ insp: true }); return { note: 'La música baja 12 dB cuando habla la voz' }; }
+      return { st: 'skip', note: mus ? 'Sin voz: la música queda igual.' : 'No hay música. Súbela en Audio para activar el ducking.' };
+    });
+    let res = [];
+    await run('review', async () => {
+      res = G.review(p); const bad = res.filter((x) => x.lvl === 'bad').length, warn = res.filter((x) => x.lvl === 'warn').length;
+      return { st: bad ? 'bad' : warn ? 'warn' : 'ok', note: bad ? `${bad} por corregir, ${warn} avisos` : warn ? `${warn} avisos` : 'Todo en orden' };
+    });
+    E.api.seek?.(0);
+    m.q('.modal-f').innerHTML = `<button class="btn" data-undo>Deshacer todo</button><button class="btn" data-rev>Ver revisión y reporte</button><button class="btn primary" data-done>Listo</button>`;
+    m.q('.modal-f').addEventListener('click', (e) => {
+      if (e.target.closest('[data-undo]')) { while (E.undo.length > undoStart) E.api.undo(); F.toast('Edición automática deshecha', 'ok'); m.close(); }
+      if (e.target.closest('[data-rev]')) { m.close(); G.openReview(E); }
+      if (e.target.closest('[data-done]')) m.close();
+    });
+  };
+  /* versiones sin avisos para usar dentro del automático */
+  G.multicamQuiet = (p) => p.clips.forEach((c, i) => { const k = i % 3; if (k === 0) { c.motion = 'none'; c.motionAmt = 0.15; } else if (k === 1) { c.motion = 'zoomIn'; c.motionAmt = 0.13; } else { c.motion = i % 2 ? 'panL' : 'panR'; c.motionAmt = 0.25; } });
+  G.cleanQuiet = (p) => p.clips.forEach((c) => (c.text = G.cleanText(c.text)));
+
   /** Multicámara con una sola imagen: alterna encuadres (general, punch-in 113 %, punch-in 125 % tope). */
   G.multicam = (E) => {
     const p = E.p; if (!p.clips.length) return F.toast('Añade imágenes al timeline');
@@ -234,8 +322,10 @@
     const hook = items.filter((it) => it.start < 3).some((it) => it.clip.text);
     hook ? add('ok', 'Gancho en los primeros 3 s') : add('warn', 'Sin gancho en los primeros 3 s', 'Pon un texto fuerte en el primer clip: el primer segundo debe frenar el scroll.');
     /* formato y duración */
-    p.aspect === D.aspect ? add('ok', 'Formato correcto para el destino', `${p.aspect} · ${D.n}`) : add('bad', 'Formato no coincide con el destino', `${D.n} pide ${D.aspect}; el proyecto es ${p.aspect}.`);
-    if (D.ad) (total >= 25 && total <= 40) ? add('ok', 'Duración de anuncio COD', `${F.fmtS(total)} (ideal 25–40 s)`) : add('warn', 'Duración fuera de 25–40 s', `Dura ${F.fmtS(total)}. Usa «Ajustar a duración objetivo».`);
+    if (!g.destinoSet) add('warn', 'Destino sin elegir', 'Elígelo en Intake (Golden) para revisar formato y duración: anuncio Meta/TikTok, YouTube o reel.');
+    else p.aspect === D.aspect ? add('ok', 'Formato correcto para el destino', `${p.aspect} · ${D.n}`) : add('bad', 'Formato no coincide con el destino', `${D.n} pide ${D.aspect}; el proyecto es ${p.aspect}.`);
+    if (!g.destinoSet) { /* sin destino no se juzga la duración */ }
+    else if (D.ad) (total >= 25 && total <= 40) ? add('ok', 'Duración de anuncio COD', `${F.fmtS(total)} (ideal 25–40 s)`) : add('warn', 'Duración fuera de 25–40 s', `Dura ${F.fmtS(total)}. Usa «Ajustar a duración objetivo».`);
     else if (g.target) Math.abs(total - g.target) <= g.target * 0.15 ? add('ok', 'Duración cerca del objetivo', F.fmtS(total)) : add('warn', 'Duración lejos del objetivo', `Dura ${F.fmtS(total)} y el objetivo es ${g.target} s.`);
     /* ritmo */
     const slow = p.clips.map((c, i) => ({ c, i })).filter(({ c }) => c.duration > 6);
@@ -290,6 +380,8 @@
     const vozSel = E.selType === 'audio' ? p.audio.find((a) => a.id === E.sel) : p.audio.find((a) => a.kind !== 'musica');
     const step = (n, t, inner) => `<div class="gstep"><div class="gh"><span class="gn">${n}</span><b>${t}</b></div>${inner}</div>`;
     bin.innerHTML = `<div class="gold">
+      <button class="btn primary auto-btn" data-g="auto">${I('wand')} Editar automático<small>Corta, subtitula, da ritmo y revisa con un clic</small></button>
+      <div class="small muted" style="text-align:center">o hazlo a mano, paso a paso:</div>
       <div class="row" style="gap:6px;margin-bottom:8px"><button class="btn sm primary" data-g="review" style="flex:1">${I('check')} Revisión Golden</button><button class="btn sm" data-g="guide" title="Reglas y método">${I('eye')} Guía</button></div>
       ${step('0', 'Intake', `<label class="lbl">Destino</label><select data-gf="destino">${Object.entries(DESTINOS).map(([k, v]) => `<option value="${k}" ${g.destino === k ? 'selected' : ''}>${v.n}</option>`).join('')}</select>
         <label class="lbl">Producto</label><input type="text" data-gf="producto" value="${F.esc(g.producto)}" placeholder="Nombre del producto">
@@ -323,14 +415,15 @@
       if (f === 'duck') { E.api.commit(); p.duck = e.target.checked; E.api.after({ insp: true }); return; }
       g[f] = f === 'target' ? +e.target.value || 0 : e.target.value;
       if (f === 'destino') {
-        const D = DESTINOS[g.destino]; g.target = D.target; E.api.commit();
+        const D = DESTINOS[g.destino]; g.target = D.target; g.destinoSet = true; E.api.commit();
         p.aspect = D.aspect; E.api.setAspect?.(); E.api.after({ insp: true }); E.api.renderBin();
       }
       E.api.save();
     });
     bin.addEventListener('click', (e) => {
       const b = e.target.closest('[data-g]'); if (!b || !E.p) return; const a = b.dataset.g, p = E.p, g = gd(p);
-      if (a === 'review') G.openReview(E);
+      if (a === 'auto') G.auto(E);
+      else if (a === 'review') G.openReview(E);
       else if (a === 'guide') G.openGuide();
       else if (a === 'silence') { const v = E.selType === 'audio' ? E.sel : p.audio.find((x) => x.kind !== 'musica')?.id; b.disabled = true; G.cleanSilence(E, v, G.minSil || 0.6).catch((er) => F.toast('No se pudo analizar el audio: ' + er.message, 'error')).finally(() => (b.disabled = false)); }
       else if (a === 'tcut' || a === 'acap') {
