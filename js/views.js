@@ -178,6 +178,7 @@
         <label class="lbl">Describe la imagen</label><textarea id="iPrompt" rows="5" placeholder="Ej: un faro solitario en un acantilado durante una tormenta al atardecer">${F.esc(st.prompt)}</textarea>
         <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap"><button class="btn sm outline" id="iEnh">${I('wand')} Mejorar prompt con IA</button><select id="iEnhP" style="width:auto" title="IA que mejora el prompt">${opt([['auto', 'IA: según Integraciones'], ['anthropic', 'IA: Claude'], ['openai', 'IA: OpenAI (ChatGPT)'], ['gemini', 'IA: Gemini'], ['minimax', 'IA: MiniMax']], st.enhProvider || 'auto')}</select></div>
         <label class="lbl">Generador</label><div class="seg" id="iProv">${[['openai', 'OpenAI'], ['gemini', 'Gemini'], ['minimax', 'MiniMax']].map(([k, n]) => `<button data-p="${k}" class="${k === st.provider ? 'on' : ''}">${n}</button>`).join('')}</div>
+        <label class="lbl">Modelo de imagen</label><select id="iM"></select>
         <label class="lbl">Estilo</label><div class="chips" id="iSty">${Object.entries(F.STYLES).map(([k, v]) => `<button class="chip ${k === st.style ? 'on' : ''}" data-s="${k}">${v.name}</button>`).join('')}</div>
         <div class="grid3"><div><label class="lbl">Formato</label><select id="iSize">${opt([['1536x1024', 'Horizontal'], ['1024x1536', 'Vertical'], ['1024x1024', 'Cuadrado']], st.size)}</select></div>
         <div><label class="lbl">Calidad</label><select id="iQ">${opt([['low', 'Baja'], ['medium', 'Media'], ['high', 'Alta']], st.quality)}</select></div>
@@ -188,16 +189,40 @@
       <div><div class="card"><h3>${I('sparkles')} Resultados</h3><div class="img-grid" id="iRes"><div class="empty" style="grid-column:1/-1">${I('image')}<p class="small">Las imágenes nuevas aparecerán aquí y se guardan automáticamente en la biblioteca.</p></div></div></div>
       <div class="card"><h3>${I('grid')} Galería IA <span class="grow"></span><a class="btn sm ghost" href="#/biblioteca">Ver biblioteca</a></h3><div class="img-grid" id="iGal"></div></div></div>
     </div></div>`;
-    const IMG_MODEL = { openai: () => F.settings.models.image, gemini: () => F.settings.models.geminiImage, minimax: () => F.settings.models.minimaxImage }, IMG_NAME = { openai: 'OpenAI', gemini: 'Gemini', minimax: 'MiniMax' };
-    const modelLine = () => { el.querySelector('#iModel').textContent = `${IMG_NAME[st.provider] || 'OpenAI'} · ${(IMG_MODEL[st.provider] || IMG_MODEL.openai)()}`; };
-    const cost = () => { modelLine(); const per = st.provider === 'gemini' ? 0.039 : st.provider === 'minimax' ? 0.0035 : { low: 0.016, medium: 0.063, high: 0.25 }[st.quality]; el.querySelector('#iCost').textContent = `Costo aproximado: US$${(per * st.n).toFixed(2)} · se guardan en tu biblioteca`; };
+    const IMG_KEY = { openai: 'image', gemini: 'geminiImage', minimax: 'minimaxImage' }, IMG_NAME = { openai: 'OpenAI', gemini: 'Gemini', minimax: 'MiniMax' };
+    const IMG_LIST = { openai: ['gpt-image-2', 'gpt-image-1.5', 'gpt-image-1', 'gpt-image-1-mini', 'dall-e-3', 'dall-e-2'], gemini: ['gemini-2.5-flash-image', 'gemini-2.0-flash-preview-image-generation'], minimax: ['image-01', 'image-01-live'] };
+    // US$ por imagen [cuadrada, horizontal/vertical] según calidad. Son precios de referencia: pueden variar.
+    const IMG_PRICE = {
+      'gpt-image-2': { low: [0.009, 0.013], medium: [0.034, 0.05], high: [0.133, 0.2], est: true },
+      'gpt-image-1.5': { low: [0.009, 0.013], medium: [0.034, 0.05], high: [0.133, 0.2] },
+      'gpt-image-1': { low: [0.011, 0.016], medium: [0.042, 0.063], high: [0.167, 0.25] },
+      'gpt-image-1-mini': { low: [0.005, 0.006], medium: [0.011, 0.015], high: [0.036, 0.052] },
+      'dall-e-3': { flat: [0.04, 0.08] }, 'dall-e-2': { flat: [0.02, 0.02] },
+    };
+    const curModel = () => F.settings.models[IMG_KEY[st.provider] || 'image'];
+    const fillModels = () => { const list = IMG_LIST[st.provider] || [], cur = curModel(), sel = el.querySelector('#iM'); sel.innerHTML = (list.includes(cur) ? list : [cur, ...list]).map((m) => `<option value="${F.esc(m)}" ${m === cur ? 'selected' : ''}>${F.esc(m)}</option>`).join(''); };
+    const modelLine = () => { el.querySelector('#iModel').textContent = `${IMG_NAME[st.provider] || 'OpenAI'} · ${curModel()}`; };
+    const unit = () => {
+      if (st.provider === 'gemini') return { per: 0.039, note: 'Gemini' };
+      if (st.provider === 'minimax') return { per: 0.0035, note: 'MiniMax' };
+      const m = F.settings.models.image, t = IMG_PRICE[m] || IMG_PRICE['gpt-image-1'], big = st.size !== '1024x1024';
+      const per = t.flat ? t.flat[big ? 1 : 0] : t[st.quality][big ? 1 : 0];
+      return { per, note: `${m}${t.flat ? '' : ', calidad ' + ({ low: 'baja', medium: 'media', high: 'alta' }[st.quality])}`, est: t.est || !IMG_PRICE[m] };
+    };
+    const cost = () => {
+      modelLine();
+      const u = unit(), tot = u.per * st.n;
+      el.querySelector('#iCost').innerHTML = `<b>Costo: US$${tot.toFixed(tot < 0.1 ? 3 : 2)}</b> (${st.n} × US$${u.per.toFixed(u.per < 0.01 ? 4 : 3)} · ${F.esc(u.note)})${u.est ? ' · precio estimado' : ''} · se guardan en tu biblioteca`;
+      const q = el.querySelector('#iQ'); if (q) q.disabled = st.provider !== 'openai' || !!IMG_PRICE[F.settings.models.image]?.flat;
+    };
     const gal = () => { const ai = F.media.images().filter((m) => m.source === 'ai').slice(0, 24); el.querySelector('#iGal').innerHTML = ai.length ? ai.map((m) => V.tile(m)).join('') : '<div class="small dim">Aún no generaste imágenes.</div>'; };
-    cost(); gal();
+    fillModels(); cost(); gal();
     const off = F.on('media', gal);
     V.mediaActions(el);
     el.querySelector('#iPrompt').addEventListener('input', (e) => { st.prompt = e.target.value; save(); });
     el.querySelector('#iSty').addEventListener('click', (e) => { const c = e.target.closest('[data-s]'); if (!c) return; st.style = c.dataset.s; save(); el.querySelectorAll('#iSty .chip').forEach((x) => x.classList.toggle('on', x === c)); });
-    el.querySelector('#iProv').addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (!b) return; st.provider = b.dataset.p; save(); el.querySelectorAll('#iProv button').forEach((x) => x.classList.toggle('on', x === b)); cost(); });
+    el.querySelector('#iProv').addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (!b) return; st.provider = b.dataset.p; save(); el.querySelectorAll('#iProv button').forEach((x) => x.classList.toggle('on', x === b)); fillModels(); cost(); });
+    el.querySelector('#iM').addEventListener('change', (e) => { F.settings.models[IMG_KEY[st.provider] || 'image'] = e.target.value; F.saveSettings(); cost(); });
     for (const [id, k] of [['iSize', 'size'], ['iQ', 'quality'], ['iN', 'n']]) el.querySelector('#' + id).addEventListener('change', (e) => { st[k] = k === 'n' ? +e.target.value : e.target.value; save(); cost(); });
     el.querySelector('#iEnhP').addEventListener('change', (e) => { st.enhProvider = e.target.value; save(); });
     el.querySelector('#iEnh').onclick = async (e) => {
