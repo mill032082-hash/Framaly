@@ -33,7 +33,7 @@ async function authenticate(req: Request, tokenInPath: string | null, base: stri
   const { data: acc } = await client.from("framaly_access").select("status,role,perms,ai,daily_usd,email").eq("user_id", data.user_id).maybeSingle();
   if (!acc || acc.status !== "approved") return J({ error: { type: "forbidden", message: "La cuenta dueña de esta clave no está aprobada." } }, 403);
   const mode = EXEC_MODES.includes(data.exec_mode) ? data.exec_mode : "external"; // ante la duda, el modo más seguro
-  return { ctx: { client, uid: data.user_id, acc: acc as Access, mode, tokenId: data.token_id }, tokenId: data.token_id, scopes: data.scopes ?? ["read", "write"] };
+  return { ctx: { client, uid: data.user_id, acc: acc as Access, mode, ai: Array.isArray(data.ai_allow) ? data.ai_allow : null, tokenId: data.token_id }, tokenId: data.token_id, scopes: data.scopes ?? ["read", "write"] };
 }
 
 /** Ejecuta una herramienta con permisos, límite de uso y registro */

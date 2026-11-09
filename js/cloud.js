@@ -162,6 +162,22 @@
   st.oauthSetMode = async (id, mode) => { const s = await sb(); const { error } = await s.rpc('framaly_oauth_set_mode', { p_id: id, p_mode: mode }); if (error) throw new Error(explain(error)); };
   st.ledger = async (n = 12) => { const s = await sb(); const { data, error } = await s.rpc('framaly_mcp_ledger_recent', { p_limit: n }); if (error) throw new Error(explain(error)); return data || []; };
   st.ledgerSummary = async () => { const s = await sb(); const { data, error } = await s.rpc('framaly_mcp_ledger_summary'); if (error) throw new Error(explain(error)); return data || []; };
+  /* ---------- permisos por IA de cada conexión ---------- */
+  const AI_LIST = [['anthropic', 'Claude', 'Escribir guiones y textos'], ['gemini', 'Gemini', 'Guiones e imágenes'], ['elevenlabs', 'ElevenLabs', 'Voces y narración'], ['openai', 'OpenAI', 'Texto, imágenes y voz · gasta tus créditos de OpenAI']];
+  const ALL_AI = AI_LIST.map((x) => x[0]);
+  F.aiPerm = {
+    LIST: AI_LIST,
+    /** casillas marcadas → modo + lista (ninguna = modo externo; con OpenAI = «todo»; si no = «sin OpenAI») */
+    fromChecks: (set) => { const ai = ALL_AI.filter((x) => set.has(x)); return { mode: !ai.length ? 'external' : ai.includes('openai') ? 'all' : 'no_openai', ai }; },
+    /** modo + lista guardados → casillas marcadas (las conexiones anteriores sin lista se deducen del modo) */
+    toChecks: (mode, ai) => new Set(mode === 'external' ? [] : (Array.isArray(ai) ? ai : mode === 'all' ? ALL_AI : ALL_AI.filter((x) => x !== 'openai')).filter((x) => mode === 'all' || x !== 'openai')),
+    /** casillas con su explicación; attrs = atributos extra de cada casilla */
+    html: (checked, attrs = '') => AI_LIST.map(([v, l, d]) => `<label class="aichk${v === 'openai' ? ' warn' : ''}"><input type="checkbox" value="${v}" ${checked.has(v) ? 'checked' : ''} ${attrs}><span><b>${l}</b> <span class="mini">${d}</span></span></label>`).join(''),
+  };
+  st.connAi = async () => { const s = await sb(); const { data, error } = await s.rpc('framaly_conn_ai'); if (error) throw new Error(explain(error)); return data || {}; };
+  st.setTokenAi = async (id, mode, ai) => { const s = await sb(); const { error } = await s.rpc('framaly_token_set_ai', { p_id: id, p_mode: mode, p_ai: ai }); if (error) throw new Error(explain(error)); };
+  st.setGrantAi = async (id, mode, ai) => { const s = await sb(); const { error } = await s.rpc('framaly_grant_set_ai', { p_id: id, p_mode: mode, p_ai: ai }); if (error) throw new Error(explain(error)); };
+  st.oauthSetAi = async (id, mode, ai) => { const s = await sb(); const { error } = await s.rpc('framaly_oauth_set_ai', { p_id: id, p_mode: mode, p_ai: ai }); if (error) throw new Error(explain(error)); };
   st.overview = async (days = 30) => { const s = await sb(); const { data, error } = await s.rpc('framaly_api_overview', { p_days: days }); if (error) throw new Error(explain(error)); return data || {}; };
   st.limits = async () => { const s = await sb(); return rows(s.from('framaly_limits').select('provider,monthly_usd,alert_pct')); };
   st.setLimit = async (provider, patch) => { const s = await sb(); await rows(s.from('framaly_limits').update({ ...patch, updated_at: new Date().toISOString() }).eq('provider', provider)); };

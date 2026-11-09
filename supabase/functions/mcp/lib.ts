@@ -1,6 +1,6 @@
 // FRAMALY Studio · piezas puras del servidor MCP / API (sin red ni base de datos: se pueden probar solas).
 
-export const VERSION = "1.7.0";
+export const VERSION = "1.8.0";
 
 /** Modo de ejecución de una conexión: external = FRAMALY no genera nada · no_openai = puede generar, pero OpenAI queda bloqueado · all = todo permitido */
 export type ExecMode = "external" | "no_openai" | "all";

@@ -694,3 +694,10 @@ body.resizing { cursor: col-resize; user-select: none; }
 .flows { transition: grid-template-columns .18s ease; }
 body.resizing .flows { transition: none; }
 .codebox { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--bg2); border: 1px solid var(--line2); color: var(--text); font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; user-select: all; }
+
+.aichk { display: flex; gap: 8px; align-items: flex-start; margin: 5px 0; cursor: pointer; }
+.aichk input { margin-top: 3px; accent-color: var(--or2, #ff8a2b); }
+.aichk.warn b { color: var(--or2); }
+.aichips { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; margin-top: 4px; }
+.aichips .aichk { margin: 2px 0; font-size: 12.5px; }
+.aichips .aichk .mini { display: none; }

@@ -24,14 +24,16 @@
       box.innerHTML = `<h3>${I('plug')} Conectar «${F.esc(info.client_name)}» con FRAMALY</h3>
         <p><b>${F.esc(info.client_name)}</b> <span class="mini">(${F.esc(info.redirect_host || '')})</span> quiere usar tu cuenta <b>${F.esc(C.user.email || '')}</b> para:</p>
         <ul class="small" style="line-height:1.9;padding-left:18px"><li>Escribir guiones, generar imágenes y voces con tus claves de IA, <b>respetando tus topes de gasto</b>.</li><li>Traer imágenes y audios a tu biblioteca.</li><li>Crear proyectos de video y ver tus proyectos y tu biblioteca.</li></ul>
-        <b class="small">¿Qué puede hacer con tus IAs?</b>
-        <div id="cnxModes" style="margin:6px 0 10px">${[['external', 'Solo montar mis recursos (recomendado)', 'Trae sus propios guiones, imágenes y audios; FRAMALY no genera nada ni gasta créditos.'], ['no_openai', 'Generar con Claude, Gemini y ElevenLabs', 'OpenAI queda bloqueado.'], ['all', 'Generar con todo, incluido OpenAI', 'Gasta tus créditos.']].map(([v, l, d], i) => `<label style="display:flex;gap:8px;align-items:flex-start;margin:6px 0;cursor:pointer"><input type="radio" name="cnxMode" value="${v}" ${i === 0 ? 'checked' : ''} style="margin-top:3px"><span><b>${l}</b><br><span class="mini">${d}</span></span></label>`).join('')}</div>
+        <b class="small">¿Qué IAs de FRAMALY puede usar?</b>
+        <p class="mini" style="margin:4px 0">Marca solo las que quieras. <b>Si no marcas ninguna</b>, solo podrá montar tus propios archivos (guiones, imágenes y audios que traiga), sin gastar créditos.</p>
+        <div id="cnxAi" style="margin:6px 0 10px">${F.aiPerm.html(new Set(), 'name="cnxAi"')}</div>
+        <p class="mini" id="cnxWarn" style="color:var(--or2);display:none">Con OpenAI marcado, esta aplicación podrá gastar tus créditos de OpenAI (siempre respetando tus topes).</p>
         <p class="mini">No podrá ver tus claves de IA ni cambiar tus ajustes. Puedes quitarle el acceso cuando quieras en <b>Ajustes → Conectar con ChatGPT y otras IAs</b>.</p>
         <div class="row" style="gap:8px;margin-top:14px"><button class="btn primary" id="cnxOk">Permitir</button><button class="btn" id="cnxNo">Cancelar</button></div>`;
       const go = async (allow) => {
         const b = box.querySelector(allow ? '#cnxOk' : '#cnxNo'); F.busy(b, true, allow ? 'Conectando…' : '…');
         try {
-          if (allow) await C.oauthSetMode(req, box.querySelector('input[name=cnxMode]:checked')?.value || 'external');
+          if (allow) { const sel = F.aiPerm.fromChecks(new Set([...box.querySelectorAll('#cnxAi input:checked')].map((x) => x.value))); await C.oauthSetAi(req, sel.mode, sel.ai); }
           const r = await C.oauthDecide(req, allow), u = new URL(r.redirect_uri);
           if (r.error) u.searchParams.set('error', r.error); else u.searchParams.set('code', r.code);
           if (r.state) u.searchParams.set('state', r.state);
@@ -39,6 +41,7 @@
           location.href = u.toString();
         } catch (e) { F.toast(e.message, 'error', 6000); fail(e.message); }
       };
+      box.querySelector('#cnxAi').onchange = () => { box.querySelector('#cnxWarn').style.display = box.querySelector('#cnxAi input[value=openai]').checked ? '' : 'none'; };
       box.querySelector('#cnxOk').onclick = () => go(true); box.querySelector('#cnxNo').onclick = () => go(false);
     })();
     return () => { dead = true; };
@@ -111,9 +114,9 @@
     /* ----- conectar con ChatGPT y otras IAs (servidor MCP + API) ----- */
     const TOOLS_INFO = [['framaly_status', 'Qué IAs tienes disponibles y cuánto llevas gastado hoy'], ['framaly_write_script', 'Escribe el guion de un video en escenas'], ['framaly_generate_image', 'Genera una imagen y la guarda en tu biblioteca'], ['framaly_import_image', 'Trae a tu biblioteca imágenes que ya tienes (por ejemplo, las de ChatGPT)'], ['framaly_import_audio', 'Trae audios que ya tienes: narración, música o efectos (MP3, WAV, M4A)'], ['framaly_generate_voice', 'Convierte un texto en narración (MP3)'], ['framaly_seo_metadata', 'Título, descripción y etiquetas para YouTube'], ['framaly_create_video_project', 'Crea un proyecto de video completo, listo para el editor'], ['framaly_list_projects', 'Lista tus proyectos'], ['framaly_list_media', 'Lista tu biblioteca de imágenes y audios']];
     const GPT_TXT = 'Cuando el usuario cree o suba imágenes o audios en esta conversación y pida un video, llama a framaly_create_video_project pasando todos esos archivos en openaiFileIdRefs: las imágenes en el orden en que deben salir; un solo audio será la música de fondo y varios audios serán la narración de cada escena, en orden. Añade un título y, si hay texto para narrar, una escena por imagen con su "narration". No generes imágenes ni voces nuevas si ya existen. Al terminar, di al usuario que abra FRAMALY, pulse Actualizar y exporte el MP4 desde el Editor.';
-    const conn = { tokens: null, calls: [], grants: [], modes: {}, sum: [], ledger: [], fresh: null, busy: false };
-    const MODES = [['external', 'Modo ChatGPT externo (recomendado)', 'ChatGPT trae sus guiones, imágenes y audios; FRAMALY solo los monta. No gasta ningún crédito.'], ['no_openai', 'FRAMALY puede generar, sin OpenAI', 'Usa Claude, Gemini y ElevenLabs de FRAMALY. OpenAI queda bloqueado.'], ['all', 'FRAMALY puede generar con todo (gasta créditos)', 'Incluye OpenAI. Solo si tú lo eliges a propósito.']];
-    const modeSel = (attr, id, cur) => `<select class="mini-sel" ${attr}="${F.esc(id)}" title="Qué puede hacer esta conexión">${MODES.map(([v, l]) => `<option value="${v}" ${v === (cur || 'external') ? 'selected' : ''}>${F.esc(l)}</option>`).join('')}</select>`;
+    const conn = { tokens: null, calls: [], grants: [], ai: {}, sum: [], ledger: [], fresh: null, busy: false };
+    const aiOf = (id) => { const c = conn.ai[id]; return F.aiPerm.toChecks(c?.mode || 'external', c?.ai ?? null); };
+    const aiChips = (attr, id) => `<div class="aichips" ${attr}="${F.esc(id)}"><span class="mini">IAs permitidas:</span>${F.aiPerm.html(aiOf(id))}</div>`;
     const USD = (n) => 'US$ ' + Number(n || 0).toFixed(4).replace(/\.?0+$/, '').replace(/\.$/, '');
     const copyBtn = (v, label = 'Copiar') => `<button class="btn sm" data-copy="${F.esc(v)}">${I('copy')} ${label}</button>`;
     const renderConn = () => {
@@ -127,9 +130,9 @@
       const led = (conn.ledger || []).map((r) => `<div class="row2 prow"><span><span class="tag ${r.blocked ? 'err' : 'ok'}">${r.blocked ? 'bloqueada' : r.kind}</span> <b>${F.esc(PROV[r.provider] || r.provider)}</b> <span class="mini">${F.esc(r.model || '')} · ${F.esc(r.tool)} · modo ${F.esc(r.mode)}${r.project_id ? ' · proyecto ' + F.esc(r.project_id) : ''}</span></span><span class="mini">${USD(r.cost_usd)} · ${F.ago(new Date(r.created_at).getTime())}</span></div>`).join('');
       const fresh = conn.fresh ? `<div class="notice" style="margin:12px 0"><div><b>Tu nueva clave «${F.esc(conn.fresh.name)}»</b> — cópiala ahora, no se podrá volver a ver:
         <div class="keyrow" style="margin-top:8px"><input type="text" readonly value="${F.esc(conn.fresh.token)}" id="aTokV" onclick="this.select()">${copyBtn(conn.fresh.token)}</div></div></div>` : '';
-      const rows = toks.filter((t) => !t.revoked_at).map((t) => `<div class="row2 prow"><span><b>${F.esc(t.name)}</b> <span class="mini">· ${F.esc(t.prefix)}••••••••</span><br>${modeSel('data-tokmode', t.id, conn.modes[t.id])}</span><span class="mini">${t.last_used_at ? 'usada ' + F.ago(new Date(t.last_used_at).getTime()) : 'sin usar'} <button class="btn sm danger" data-revoke="${t.id}" style="margin-left:8px">Revocar</button></span></div>`).join('');
+      const rows = toks.filter((t) => !t.revoked_at).map((t) => `<div class="row2 prow"><span><b>${F.esc(t.name)}</b> <span class="mini">· ${F.esc(t.prefix)}••••••••</span><br>${aiChips('data-tokai', t.id)}</span><span class="mini">${t.last_used_at ? 'usada ' + F.ago(new Date(t.last_used_at).getTime()) : 'sin usar'} <button class="btn sm danger" data-revoke="${t.id}" style="margin-left:8px">Revocar</button></span></div>`).join('');
       const calls = (conn.calls || []).map((c) => `<div class="row2 prow"><span><span class="tag ${c.ok ? 'ok' : 'err'}">${c.ok ? 'ok' : 'error'}</span> <b>${F.esc(c.tool)}</b> <span class="mini">${F.esc(c.token_name || '')}${c.ok ? '' : ' · ' + F.esc(c.detail || '')}</span></span><span class="mini">${F.ago(new Date(c.created_at).getTime())}${c.ms ? ' · ' + (c.ms / 1000).toFixed(1) + ' s' : ''}</span></div>`).join('');
-      const apps = (conn.grants || []).map((g) => `<div class="row2 prow"><span><b>${F.esc(g.client_name)}</b> <span class="tag ok">OAuth</span><br>${modeSel('data-grantmode', g.id, conn.modes[g.id])}</span><span class="mini">${g.last_used_at ? 'usada ' + F.ago(new Date(g.last_used_at).getTime()) : 'sin usar'} <button class="btn sm danger" data-revgrant="${g.id}" style="margin-left:8px">Quitar acceso</button></span></div>`).join('');
+      const apps = (conn.grants || []).map((g) => `<div class="row2 prow"><span><b>${F.esc(g.client_name)}</b> <span class="tag ok">OAuth</span><br>${aiChips('data-grantai', g.id)}</span><span class="mini">${g.last_used_at ? 'usada ' + F.ago(new Date(g.last_used_at).getTime()) : 'sin usar'} <button class="btn sm danger" data-revgrant="${g.id}" style="margin-left:8px">Quitar acceso</button></span></div>`).join('');
       box.innerHTML = `<h3>${I('plug')} Conectar con ChatGPT y otras IAs</h3>
         <p class="desc">Deja que ChatGPT, Claude u otro agente use FRAMALY por ti: escribir guiones, generar imágenes y voces y <b>crear proyectos de video</b> que aparecen en tu editor. Usa tus claves de IA y respeta tus topes de gasto.</p>
         <label class="lbl">Dirección del servidor MCP</label><div class="keyrow"><input type="text" readonly value="${F.esc(url)}" onclick="this.select()">${copyBtn(url)}</div>
@@ -142,7 +145,8 @@
         <b style="color:var(--text)">Tus claves de conexión</b>
         <p class="mini" style="margin:4px 0 8px">Cada IA o programa usa su propia clave. Si una se filtra, la revocas aquí y deja de funcionar al instante.</p>
         ${fresh}
-        <form class="invite-form" id="aTokForm" novalidate><input type="text" id="aTokName" placeholder="Nombre (ej: ChatGPT, Claude, Cursor)" maxlength="60" autocomplete="off"><select id="aTokMode" class="mini-sel" title="Qué puede hacer esta clave">${MODES.map(([v, l]) => `<option value="${v}">${F.esc(l)}</option>`).join('')}</select><button class="btn primary" type="submit">${I('plus')} Crear clave</button></form>
+        <form class="invite-form" id="aTokForm" novalidate><input type="text" id="aTokName" placeholder="Nombre (ej: ChatGPT, Claude, Cursor)" maxlength="60" autocomplete="off"><button class="btn primary" type="submit">${I('plus')} Crear clave</button></form>
+        <div class="aichips" id="aTokAi" style="margin-top:6px"><span class="mini">IAs que podrá usar (si no marcas ninguna, solo monta tus archivos):</span>${F.aiPerm.html(new Set())}</div>
         <div class="notice" style="margin:10px 0 0"><div><b>Regla de FRAMALY:</b> cuando lo usas desde ChatGPT en <b>modo externo</b>, FRAMALY <b>nunca</b> gasta tus créditos de OpenAI (ni de ningún proveedor): recibe lo que ChatGPT creó y solo lo monta. El bloqueo está en el servidor, no solo en la pantalla.</div></div>
         <div style="margin-top:10px">${rows || '<p class="mini" style="margin:0">Todavía no tienes claves de conexión.</p>'}</div>
         <div class="sep"></div>
@@ -170,7 +174,7 @@
         <div>${sum || '<p class="mini" style="margin:0">Sin operaciones todavía.</p>'}</div>
         <details class="small" style="margin-top:8px"><summary style="cursor:pointer;color:var(--or2)">Ver el detalle de las últimas operaciones</summary><div style="margin-top:6px">${led || '<p class="mini">Nada todavía.</p>'}</div></details>`;
     };
-    const loadConn = async () => { if (!C?.configured() || !C.user || !C.approved()) return renderConn(); try { [conn.tokens, conn.calls, conn.grants, conn.modes, conn.sum, conn.ledger] = await Promise.all([C.tokens(), C.apiCalls(10), C.grants().catch(() => []), C.connModes().catch(() => ({})), C.ledgerSummary().catch(() => []), C.ledger(12).catch(() => [])]); } catch (e) { F.toast(e.message, 'error'); } renderConn(); };
+    const loadConn = async () => { if (!C?.configured() || !C.user || !C.approved()) return renderConn(); try { [conn.tokens, conn.calls, conn.grants, conn.ai, conn.sum, conn.ledger] = await Promise.all([C.tokens(), C.apiCalls(10), C.grants().catch(() => []), C.connAi().catch(() => ({})), C.ledgerSummary().catch(() => []), C.ledger(12).catch(() => [])]); } catch (e) { F.toast(e.message, 'error'); } renderConn(); };
     loadConn();
     q('#aConn').addEventListener('click', async (e) => {
       const cp = e.target.closest('[data-copy]');
@@ -181,16 +185,18 @@
       if (rv) { if (!(await F.confirm('Revocar clave', 'La IA o el programa que use esta clave dejará de funcionar. ¿Revocarla?', 'Revocar'))) return; try { await C.revokeToken(rv.dataset.revoke); F.toast('Clave revocada', 'ok'); conn.fresh = null; await loadConn(); } catch (err) { F.toast(err.message, 'error'); } }
     });
     q('#aConn').addEventListener('change', async (e) => {
-      const t = e.target.closest('[data-tokmode],[data-grantmode]'); if (!t) return;
-      const isTok = t.hasAttribute('data-tokmode'), id = isTok ? t.dataset.tokmode : t.dataset.grantmode, v = t.value;
-      if (v === 'all' && !(await F.confirm('Permitir gastar créditos', 'Con este modo, la conexión podrá generar con TODOS tus proveedores, incluido OpenAI, y se descontará de tus créditos. ¿Seguro?', 'Sí, permitir'))) { t.value = conn.modes[id] || 'external'; return; }
-      try { await (isTok ? C.setTokenMode(id, v) : C.setGrantMode(id, v)); conn.modes[id] = v; F.toast('Modo cambiado', 'ok', 1500); } catch (err) { F.toast(err.message, 'error'); t.value = conn.modes[id] || 'external'; }
+      const box = e.target.closest('.aichips[data-tokai],.aichips[data-grantai]'); if (!box) return;
+      const isTok = box.hasAttribute('data-tokai'), id = isTok ? box.dataset.tokai : box.dataset.grantai;
+      const set = new Set([...box.querySelectorAll('input:checked')].map((x) => x.value)), sel = F.aiPerm.fromChecks(set), before = conn.ai[id];
+      const revert = () => { box.querySelectorAll('input').forEach((x) => { x.checked = aiOf(id).has(x.value); }); };
+      if (e.target.value === 'openai' && e.target.checked && !(await F.confirm('Permitir gastar créditos de OpenAI', 'Esta conexión podrá generar con OpenAI y se descontará de tus créditos de OpenAI (respetando tus topes). ¿Seguro?', 'Sí, permitir'))) { e.target.checked = false; return; }
+      try { await (isTok ? C.setTokenAi(id, sel.mode, sel.ai) : C.setGrantAi(id, sel.mode, sel.ai)); conn.ai[id] = { mode: sel.mode, ai: sel.ai }; F.toast(sel.ai.length ? 'IAs permitidas: ' + sel.ai.map((x) => F.aiPerm.LIST.find((y) => y[0] === x)[1]).join(', ') : 'Solo monta tus archivos (sin IAs)', 'ok', 2200); } catch (err) { F.toast(err.message, 'error'); conn.ai[id] = before; revert(); }
     });
     q('#aConn').addEventListener('submit', async (e) => {
       e.preventDefault(); if (conn.busy) return;
       const name = q('#aTokName').value.trim(); if (!name) return F.toast('Ponle un nombre a la clave');
       conn.busy = true;
-      try { const mode = q('#aTokMode')?.value || 'external'; conn.fresh = await C.createToken(name); if (mode !== 'external') await C.setTokenMode(conn.fresh.id, mode); F.toast('Clave creada. Cópiala ahora.', 'ok', 4000); await loadConn(); q('#aTokV')?.select(); } catch (err) { F.toast(err.message, 'error'); }
+      try { const sel = F.aiPerm.fromChecks(new Set([...q('#aTokAi').querySelectorAll('input:checked')].map((x) => x.value))); conn.fresh = await C.createToken(name); if (sel.ai.length) await C.setTokenAi(conn.fresh.id, sel.mode, sel.ai); F.toast('Clave creada. Cópiala ahora.', 'ok', 4000); await loadConn(); q('#aTokV')?.select(); } catch (err) { F.toast(err.message, 'error'); }
       conn.busy = false;
     });
     const offConn = F.on('cloud', () => { if (!conn.tokens) loadConn(); else renderConn(); });

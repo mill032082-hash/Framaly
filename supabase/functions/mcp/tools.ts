@@ -3,8 +3,16 @@ import { LABEL, PRICE, type Provider, checkBudget, db, getKey, logError, openaiI
 import { type ExecMode, audioDuration, isPrivateHost, mp3Duration, newId, openaiSize, parseJSON, sha256Bytes, sha256hex, sniffAudio, sniffImage } from "./lib.ts";
 
 export class ToolError extends Error {}
-export type Ctx = { client: ReturnType<typeof db>; uid: string; acc: Access; mode?: ExecMode; tokenId?: string; tool?: string; project?: string };
+export type Ctx = { client: ReturnType<typeof db>; uid: string; acc: Access; mode?: ExecMode; ai?: string[] | null; tokenId?: string; tool?: string; project?: string };
 const modeOf = (ctx: Ctx): ExecMode => ctx.mode ?? "external";
+/** IAs de FRAMALY que esta conexión puede usar: lo que la persona marcó al conceder el permiso. OpenAI solo en modo «todo». Sin marcar nada = ninguna. */
+const ALL_AI = ["anthropic", "gemini", "elevenlabs", "openai"];
+export const aiSet = (ctx: Ctx): Set<string> => {
+  const m = modeOf(ctx); if (m === "external") return new Set();
+  const s = new Set<string>(ctx.ai ?? (m === "all" ? ALL_AI : ALL_AI.filter((x) => x !== "openai")));
+  if (m !== "all") s.delete("openai");
+  return s;
+};
 
 /** Libro de auditoría: una fila por operación (proveedor, modelo, tipo, créditos, coste, proyecto y modo). Nunca rompe la respuesta. */
 async function ledger(ctx: Ctx, o: { provider: string; model?: string | null; kind: string; units?: Record<string, unknown>; cost?: number; blocked?: boolean; detail?: string }) {
@@ -43,6 +51,17 @@ async function pick(ctx: Ctx, order: Provider[], pref?: string, kind = "texto"):
       throw new ToolError("OpenAI está bloqueado en esta conexión (no se gastan créditos de OpenAI de FRAMALY). Usa otro proveedor o cambia el modo en FRAMALY → Ajustes → Conectar.");
     }
     order = order.filter((x) => x !== "openai");
+  }
+  // PERMISOS POR IA: solo las que la persona marc\u00f3 para esta conexi\u00f3n
+  const okAi = aiSet(ctx);
+  if (pref && !okAi.has(pref)) {
+    await ledger(ctx, { provider: pref, kind, blocked: true, detail: "IA no permitida para esta conexi\u00f3n", units: { cost_framaly: 0 } });
+    throw new ToolError(`Esta conexi\u00f3n no tiene permiso para usar ${LABEL[pref as Provider] ?? pref}. Puedes cambiarlo en FRAMALY \u2192 Ajustes \u2192 Conectar \u2192 IAs permitidas.`);
+  }
+  order = order.filter((x) => okAi.has(x));
+  if (!order.length) {
+    await ledger(ctx, { provider: "ninguna", kind, blocked: true, detail: "sin IAs permitidas para esta herramienta", units: { cost_framaly: 0 } });
+    throw new ToolError(`Esta conexi\u00f3n no tiene permiso para ninguna IA que sirva para ${WHAT[kind] ?? "esto"}. Marca las IAs permitidas en FRAMALY \u2192 Ajustes \u2192 Conectar.`);
   }
   const list = pref ? [pref as Provider] : order;
   for (const p of list) {
@@ -236,10 +255,11 @@ export const HANDLERS: Record<string, Handler> = {
     const { data: spent } = await ctx.client.rpc("framaly_cost_sum", { p_provider: null, p_user: ctx.uid, p_since: day.toISOString() });
     const md = modeOf(ctx), blockOpenai = md !== "all";
     const strip = (l: string[]) => (blockOpenai ? l.filter((x) => x !== "openai") : l);
-    const gen = md === "external" ? { texto: [], imagenes: [], voz: [] } : { texto: strip(await avail(["anthropic", "openai", "gemini"])), imagenes: strip(await avail(["openai", "gemini"])), voz: strip(await avail(["openai", "elevenlabs"])) };
+    const okAi = aiSet(ctx), only = (l: string[]) => l.filter((x) => okAi.has(x));
+    const gen = md === "external" ? { texto: [], imagenes: [], voz: [] } : { texto: only(strip(await avail(["anthropic", "openai", "gemini"]))), imagenes: only(strip(await avail(["openai", "gemini"]))), voz: only(strip(await avail(["openai", "elevenlabs"]))) };
     return { cuenta: ctx.acc.email, rol: ctx.acc.role, modo: md,
       modo_explicacion: md === "external" ? "Modo ChatGPT externo: FRAMALY NO genera guiones, imágenes ni voces. Tú los generas y los envías (framaly_import_image / framaly_import_audio / framaly_upload_media) y FRAMALY monta el video. No se gastan créditos de OpenAI ni de ningún proveedor de FRAMALY." : md === "no_openai" ? "FRAMALY puede generar con Claude, Gemini y ElevenLabs. OpenAI está bloqueado." : "FRAMALY puede generar con cualquier proveedor habilitado, incluido OpenAI (gasta tus créditos).",
-      openai_de_framaly_bloqueado: blockOpenai, ias_disponibles: gen,
+      openai_de_framaly_bloqueado: blockOpenai, ias_permitidas_para_esta_conexion: [...okAi], ias_disponibles: gen,
       tope_diario_usd: ctx.acc.role === "admin" ? null : Number(ctx.acc.daily_usd), gastado_hoy_usd: Number(Number(spent ?? 0).toFixed(4)) };
   },
 
