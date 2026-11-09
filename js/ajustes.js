@@ -95,15 +95,16 @@
             : `<button class="btn sm primary" data-p="${p.user_id}" data-s="approved">Aprobar</button>${p.status === 'pending' ? `<button class="btn sm" data-p="${p.user_id}" data-s="blocked">Rechazar</button>` : ''}`;
         const ed = editing.has(p.user_id), d = ed ? draft[p.user_id] : null;
         const perms = (d ? d.perms : p.perms) || {}, ai = (d ? d.ai : p.ai) || {}, daily = d ? d.daily_usd : (p.daily_usd ?? 2);
-        const panel = open.has(p.user_id) && p.role !== 'admin' ? `<div class="perms"><fieldset ${ed ? '' : 'disabled'} style="border:0;margin:0;padding:0;min-width:0">
+        const bar = (extra = '') => `<div class="row" style="flex-wrap:wrap;gap:8px;${extra}">${ed
+          ? `<button class="btn primary" data-psave="${p.user_id}">${I('check')} Guardar cambios</button><button class="btn" data-pcancel="${p.user_id}">Cancelar</button><span class="small muted">Tienes cambios sin guardar hasta que pulses Guardar.</span>`
+          : `<button class="btn" data-pedit="${p.user_id}">${I('edit')} Editar</button><span class="small muted">Pulsa Editar para asignar o quitar permisos y claves de esta persona.</span>`}</div>`;
+        const panel = open.has(p.user_id) && p.role !== 'admin' ? `<div class="perms">${bar('margin-bottom:12px')}<fieldset ${ed ? '' : 'disabled'} style="border:0;margin:0;padding:0;min-width:0">
             <b class="small">Puede usar:</b><div class="perm-grid">${SECS.map(([k, n]) => `<label class="check"><input type="checkbox" data-pp="${p.user_id}" data-pk="${k}" ${perms[k] === false ? '' : 'checked'}> ${n}</label>`).join('')}</div>
             <b class="small" style="display:block;margin-top:14px">IA: ¿con qué clave trabaja?</b>
             <div class="ai-grid">${AIS.map(([k, n]) => `<div><label class="lbl">${n}</label><select data-pai="${p.user_id}" data-pak="${k}">${MODES.map(([v, l]) => `<option value="${v}" ${(ai[k] || 'own') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`).join('')}
               <div><label class="lbl">Tope diario con clave de FRAMALY (US$)</label><input type="number" min="0" step="0.5" data-pdaily="${p.user_id}" value="${daily}"></div></div></fieldset>
             <p class="hint">«Clave de FRAMALY»: usa tu clave sin verla y cuenta para tus límites. «Que ponga la suya»: ve Integraciones API para pegar su clave. «Sin IA»: esa API queda desactivada.</p>
-            <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px">${ed
-              ? `<button class="btn primary" data-psave="${p.user_id}">${I('check')} Guardar cambios</button><button class="btn" data-pcancel="${p.user_id}">Cancelar</button><span class="small muted">Tienes cambios sin guardar hasta que pulses Guardar.</span>`
-              : `<button class="btn" data-pedit="${p.user_id}">${I('edit')} Editar</button><span class="small muted">Pulsa Editar para cambiar permisos o claves de esta persona.</span>`}</div></div>` : '';
+            ${bar(ed ? 'position:sticky;bottom:0;z-index:5;margin-top:12px;padding:10px 0;background:var(--bg2,#110d0a);border-top:1px solid rgba(255,255,255,.08)' : 'margin-top:12px')}</div>` : '';
         const permBtn = p.role === 'admin' || me ? '' : `<button class="btn sm" data-perm="${p.user_id}">${open.has(p.user_id) ? 'Cerrar' : 'Permisos'}</button>`;
         return `<div class="person"><span class="em"><b>${F.esc(p.email || 'Sin correo')}</b>${me ? ' <span class="small muted">(tú)</span>' : ''}<br><span class="small muted">${inv ? 'esperando que se registre' : F.ago(new Date(p.created_at).getTime())}</span></span>${p.role === 'admin' ? '<span class="tag or">Administrador</span>' : ''}<span class="tag ${cls}">${lbl}</span>${permBtn}${acts}${panel}</div>`;
       }).join('');
