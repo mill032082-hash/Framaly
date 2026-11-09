@@ -144,8 +144,9 @@
     images() { return this.list.filter((m) => m.type === 'image'); },
     audios() { return this.list.filter((m) => m.type === 'audio'); },
     url(m) { if (typeof m === 'string') m = this.byId(m); if (!m) return ''; if (!this.urls.has(m.id)) this.urls.set(m.id, URL.createObjectURL(m.blob)); return this.urls.get(m.id); },
-    async add({ type, name, blob, source = 'upload', meta = {} }) {
-      const m = { id: F.uid(), type, name: name || (type === 'image' ? 'Imagen' : 'Audio'), blob, source, meta, size: blob.size, created: Date.now() };
+    async add({ type, name, blob, source = 'upload', meta = {}, duration }) {
+      const m = { id: F.uid(), type, name: name || (type === 'image' ? 'Imagen' : type === 'video' ? 'Video' : 'Audio'), blob, source, meta, size: blob.size, created: Date.now() };
+      if (duration && type === 'video') m.duration = duration;
       if (type === 'audio') { try { m.duration = (await this.decode(m)).duration; } catch (e) { m.duration = 0; } }
       await F.db.put('media', m);
       this.list.unshift(m);
@@ -155,8 +156,9 @@
     async addFiles(files) {
       const out = [];
       for (const f of files) {
+        if (this.addVideos && this.isVideoFile(f)) { const r = await this.addVideos([f], (t) => F.toast(t, '', 2500)); r.forEach((x) => { out.push(x.video); if (x.audio) out.push(x.audio); }); continue; }
         const type = f.type.startsWith('image/') ? 'image' : f.type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(f.name) ? 'audio' : null;
-        if (!type) { F.toast(`Formato no compatible: ${f.name}`, 'error'); continue; }
+        if (!type) { F.toast(`Formato no compatible: ${f.name}. Sirven imágenes, audios y videos MP4.`, 'error'); continue; }
         out.push(await this.add({ type, name: f.name.replace(/\.[^.]+$/, ''), blob: f }));
       }
       if (out.length) F.toast(`${out.length} archivo(s) añadidos a la biblioteca`, 'ok');
@@ -168,7 +170,7 @@
       F.cloud?.tomb('media', id);
       this.list = this.list.filter((m) => m.id !== id);
       if (this.urls.has(id)) { URL.revokeObjectURL(this.urls.get(id)); this.urls.delete(id); }
-      this.imgs.delete(id); this.bufs.delete(id);
+      this.imgs.delete(id); this.bufs.delete(id); this.dropVideo?.(id);
       F.emit('media');
     },
     image(id) {
@@ -246,6 +248,8 @@
     for (const id of [].concat(ids)) {
       const m = F.media.byId(id); if (!m) continue;
       if (m.type === 'image') { p.clips.push(F.newClip(id)); nImg++; }
+      else if (m.type === 'video') { const st = F.R.layout(p).total; p.clips.push(F.newClip(id, { duration: F.round1(Math.max(0.5, m.duration || 4)), vstart: 0, motion: 'none', transition: 'none' })); if (m.meta?.audioId && !p.audio.some((x) => x.kind === 'voz')) p.audio.push({ id: F.uid(), mediaId: m.meta.audioId, start: F.round1(st), volume: 1, loop: false, fadeOut: false, kind: 'voz' }); nImg++; }
+      else if (m.meta?.fromVideo && !kind) continue;
       else {
         const k = kind || (m.source === 'ai' ? 'voz' : 'musica');
         p.audio.push({ id: F.uid(), mediaId: id, start: 0, volume: k === 'musica' ? 0.25 : 1, loop: k === 'musica', fadeOut: k === 'musica', kind: k });

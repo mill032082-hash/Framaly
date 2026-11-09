@@ -37,7 +37,7 @@
   };
 
   /* pestañas del panel izquierdo: archivos y herramientas para editar */
-  const TABS = [['image', 'Imágenes'], ['audio', 'Audio'], ['motion', 'Animaciones'], ['fx', 'Efectos'], ['trans', 'Transiciones'], ['text', 'Texto'], ['golden', 'Golden'], ['more', 'Más']];
+  const TABS = [['image', 'Imágenes'], ['video', 'Videos'], ['audio', 'Audio'], ['motion', 'Animaciones'], ['fx', 'Efectos'], ['trans', 'Transiciones'], ['text', 'Texto'], ['golden', 'Golden'], ['more', 'Más']];
   const GLYPH = { none: '■', kenburns: '⤢', zoomIn: '⊕', zoomOut: '⊖', panL: '←', panR: '→', panU: '↑', panD: '↓', fade: '◐', black: '●', flash: '✦', slideL: '⇠', slideR: '⇢', slideU: '⇡', zoom: '⌖', wipe: '▌', circle: '◯', blur: '≋', spin: '↻', blinds: '☰', glitch: '▚' };
 
   function tpl() {
@@ -126,15 +126,15 @@
   /* ---------- biblioteca lateral ---------- */
   function renderBin() {
     const bin = q('#bin'); if (!bin) return;
-    const up = q('#binUp'); if (up) up.style.display = ['image', 'audio'].includes(E.binTab) ? '' : 'none';
-    if (!['image', 'audio'].includes(E.binTab)) return renderTools(bin);
-    const list = E.binTab === 'image' ? F.media.images() : F.media.audios();
+    const up = q('#binUp'); if (up) up.style.display = ['image', 'video', 'audio'].includes(E.binTab) ? '' : 'none';
+    if (!['image', 'video', 'audio'].includes(E.binTab)) return renderTools(bin);
+    const list = E.binTab === 'image' ? F.media.images() : E.binTab === 'video' ? F.media.videos() : F.media.audios();
     if (!list.length) {
-      bin.innerHTML = `<div class="empty" style="grid-column:span 2;padding:24px 10px">${I(E.binTab === 'image' ? 'image' : 'music')}<p class="small">Sin ${E.binTab === 'image' ? 'imágenes' : 'audios'} todavía</p><button class="btn sm" data-up>${I('upload')} Subir</button></div>`;
+      bin.innerHTML = `<div class="empty" style="grid-column:span 2;padding:24px 10px">${I(E.binTab === 'image' ? 'image' : E.binTab === 'video' ? 'film' : 'music')}<p class="small">Sin ${E.binTab === 'image' ? 'imágenes' : E.binTab === 'video' ? 'videos' : 'audios'} todavía</p><button class="btn sm" data-up>${I('upload')} Subir</button></div>`;
       return;
     }
-    bin.innerHTML = list.map((m) => m.type === 'image'
-      ? `<div class="bin-item" draggable="true" data-m="${m.id}" title="${F.esc(m.name)}" style="background-image:url('${F.media.url(m)}')"><button class="add" data-add="${m.id}" title="Añadir al final">${I('plus')}</button></div>`
+    bin.innerHTML = list.map((m) => m.type === 'image' || m.type === 'video'
+      ? `<div class="bin-item ${m.type === 'video' ? 'vid' : ''}" draggable="true" data-m="${m.id}" title="${F.esc(m.name)}" style="background-image:url('${F.media.thumb(m)}')">${m.type === 'video' ? `<span class="vdur">${F.fmtS(m.duration)}</span>` : ''}<button class="add" data-add="${m.id}" title="Añadir al final">${I('plus')}</button></div>`
       : `<div class="bin-item aud" draggable="true" data-m="${m.id}" title="${F.esc(m.name)}">${I(m.source === 'ai' ? 'mic' : 'music')}<span>${F.esc(m.name)}<br><small>${F.fmtS(m.duration)}</small></span><button class="add" data-add="${m.id}" title="Añadir">${I('plus')}</button></div>`).join('');
   }
 
@@ -149,7 +149,7 @@
     if (tab === 'motion') body = R.MOTIONS.map((o) => item('motion', o, GLYPH[o.id] || '•')).join('');
     else if (tab === 'trans') body = R.TRANSITIONS.map((o) => item('transition', o, GLYPH[o.id] || '•')).join('');
     else if (tab === 'fx') {
-      const m = c ? F.media.byId(c.mediaId) : F.media.images()[0], bg = m ? `background-image:url('${F.media.url(m)}')` : 'background:linear-gradient(135deg,#f59e0b,#7c3aed)';
+      const m = c ? F.media.byId(c.mediaId) : F.media.images()[0], bg = m ? `background-image:url('${F.media.thumb(m)}')` : 'background:linear-gradient(135deg,#f59e0b,#7c3aed)';
       body = R.filters().map((o) => item('filter', o, '', `<span class="fxp" style="${bg};filter:${o.css === 'none' ? 'none' : o.css}"></span>`)).join('');
     } else if (tab === 'text') {
       body = `<div class="pre-sub">Estilo del texto</div>${R.TEXT_STYLES.map((o) => item('textStyle', o, 'Aa')).join('')}<div class="pre-sub">Animación del texto</div>${R.TEXT_ANIMS.map((o) => item('textAnim', o, '✦')).join('')}
@@ -184,11 +184,12 @@
   function addMedia(id, index, kind, start) {
     const m = F.media.byId(id); if (!m) return;
     commit();
-    if (m.type === 'image') {
-      const prev = p.clips[p.clips.length - 1];
-      const c = F.newClip(id, prev ? { transition: prev.transition, filter: prev.filter, transDur: prev.transDur } : {});
+    if (m.type === 'image' || m.type === 'video') {
+      const prev = p.clips[p.clips.length - 1], vid = m.type === 'video', at = index == null || index > p.clips.length ? total() : R.layout(p).items[index]?.start || 0;
+      const c = F.newClip(id, { ...(prev ? { transition: prev.transition, filter: prev.filter, transDur: prev.transDur } : {}), ...(vid ? { duration: F.round1(Math.max(0.5, m.duration || 4)), vstart: 0, motion: 'none', transition: 'none', fit: 'cover' } : {}) });
+      if (vid && m.meta?.audioId && !p.audio.some((x) => x.kind === 'voz') && F.media.byId(m.meta.audioId)) p.audio.push({ id: F.uid(), mediaId: m.meta.audioId, start: F.round1(at), volume: 1, loop: false, fadeOut: false, kind: 'voz' });
       if (index == null || index > p.clips.length) p.clips.push(c); else p.clips.splice(index, 0, c);
-      F.media.image(id).catch(() => {});
+      F.media.image(id).catch((e) => vid && F.toast(e.message, 'error', 6000));
       select('clip', c.id, false);
     } else {
       const k = kind || (m.source === 'ai' ? 'voz' : 'musica');
@@ -200,13 +201,15 @@
   }
 
   async function upload(toTimeline = true, dropped) {
-    const files = dropped || await F.pickFiles('image/*,audio/*');
+    const files = dropped || await F.pickFiles('image/*,video/*,.mp4,.mov,.m4v,.webm,audio/*');
     if (!files.length) return;
     const added = await F.media.addFiles(files);
     if (!toTimeline || !added.length) return;
     commit();
     for (const m of added) {
       if (m.type === 'image') p.clips.push(F.newClip(m.id));
+      else if (m.type === 'video') { const st = total(); p.clips.push(F.newClip(m.id, { duration: F.round1(Math.max(0.5, m.duration || 4)), vstart: 0, motion: 'none', transition: 'none' })); if (m.meta?.audioId && !p.audio.some((x) => x.kind === 'voz')) p.audio.push({ id: F.uid(), mediaId: m.meta.audioId, start: F.round1(st), volume: 1, loop: false, fadeOut: false, kind: 'voz' }); }
+      else if (m.meta?.fromVideo) continue;   // el audio del video ya se puso como voz
       else p.audio.push({ id: F.uid(), mediaId: m.id, start: 0, volume: 0.25, loop: true, fadeOut: true, kind: 'musica' });
     }
     after({ insp: true });
@@ -271,7 +274,7 @@
     const tracks = await F.Engine.prepareAudio(p);
     const when = ac.currentTime + 0.06, t0 = E.t;
     nodes = E.muted ? [] : F.Engine.scheduleAudio(tracks, t0, tot, ac.destination, when, p.duck);
-    E.playing = true; setPlayIcon();
+    E.playing = true; R.live = true; setPlayIcon();
     const loop = () => {
       if (!E.playing) return;
       const t = t0 + Math.max(0, ac.currentTime - when);
@@ -282,7 +285,7 @@
     loop();
   }
   function stop() {
-    E.playing = false; cancelAnimationFrame(raf);
+    E.playing = false; R.live = false; R.stopVideos?.(); cancelAnimationFrame(raf);
     nodes.forEach((n) => { try { n.stop(); } catch (e) {} }); nodes = [];
     setPlayIcon();
   }
@@ -307,7 +310,7 @@
     if (E.selType === 'clip' && (obj = clipById(E.sel))) {
       const c = obj, i = p.clips.indexOf(c), m = F.media.byId(c.mediaId);
       el.innerHTML = `<h4>${I('film')} Clip ${i + 1}</h4><div class="muted small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${F.esc(m?.name || 'Sin imagen')}</div>
-        <div class="insp-thumb" style="${m ? `background-image:url('${F.media.url(m)}')` : ''}"></div>
+        <div class="insp-thumb" style="${m ? `background-image:url('${F.media.thumb(m)}')` : ''}"></div>
         <div class="row" style="margin-top:10px;gap:6px"><button class="btn sm" data-act="left" title="Mover a la izquierda" ${i === 0 ? 'disabled' : ''}>←</button><button class="btn sm" data-act="right" title="Mover a la derecha" ${i === p.clips.length - 1 ? 'disabled' : ''}>→</button><button class="btn sm" data-act="dup">${I('copy')} Duplicar</button><button class="btn sm" data-act="replace">${I('image')} Cambiar</button><span class="grow"></span><button class="btn sm danger" data-act="del" title="Eliminar">${I('trash')}</button></div>
         ${sec('Tiempo y encuadre', `<label class="lbl">Duración (segundos)</label><input type="number" step="0.1" min="0.5" data-k="duration">
           <label class="lbl">Encuadre</label><select data-k="fit"><option value="cover">Rellenar (recorta bordes)</option><option value="contain">Ajustar + fondo desenfocado</option><option value="black">Objeto sobre fondo negro (b-roll)</option></select>`, 'duration,fit')}
@@ -378,7 +381,7 @@
     if (!it) return F.toast('Coloca el cursor dentro de un clip (a más de 0,25 s de sus bordes) para dividirlo');
     commit();
     const c = it.clip, d1 = F.round1(t - it.start), d2 = Math.max(0.5, F.round1(c.duration - d1));
-    const n = { ...c, id: F.uid(), duration: d2, text: '' };
+    const n = { ...c, id: F.uid(), duration: d2, text: '' }; if (F.media.byId(c.mediaId)?.type === 'video') n.vstart = F.round1((c.vstart || 0) + d1);
     n.transition = c.transition; c.duration = d1; c.transition = 'none'; delete c.capTimes; delete n.capTimes;
     p.clips.splice(p.clips.indexOf(c) + 1, 0, n);
     select('clip', n.id, false); after({ insp: true });
@@ -544,7 +547,7 @@
       e.preventDefault(); hideInd();
       const idx = indexAt(xOf(e));
       const mid = e.dataTransfer.getData('text/media'), cid = e.dataTransfer.getData('text/clip');
-      if (mid) { const m = F.media.byId(mid); if (m?.type === 'image') addMedia(mid, idx); else if (m) addMedia(mid, null, 'voz', F.round1(xOf(e) / E.pps)); }
+      if (mid) { const m = F.media.byId(mid); if (m?.type === 'image' || m?.type === 'video') addMedia(mid, idx); else if (m) addMedia(mid, null, 'voz', F.round1(xOf(e) / E.pps)); }
       else if (cid) {
         const from = p.clips.findIndex((c) => c.id === cid); if (from < 0) return;
         let to = idx; if (to > from) to--; if (to === from) return;

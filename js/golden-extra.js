@@ -103,6 +103,38 @@ ${String(g.script || '(pégalo aquí)').trim()}
     return res;
   };
 
+
+  /* ---------- 6 · Videos reales (MP4): los cortes de silencio también cortan el video ---------- */
+  const isVid = (c) => F.media.byId(c.mediaId)?.type === 'video';
+  G.hasVideo = (p) => p.clips.some(isVid);
+  /** Parte el clip que cruza el instante t (en la línea de tiempo); la segunda parte sigue donde terminó la primera */
+  const splitAt = (p, t) => {
+    const it = R.layout(p).items.find((x) => t > x.start + 0.03 && t < x.end - 0.03); if (!it) return;
+    const c = it.clip, lt = t - it.start, n = { ...c, id: F.uid(), duration: F.round1(c.duration - lt), text: '', capTimes: undefined, vstart: F.round1((c.vstart || 0) + lt) };
+    c.duration = F.round1(lt); c.transition = 'none'; delete c.capTimes; p.clips.splice(p.clips.indexOf(c) + 1, 0, n);
+  };
+  /** Quita de la línea de tiempo los tramos [ini, fin] (segundos de la voz) */
+  G.cutTimeline = (p, cuts, offset) => {
+    cuts.slice().sort((a, b) => b[0] - a[0]).forEach(([s, e]) => {
+      s += offset; e += offset; splitAt(p, e); splitAt(p, s);
+      const { items } = R.layout(p), drop = new Set(items.filter((x) => x.start >= s - 0.04 && x.end <= e + 0.04).map((x) => x.clip.id));
+      p.clips = p.clips.filter((c) => !drop.has(c.id));
+    });
+    p.clips.forEach((c, i) => { if (i < p.clips.length - 1 && isVid(c) && isVid(p.clips[i + 1])) c.transition = 'none'; });
+  };
+  ['cleanSilence', 'cleanByTranscript'].forEach((name) => {
+    const orig = G[name]; if (!orig) return;
+    G[name] = async function (E, audioId, ...rest) {
+      const p = E.p, g = gd(p), prev = g.lastCut, r = await orig.call(this, E, audioId, ...rest);
+      if (G.hasVideo(p) && g.lastCut && g.lastCut !== prev) {
+        const v = p.audio.find((x) => x.id === audioId) || p.audio.find((x) => x.kind === 'voz');
+        const before = R.layout(p).total; G.cutTimeline(p, g.lastCut.cuts, v?.start || 0);
+        E.api.after({ insp: true }); F.toast(`El video también se cortó: ${F.round1(before)} s → ${F.round1(R.layout(p).total)} s`, 'ok', 4500);
+      }
+      return r;
+    };
+  });
+
   /* ---------- 5 · Guía completa del método ---------- */
   G.openGuide = () => {
     const sec = (t, inner) => `<details class="gg" open><summary><b>${t}</b></summary>${inner}</details>`;

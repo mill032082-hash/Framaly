@@ -36,7 +36,7 @@
      ========================================================= */
   G.splitClipAt = (p, t, minEdge = 0.5) => {
     const it = R.layout(p).items.find((x) => t > x.start + minEdge && t < x.end - minEdge); if (!it) return false;
-    const c = it.clip, n = { ...c, id: F.uid(), duration: F.round1(it.end - t), text: '', capTimes: undefined };
+    const c = it.clip, n = { ...c, id: F.uid(), duration: F.round1(it.end - t), text: '', capTimes: undefined, vstart: F.round1((c.vstart || 0) + (t - it.start)) };
     n.transition = c.transition; c.duration = F.round1(t - it.start); c.transition = 'none'; delete c.capTimes;
     p.clips.splice(p.clips.indexOf(c) + 1, 0, n); return true;
   };
@@ -99,7 +99,7 @@
     const segs = [];
     if (before) segs.push(mk(before, { text: c.text }));
     segs.push(mk(mid, { mediaId, fit: 'black', motion: 'none', text: '' }));
-    if (after) segs.push(mk(after, { text: '' }));
+    if (after) segs.push(mk(after, { text: '', vstart: F.round1((c.vstart || 0) + before + mid) }));
     segs[segs.length - 1].transition = c.transition;
     if (!before) segs[0].id = c.id;   // conserva la identidad del clip original
     p.clips.splice(p.clips.indexOf(c), 1, ...segs); F.media.image(mediaId).catch(() => {}); return true;

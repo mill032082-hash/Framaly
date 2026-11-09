@@ -8,7 +8,7 @@
   const opt = (pairs, sel) => pairs.map(([v, n]) => `<option value="${F.esc(v)}" ${String(v) === String(sel) ? 'selected' : ''}>${F.esc(n)}</option>`).join('');
 
   /* ---------- piezas compartidas ---------- */
-  V.tile = (m, wide = true) => `<div class="tile ${wide ? 'wide' : ''}" data-id="${m.id}"><img src="${F.media.url(m)}" alt="" loading="lazy">${m.source === 'ai' ? '<span class="tag or ai">IA</span>' : ''}
+  V.tile = (m, wide = true) => `<div class="tile ${wide ? 'wide' : ''}" data-id="${m.id}"><img src="${F.media.thumb(m)}" alt="" loading="lazy">${m.type === 'video' ? `<span class="tag or">${F.fmtS(m.duration)}</span>` : ''}${m.source === 'ai' ? '<span class="tag or ai">IA</span>' : ''}
     <div class="ov"><div class="nm">${F.esc(m.name)}</div><div class="row"><button class="btn sm primary" data-add="${m.id}" title="Añadir al editor">${I('plus')} Editor</button><button class="btn sm" data-view="${m.id}" title="Ver">${I('eye')}</button><button class="btn sm" data-dl="${m.id}" title="Descargar">${I('download')}</button><button class="btn sm danger" data-del="${m.id}" title="Eliminar">${I('trash')}</button></div></div></div>`;
   V.audioItem = (m) => `<div class="aitem" data-id="${m.id}"><div class="ic">${I(m.source === 'ai' ? 'mic' : 'music')}</div><div class="meta"><b>${F.esc(m.name)}</b><small>${F.fmtS(m.duration)} · ${F.bytes(m.size || m.blob?.size || 0)} · ${m.source === 'ai' ? 'Voz IA' : 'Subido'}</small></div>
     <audio controls preload="none" src="${F.media.url(m)}"></audio>
@@ -20,10 +20,10 @@
     if (b.dataset.add) F.addToEditor(id);
     else if (b.dataset.addv) F.addToEditor(id, 'voz');
     else if (b.dataset.addm) F.addToEditor(id, 'musica');
-    else if (b.dataset.dl) F.download(m.blob, F.safeName(m.name) + (m.type === 'image' ? '.png' : '.mp3'));
+    else if (b.dataset.dl) F.download(m.blob, F.safeName(m.name) + (m.type === 'image' ? '.png' : m.type === 'video' ? '.mp4' : '.mp3'));
     else if (b.dataset.ren) { const n = await F.prompt('Renombrar', m.name, 'Nuevo nombre'); if (n) F.media.rename(id, n); }
     else if (b.dataset.del) { if (await F.confirm('Eliminar archivo', `¿Eliminar "${F.esc(m.name)}" de la biblioteca? Si se usa en un proyecto dejará de verse.`, 'Eliminar')) { await F.media.remove(id); F.toast('Eliminado'); } }
-    else if (b.dataset.view) F.modal({ title: m.name, wide: true, body: `<img src="${F.media.url(m)}" style="width:100%;border-radius:12px;display:block">${m.meta?.prompt ? `<p class="hint" style="margin-top:12px"><b>Prompt:</b> ${F.esc(m.meta.prompt)}</p>` : ''}`, actions: [{ label: `${I('plus')} Añadir al editor`, primary: true, onClick: () => F.addToEditor(id) }] });
+    else if (b.dataset.view) F.modal({ title: m.name, wide: true, body: `${m.type === 'video' ? `<video src="${F.media.url(m)}" controls playsinline style="width:100%;border-radius:12px;display:block;max-height:70vh;background:#000"></video>` : `<img src="${F.media.url(m)}" style="width:100%;border-radius:12px;display:block">`}${m.meta?.prompt ? `<p class="hint" style="margin-top:12px"><b>Prompt:</b> ${F.esc(m.meta.prompt)}</p>` : ''}`, actions: [{ label: `${I('plus')} Añadir al editor`, primary: true, onClick: () => F.addToEditor(id) }] });
   });
 
   /* ---------- Nuevo proyecto ---------- */
@@ -440,19 +440,19 @@
   V.biblioteca = (el) => {
     let filt = 'all', search = '';
     el.innerHTML = `<div class="page">
-      <div class="row" style="margin-bottom:18px"><div class="seg" id="bF">${[['all', 'Todo'], ['image', 'Imágenes'], ['audio', 'Audio'], ['ai', 'Creado con IA'], ['upload', 'Subido']].map(([k, n]) => `<button data-f="${k}">${n}</button>`).join('')}</div>
+      <div class="row" style="margin-bottom:18px"><div class="seg" id="bF">${[['all', 'Todo'], ['image', 'Imágenes'], ['video', 'Videos'], ['audio', 'Audio'], ['ai', 'Creado con IA'], ['upload', 'Subido']].map(([k, n]) => `<button data-f="${k}">${n}</button>`).join('')}</div>
       <input type="search" id="bS" placeholder="Buscar…" style="max-width:240px"><span class="grow"></span><span class="muted small" id="bUse"></span><button class="btn primary" id="bUp">${I('upload')} Subir archivos</button></div>
       <div id="bDrop" class="card" style="border-style:dashed"><div id="bBody"></div></div></div>`;
     const render = () => {
       el.querySelectorAll('#bF button').forEach((b) => b.classList.toggle('on', b.dataset.f === filt));
       let l = F.media.list;
-      if (filt === 'image' || filt === 'audio') l = l.filter((m) => m.type === filt);
+      if (filt === 'image' || filt === 'audio' || filt === 'video') l = l.filter((m) => m.type === filt);
       if (filt === 'ai' || filt === 'upload') l = l.filter((m) => m.source === filt);
       if (search) l = l.filter((m) => m.name.toLowerCase().includes(search));
-      const imgs = l.filter((m) => m.type === 'image'), auds = l.filter((m) => m.type === 'audio');
-      el.querySelector('#bBody').innerHTML = !l.length ? `<div class="empty" style="border:0">${I('folder')}<p><b>No hay archivos</b></p><p class="small">Arrastra imágenes o audios aquí, o pulsa “Subir archivos”.</p></div>`
-        : `${imgs.length ? `<h3>${I('image')} Imágenes <span class="tag">${imgs.length}</span></h3><div class="img-grid">${imgs.map((m) => V.tile(m)).join('')}</div>` : ''}
-           ${auds.length ? `<h3 style="margin-top:${imgs.length ? 26 : 0}px">${I('music')} Audio <span class="tag">${auds.length}</span></h3><div class="audio-list">${auds.map(V.audioItem).join('')}</div>` : ''}`;
+      const imgs = l.filter((m) => m.type === 'image'), auds = l.filter((m) => m.type === 'audio'), vids = l.filter((m) => m.type === 'video');
+      el.querySelector('#bBody').innerHTML = !l.length ? `<div class="empty" style="border:0">${I('folder')}<p><b>No hay archivos</b></p><p class="small">Arrastra imágenes, videos MP4 o audios aquí, o pulsa “Subir archivos”.</p></div>`
+        : `${vids.length ? `<h3>${I('film')} Videos <span class="tag">${vids.length}</span></h3><div class="img-grid">${vids.map((m) => V.tile(m)).join('')}</div>` : ''}${imgs.length ? `<h3>${I('image')} Imágenes <span class="tag">${imgs.length}</span></h3><div class="img-grid">${imgs.map((m) => V.tile(m)).join('')}</div>` : ''}
+           ${auds.length ? `<h3 style="margin-top:${imgs.length || vids.length ? 26 : 0}px">${I('music')} Audio <span class="tag">${auds.length}</span></h3><div class="audio-list">${auds.map(V.audioItem).join('')}</div>` : ''}`;
     };
     render();
     navigator.storage?.estimate?.().then((e) => { el.querySelector('#bUse').textContent = `Almacenamiento: ${F.bytes(e.usage || 0)} usados`; }).catch(() => {});
@@ -460,7 +460,7 @@
     V.mediaActions(el.querySelector('#bBody'));
     el.querySelector('#bF').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) { filt = b.dataset.f; render(); } });
     el.querySelector('#bS').addEventListener('input', (e) => { search = e.target.value.toLowerCase().trim(); render(); });
-    el.querySelector('#bUp').onclick = async () => F.media.addFiles(await F.pickFiles('image/*,audio/*'));
+    el.querySelector('#bUp').onclick = async () => F.media.addFiles(await F.pickFiles('image/*,video/*,.mp4,.mov,.m4v,.webm,audio/*'));
     const dz = el.querySelector('#bDrop');
     dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.style.borderColor = 'var(--or)'; });
     dz.addEventListener('dragleave', () => (dz.style.borderColor = ''));

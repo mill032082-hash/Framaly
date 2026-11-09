@@ -327,6 +327,7 @@
     let n = 0; const total = up.length + down.length;
     const tick = (what) => { n++; set({ progress: `${what} ${n}/${total} archivo(s)…` }); };
     await F.pool(up, 3, async (m) => {
+      if (m.type === 'video' && m.size > 45 * 1048576) { log.big = (log.big || 0) + 1; tick('Omitido (video grande)'); return; }   // el límite de la nube es 50 MB por archivo: se queda en este dispositivo
       const up1 = await s.storage.from(BUCKET).upload(uid + '/' + m.id, m.blob, { upsert: true, contentType: m.blob.type || 'application/octet-stream' });
       if (up1.error) throw up1.error;
       const { error: e2 } = await s.from('framaly_media').upsert({ user_id: uid, ...strip(m), deleted: false }, { onConflict: 'user_id,id' });

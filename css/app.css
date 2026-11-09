@@ -766,3 +766,7 @@ body.resizing .flows { transition: none; }
 .skill .sk-main blockquote { border-left: 3px solid var(--or2, #ff8a2b); margin: 8px 0; padding: 4px 12px; color: var(--muted); }
 .skill .sk-main hr { border: 0; border-top: 1px solid var(--line2); margin: 20px 0; }
 @media (max-width: 760px) { .skill { grid-template-columns: 1fr; } .skill .sk-side { position: static; max-height: none; } .skill .sk-tocs { max-height: 120px; } }
+
+.bin-item.vid { position: relative; }
+.bin-item.vid::after { content: '\25B6'; position: absolute; left: 6px; bottom: 5px; font-size: 11px; color: #fff; background: rgba(0,0,0,.55); border-radius: 4px; padding: 1px 5px; }
+.bin-item .vdur { position: absolute; right: 6px; bottom: 5px; font-size: 11px; color: #fff; background: rgba(0,0,0,.55); border-radius: 4px; padding: 1px 5px; }

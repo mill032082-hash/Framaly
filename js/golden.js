@@ -175,7 +175,7 @@
       if (c.duration <= maxLen * 1.25) continue;
       const k = Math.ceil(c.duration / maxLen), part = F.round1(c.duration / k), last = c.transition;
       const extra = [];
-      for (let j = 1; j < k; j++) extra.push({ ...c, id: F.uid(), duration: j === k - 1 ? Math.max(0.5, F.round1(c.duration - part * (k - 1))) : part, transition: j === k - 1 ? last : 'none', text: '' });
+      for (let j = 1; j < k; j++) extra.push({ ...c, id: F.uid(), duration: j === k - 1 ? Math.max(0.5, F.round1(c.duration - part * (k - 1))) : part, transition: j === k - 1 ? last : 'none', text: '', vstart: F.round1((c.vstart || 0) + part * j) });
       c.duration = part; c.transition = 'none';
       p.clips.splice(i + 1, 0, ...extra); i += extra.length; n += extra.length;
     }
@@ -215,6 +215,7 @@
       const v = voice(); if (!v) return { st: 'skip', note: 'Sin voz: se respetan las duraciones actuales.' };
       const end = (v.start || 0) + (F.media.byId(v.mediaId)?.duration || 0) + 0.5, tot = E.api.total();
       if (!end || !tot) return { st: 'skip' };
+      if (p.clips.some((c) => F.media.byId(c.mediaId)?.type === 'video')) return { st: 'skip', note: 'Con video real las duraciones no se estiran: el corte de silencios ya lo acorta.' };
       E.api.commit(); const f = end / tot; p.clips.forEach((c) => (c.duration = Math.max(0.5, F.round1(c.duration * f))));
       E.api.after({ insp: true }); return { note: `Imágenes ajustadas a ${F.fmtS(end)} de voz` };
     });
@@ -317,6 +318,7 @@
   G.fitTarget = (E, target) => {
     const p = E.p, tot = E.api.total();
     if (!p.clips.length || !target) return F.toast('Indica una duración objetivo y añade clips');
+    if (p.clips.some((c) => F.media.byId(c.mediaId)?.type === 'video')) return F.toast('Con video real la duración no se estira: usa «Reducir más los silencios» o recorta los clips.', 'info', 5500);
     E.api.commit(); const f = target / tot;
     p.clips.forEach((c) => (c.duration = Math.max(0.5, F.round1(c.duration * f))));
     E.api.after({ insp: true }); F.toast(`Duración ajustada a ~${F.fmtS(E.api.total())}`, 'ok');
