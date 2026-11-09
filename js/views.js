@@ -41,7 +41,7 @@
   /* =================== INICIO =================== */
   V.inicio = (el) => {
     const ps = F.projects.list;
-    const au = load('auto', { topic: '', aspect: '16:9', duration: 60, style: 'cine', exportAfter: true });
+    const au = load('auto', { topic: '', aspect: '16:9', duration: 60, style: 'cine', exportAfter: true, model: '' });
     const mods = [
       ['editor', 'film', 'Editor de video', 'Timeline profesional con transiciones, movimiento y textos'],
       ['flujos', 'workflow', 'Flujos y agentes', 'Idea → guion → imágenes → voz → video, en automático'],
@@ -66,6 +66,7 @@
             <select id="aFmt" title="Formato">${opt(R.ASPECTS, au.aspect)}</select>
             <select id="aDur" title="Duración">${opt([[30, '30 segundos'], [60, '1 minuto'], [90, '1,5 minutos'], [120, '2 minutos'], [180, '3 minutos'], [300, '5 minutos']], au.duration)}</select>
             <select id="aSty" title="Estilo visual">${opt(Object.entries(F.STYLES).filter(([k]) => k !== 'ninguno').map(([k, v]) => [k, v.name]), au.style)}</select>
+            <select id="aMod" title="Modelo de imágenes de OpenAI / ChatGPT">${opt([['', `Imágenes: según Integraciones (${F.settings.models.image})`], ...F.api.OPENAI_IMAGE_MODELS], au.model)}</select>
           </div>
           <label class="check"><input type="checkbox" id="aExp" ${au.exportAfter ? 'checked' : ''}> Exportar el MP4 automáticamente al terminar</label>
           <div class="row"><button class="btn primary lg" id="aGo">${I('zap')} Crear video automático</button><span class="small muted" id="aCost"></span></div>
@@ -85,11 +86,12 @@
       const miss = F.auto.missing();
       q('#aState').innerHTML = miss.length ? `<span class="dot"></span>Falta conectar APIs` : `<span class="dot ok"></span>Listo para crear`;
       const n = F.clamp(Math.round(au.duration / 7), 3, 30);
-      q('#aCost').textContent = `${n} escenas · ≈ US$${(n * 0.063 + au.duration * 15 * 0.000015 + 0.03).toFixed(2)}`;
+      const gp = F.api.imagePrice({ model: au.model, size: F.pipeline.sizeFor(au.aspect), quality: 'medium' });
+      q('#aCost').textContent = `${n} escenas · ≈ US$${(n * (gp ? gp.per : 0.063) + au.duration * 15 * 0.000015 + 0.03).toFixed(2)}${gp ? ` con ${gp.name} (US$${gp.per.toFixed(3)} por imagen)` : ''}`;
     };
     autoInfo();
     q('#aTopic').addEventListener('input', (e) => { au.topic = e.target.value; store('auto', au); });
-    for (const [id, k] of [['#aFmt', 'aspect'], ['#aDur', 'duration'], ['#aSty', 'style']]) q(id).addEventListener('change', (e) => { au[k] = k === 'duration' ? +e.target.value : e.target.value; store('auto', au); autoInfo(); });
+    for (const [id, k] of [['#aFmt', 'aspect'], ['#aDur', 'duration'], ['#aSty', 'style'], ['#aMod', 'model']]) q(id).addEventListener('change', (e) => { au[k] = k === 'duration' ? +e.target.value : e.target.value; store('auto', au); autoInfo(); });
     q('#aExp').addEventListener('change', (e) => { au.exportAfter = e.target.checked; store('auto', au); });
     q('#aGo').onclick = () => F.auto.run(au);
     q('#aTopic').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) F.auto.run(au); });
@@ -105,7 +107,7 @@
 
   /* =================== GUIONES =================== */
   V.guiones = (el) => {
-    const st = load('script', { topic: '', duration: 90, scenes: 0, tone: 'informativo y entretenido', audience: 'público general', language: 'español', provider: 'auto', aspect: '16:9', style: 'cine', voice: 'nova', subtitles: 'narracion', script: null });
+    const st = load('script', { topic: '', duration: 90, scenes: 0, tone: 'informativo y entretenido', audience: 'público general', language: 'español', provider: 'auto', aspect: '16:9', style: 'cine', voice: 'nova', subtitles: 'narracion', model: '', script: null });
     const save = () => store('script', st);
     const tones = ['informativo y entretenido', 'misterioso e intrigante', 'motivacional e inspirador', 'humorístico y cercano', 'educativo y claro', 'épico y dramático', 'emotivo y narrativo', 'enérgico estilo viral'];
     el.innerHTML = `<div class="page"><div class="split">
@@ -138,6 +140,7 @@
         <div class="card"><h3>${I('film')} Producir video con este guion</h3><p class="desc">Los agentes generarán una imagen y una narración por escena y montarán el timeline con transiciones.</p>
           <div class="grid2"><div><label class="lbl">Formato</label><select id="pAsp">${opt(R.ASPECTS, st.aspect)}</select></div><div><label class="lbl">Estilo visual</label><select id="pSty">${opt(Object.entries(F.STYLES).map(([k, v]) => [k, v.name]), st.style)}</select></div>
           <div><label class="lbl">Voz (OpenAI)</label><select id="pVoice">${opt([['', 'Sin voz'], ...F.api.OPENAI_VOICES.map((v) => [v, v])], st.voice)}</select></div><div><label class="lbl">Textos</label><select id="pSub">${opt([['narracion', 'Subtítulos de la narración'], ['pantalla', 'Frase clave por escena'], ['ninguno', 'Sin textos']], st.subtitles)}</select></div></div>
+          <label class="lbl">Modelo de imágenes (OpenAI / ChatGPT)</label><select id="pMod">${opt([['', `Según Integraciones (${F.settings.models.image})`], ...F.api.OPENAI_IMAGE_MODELS], st.model)}</select>
           <button class="btn primary lg block" id="pGo" style="margin-top:16px">${I('zap')} Generar video completo</button><p class="hint">Para más control (ElevenLabs, música, SEO) usa <a href="#/flujos">Flujos y agentes</a>.</p></div>`;
       out.querySelector('#sTitle').addEventListener('input', (e) => { s.title = e.target.value; save(); });
       out.querySelector('#sScenes').addEventListener('input', (e) => { const sc = e.target.closest('[data-i]'); if (sc && e.target.dataset.k) { s.scenes[+sc.dataset.i][e.target.dataset.k] = e.target.value; save(); } });
@@ -148,13 +151,13 @@
       const full = () => s.scenes.map((x) => x.narration).join('\n\n');
       out.querySelector('#sCopy').onclick = () => { navigator.clipboard.writeText(`${s.title}\n\n${s.scenes.map((x, i) => `ESCENA ${i + 1}\n${x.narration}\n[Imagen: ${x.image_prompt}]`).join('\n\n')}`); F.toast('Guion copiado', 'ok'); };
       out.querySelector('#sVoice').onclick = () => { sessionStorage.setItem('framaly.voiceText', full()); F.router.go('#/voces'); };
-      for (const [id, k] of [['pAsp', 'aspect'], ['pSty', 'style'], ['pVoice', 'voice'], ['pSub', 'subtitles']]) out.querySelector('#' + id).addEventListener('change', (e) => { st[k] = e.target.value; save(); });
+      for (const [id, k] of [['pAsp', 'aspect'], ['pSty', 'style'], ['pVoice', 'voice'], ['pSub', 'subtitles'], ['pMod', 'model']]) out.querySelector('#' + id).addEventListener('change', (e) => { st[k] = e.target.value; save(); });
       out.querySelector('#pGo').onclick = () => {
         const s2 = { title: s.title, scenes: s.scenes.filter((x) => x.narration.trim() || x.image_prompt.trim()) };
         if (!s2.scenes.length) return F.toast('El guion no tiene escenas');
         const fl = F.pipeline.makeFlow('youtube');
         Object.assign(fl.cfg.idea, { topic: st.topic || s.title, duration: st.duration, aspect: st.aspect, language: st.language });
-        fl.cfg.images.style = st.style; fl.cfg.montage.subtitles = st.subtitles;
+        fl.cfg.images.style = st.style; fl.cfg.images.model = st.model || ''; fl.cfg.montage.subtitles = st.subtitles;
         fl.cfg.voice.voice = st.voice || 'nova'; fl.on.voice = !!st.voice; fl.on.seo = F.api.textReady();
         F.pipeline.runModal({ ...F.pipeline.cfgFrom(fl), script: { provider: st.provider }, presetScript: s2 }, { autoExport: true });
       };
@@ -178,7 +181,7 @@
         <label class="lbl">Describe la imagen</label><textarea id="iPrompt" rows="5" placeholder="Ej: un faro solitario en un acantilado durante una tormenta al atardecer">${F.esc(st.prompt)}</textarea>
         <div class="row" style="margin-top:8px"><button class="btn sm outline" id="iEnh">${I('wand')} Mejorar prompt con IA</button></div>
         <label class="lbl">Generador</label><div class="seg" id="iProv">${[['openai', 'OpenAI'], ['gemini', 'Gemini'], ['minimax', 'MiniMax']].map(([k, n]) => `<button data-p="${k}" class="${k === st.provider ? 'on' : ''}">${n}</button>`).join('')}</div>
-        <div id="iModelRow" style="${st.provider === 'openai' ? 'margin-top:8px' : 'display:none'}"><label class="lbl">Modelo de ChatGPT (OpenAI)</label><select id="iModel">${opt([['gpt-image-2', 'GPT Image 2 — el mejor (requiere verificar organización)'], ['gpt-image-1.5', 'GPT Image 1.5 (requiere verificación)'], ['gpt-image-1', 'GPT Image 1 (requiere verificación)'], ['gpt-image-1-mini', 'GPT Image 1 mini — barato (requiere verificación)'], ['dall-e-3', 'DALL·E 3 — funciona sin verificar ✓'], ['dall-e-2', 'DALL·E 2 — funciona sin verificar ✓']], st.model)}</select><p class="mini" style="margin:4px 0 0">Si sale «el modelo no existe», tu cuenta aún no está verificada. Elige <b>DALL·E 3</b> o verifica tu organización en platform.openai.com → Settings → Organization.</p></div>
+        <div id="iModelRow" style="${st.provider === 'openai' ? 'margin-top:8px' : 'display:none'}"><label class="lbl">Modelo de ChatGPT (OpenAI)</label><select id="iModel">${opt(F.api.OPENAI_IMAGE_MODELS, st.model)}</select><p class="mini" style="margin:4px 0 0">Si sale «el modelo no existe», tu cuenta aún no está verificada. Elige <b>DALL·E 3</b> o verifica tu organización en platform.openai.com → Settings → Organization.</p></div>
         <label class="lbl">Estilo</label><div class="chips" id="iSty">${Object.entries(F.STYLES).map(([k, v]) => `<button class="chip ${k === st.style ? 'on' : ''}" data-s="${k}">${v.name}</button>`).join('')}</div>
         <div class="grid3"><div><label class="lbl">Formato</label><select id="iSize">${opt([['1536x1024', 'Horizontal'], ['1024x1536', 'Vertical'], ['1024x1024', 'Cuadrado']], st.size)}</select></div>
         <div><label class="lbl">Calidad</label><select id="iQ">${opt([['low', 'Baja'], ['medium', 'Media'], ['high', 'Alta']], st.quality)}</select></div>
@@ -189,16 +192,11 @@
       <div><div class="card"><h3>${I('sparkles')} Resultados</h3><div class="img-grid" id="iRes"><div class="empty" style="grid-column:1/-1">${I('image')}<p class="small">Las imágenes nuevas aparecerán aquí y se guardan automáticamente en la biblioteca.</p></div></div></div>
       <div class="card"><h3>${I('grid')} Galería IA <span class="grow"></span><a class="btn sm ghost" href="#/biblioteca">Ver biblioteca</a></h3><div class="img-grid" id="iGal"></div></div></div>
     </div></div>`;
-    // Precio por imagen en US$ (cuadrada 1024×1024 / horizontal-vertical 1536×1024), por calidad. Estimados de OpenAI.
-    const GPT_PRICE = {
-      'gpt-image-2': { name: 'GPT Image 2', sq: { low: 0.006, medium: 0.053, high: 0.211 }, wide: { low: 0.005, medium: 0.041, high: 0.165 } },
-      'gpt-image-1.5': { name: 'GPT Image 1.5', sq: { low: 0.009, medium: 0.034, high: 0.133 }, wide: { low: 0.013, medium: 0.05, high: 0.2 } },
-    };
     const cost = () => {
       const out = el.querySelector('#iCost');
-      const gp = st.provider === 'openai' && GPT_PRICE[st.model];
+      const gp = st.provider === 'openai' && F.api.imagePrice({ model: st.model, size: st.size, quality: st.quality });
       if (gp) {
-        const per = gp[st.size === '1024x1024' ? 'sq' : 'wide'][st.quality];
+        const per = gp.per;
         const q = { low: 'baja', medium: 'media', high: 'alta' }[st.quality];
         out.innerHTML = `<b>Costo con ${gp.name}: US$${(per * st.n).toFixed(3)}</b> (US$${per.toFixed(3)} por imagen, calidad ${q}${st.n > 1 ? ` × ${st.n}` : ''}) · estimado, se cobra en tu cuenta de OpenAI · se guardan en tu biblioteca`;
         return;

@@ -201,6 +201,25 @@
       });
       return asBlob(r);
     },
+    /** Variantes de imagen de OpenAI (ChatGPT) para los selectores */
+    OPENAI_IMAGE_MODELS: [
+      ['gpt-image-2', 'GPT Image 2 — el mejor (requiere verificar organización)'],
+      ['gpt-image-1.5', 'GPT Image 1.5 (requiere verificación)'],
+      ['gpt-image-1', 'GPT Image 1 (requiere verificación)'],
+      ['gpt-image-1-mini', 'GPT Image 1 mini — barato (requiere verificación)'],
+      ['dall-e-3', 'DALL·E 3 — funciona sin verificar ✓'],
+      ['dall-e-2', 'DALL·E 2 — funciona sin verificar ✓'],
+    ],
+    /** US$ por imagen (cuadrada / horizontal-vertical) y calidad. Estimados de OpenAI; solo los modelos con precio conocido. */
+    IMAGE_PRICE: {
+      'gpt-image-2': { name: 'GPT Image 2', sq: { low: 0.006, medium: 0.053, high: 0.211 }, wide: { low: 0.005, medium: 0.041, high: 0.165 } },
+      'gpt-image-1.5': { name: 'GPT Image 1.5', sq: { low: 0.009, medium: 0.034, high: 0.133 }, wide: { low: 0.013, medium: 0.05, high: 0.2 } },
+    },
+    /** Precio por imagen del modelo de OpenAI elegido (o el de Integraciones si va vacío); null si no se conoce */
+    imagePrice({ model, size = '1536x1024', quality = 'medium' } = {}) {
+      const mdl = model || F.settings.models.image, t = this.IMAGE_PRICE[mdl];
+      return t ? { name: t.name, per: t[size === '1024x1024' ? 'sq' : 'wide'][quality] ?? t.wide.medium } : null;
+    },
     OPENAI_VOICES: ['nova', 'shimmer', 'coral', 'sage', 'alloy', 'ash', 'ballad', 'echo', 'fable', 'onyx', 'verse'],
 
     /** ElevenLabs */
