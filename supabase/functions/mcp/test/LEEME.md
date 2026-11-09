@@ -12,3 +12,10 @@ npx --yes esbuild index.ts --bundle --format=esm --platform=node --outfile=/tmp/
   --alias:jsr:@supabase/functions-js/edge-runtime.d.ts=/tmp/mcpe2e/empty.mjs
 node /tmp/mcpe2e/e2e.mjs                                                          # servidor completo: autenticación, MCP, REST, topes
 ```
+
+## Modo externo (ChatGPT) y auditoría
+```bash
+node /tmp/mcpe2e/e2e-modes.mjs      # 44 comprobaciones: modos external / no_openai / all, subida, anti-duplicados, auditoría
+FX_DIR=/tmp/fx node /tmp/mcpe2e/make-fixture.mjs   # crea un proyecto real con archivos reales (para exportarlo en un navegador)
+```
+Los archivos de ejemplo (`a.png`, `voz1.wav`…) se generan con Python (ver la sesión) y se leen desde `FX_DIR`.
