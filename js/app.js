@@ -26,7 +26,9 @@
     sb.innerHTML = `<a class="brand" href="#/inicio"><div class="logo"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg></div><div><b>FRAMALY</b><small>Studio de video IA</small></div></a>
       <nav class="nav" id="nav"></nav>
       <div class="acct" id="acct"></div>
+      <button class="btn block" id="sbUpd" title="Guarda tus cambios en la nube y carga la última versión de FRAMALY">${I('refresh')} Actualizar app</button>
       <div class="side-foot"><b style="color:var(--text);font-size:12px">Conexiones</b><div class="apis" id="apiDots"></div></div>`;
+    F.$('#sbUpd').onclick = (e) => updateApp(e.currentTarget);
     nav(); dots(); acct();
   }
   /** Campanita del administrador: cuántos avisos sin leer */
@@ -126,6 +128,12 @@
     F.$('#sidebar').classList.toggle('open', open);
     document.body.classList.toggle('menu-open', open);
   }
+  /** Envía a la nube lo pendiente y carga la última versión de la app */
+  async function updateApp(btn) {
+    F.busy(btn, true, 'Actualizando…');
+    try { if (F.cloud?.configured?.() && F.cloud.user) await F.cloud.sync({ manual: true }); } catch (err) { /* si falla la nube, igual se actualiza la app */ }
+    location.reload();
+  }
   function topbar(r) {
     const p = F.projects.current();
     F.$('#topbar').innerHTML = `<button class="icon-btn menu" id="mMenu" aria-label="Abrir menú">${I('menu')}</button><h1>${r.name}</h1><span class="sub">${r.sub || ''}</span><span class="grow"></span>
@@ -136,12 +144,7 @@
       <button class="btn sm" id="tbHelp" title="Instrucciones de esta sección">${I('script')}<span class="bt">Instrucciones</span></button>
       <button class="btn primary sm" id="tbNew" title="Nuevo proyecto">${I('plus')}<span class="bt">Nuevo proyecto</span></button>`;
     F.$('#tbNew').onclick = () => F.views.newProject();
-    F.$('#tbUpd').onclick = async (e) => {
-      const b = e.currentTarget; F.busy(b, true, 'Actualizando…');
-      // primero se envían a la nube los cambios pendientes; después se carga la última versión de la app
-      try { if (F.cloud?.configured?.() && F.cloud.user) await F.cloud.sync({ manual: true }); } catch (err) { /* si falla la nube, igual se actualiza la app */ }
-      location.reload();
-    };
+    F.$('#tbUpd').onclick = (e) => updateApp(e.currentTarget);
     const bl = F.$('#tbBell'); if (bl) bl.onclick = bellModal;
     bell();
     F.$('#tbHelp').onclick = () => F.showHelp(r.id);

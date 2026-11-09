@@ -627,3 +627,9 @@ body.has-ask #toasts { bottom: 82px; }
 .fw-banner.warn > div > b { color: var(--or2); }
 .own-sec { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line2); }
 .fw-banner .tag, .own-sec .tag { white-space: nowrap; flex: none; }
+#sbUpd { margin: 8px 12px 0; width: calc(100% - 24px); display: none; }
+@media (max-width: 1000px) {
+  #sbUpd { display: inline-flex; justify-content: center; align-items: center; gap: 8px; }
+  .topbar #tbUpd .bt { display: inline; }
+  .topbar #tbUpd { padding: 0 10px; gap: 6px; }
+}
