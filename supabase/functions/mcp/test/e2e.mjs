@@ -45,7 +45,7 @@ const call = async (name, args, tok) => { const r = await rpc('tools/call', { na
 let r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp/openapi.json')); const spec = await r.json();
 ok('descripciones OpenAPI ≤ 300 caracteres (límite de ChatGPT)', Object.values(spec.paths).every((p) => p.post.description.length <= 300 && p.post.summary.length <= 300), Object.values(spec.paths).map((p) => p.post.description.length));
 ok('GET openapi.json público', r.status === 200 && spec.openapi === '3.1.0' && spec.servers[0].url === 'https://proj.supabase.co/functions/v1/mcp');
-r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp')); ok('GET info', r.status === 200 && (await r.json()).tools.length === 11);
+r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp')); ok('GET info', r.status === 200 && (await r.json()).tools.length === 12);
 r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp', { method: 'OPTIONS' })); ok('CORS preflight', r.status === 204 && r.headers.get('access-control-allow-headers').includes('authorization'));
 // --- autenticación
 r = await post('', { jsonrpc: '2.0', id: 1, method: 'ping' }, null); ok('sin clave → 401', r.status === 401 && r.headers.get('www-authenticate').startsWith('Bearer'));
@@ -57,8 +57,8 @@ r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp/t/' + T
 r = await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'chatgpt' } });
 ok('initialize', r.body.result.serverInfo.name === 'framaly' && r.body.result.capabilities.tools && r.body.result.protocolVersion === '2025-03-26' && r.body.result.instructions.includes('framaly_status'));
 r = await post('', { jsonrpc: '2.0', method: 'notifications/initialized' }); ok('notificación → 202', r.status === 202);
-r = await rpc('tools/list'); ok('tools/list (10, con esquema y anotaciones)', r.body.result.tools.length === 11 && r.body.result.tools.every((t) => t.inputSchema.type === 'object') && r.body.result.tools.find((t) => t.name === 'framaly_status').annotations.readOnlyHint === true);
-r = await rpc('tools/list', {}, TOKEN2); ok('clave solo-lectura ve solo 3 herramientas', r.body.result.tools.length === 3, r.body.result.tools.map((t) => t.name));
+r = await rpc('tools/list'); ok('tools/list (10, con esquema y anotaciones)', r.body.result.tools.length === 12 && r.body.result.tools.every((t) => t.inputSchema.type === 'object') && r.body.result.tools.find((t) => t.name === 'framaly_status').annotations.readOnlyHint === true);
+r = await rpc('tools/list', {}, TOKEN2); ok('clave solo-lectura ve solo 4 herramientas', r.body.result.tools.length === 4, r.body.result.tools.map((t) => t.name));
 r = await rpc('método/raro'); ok('método desconocido → -32601', r.body.error.code === -32601);
 r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp', { method: 'POST', headers: { authorization: 'Bearer ' + TOKEN }, body: '{no json' })); ok('JSON roto → -32700', (await r.json()).error.code === -32700);
 // --- herramientas

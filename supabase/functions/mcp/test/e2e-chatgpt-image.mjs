@@ -76,7 +76,7 @@ c = await call('framaly_import_image', { image: { download_url: 'http://files.oa
 ok('http (no https) → rechazada', c.isError, c.v);
 // descriptor MCP: ChatGPT necesita _meta["openai/fileParams"] para entregar archivos
 let r = await rpc('tools/list', {}, TX); const t = r.body.result.tools.find((x) => x.name === 'framaly_import_image');
-ok('tools/list declara _meta["openai/fileParams"] = [image, images]', JSON.stringify(t._meta?.['openai/fileParams']) === '["image","images"]' && t.inputSchema.properties.image.properties.download_url && t.inputSchema.properties.images.items.properties.file_id, t);
+ok('tools/list declara _meta["openai/fileParams"] = [image]', JSON.stringify(t._meta?.['openai/fileParams']) === '["image"]' && t.inputSchema.properties.image.properties.download_url , t);
 // subida base64 y formato de resultado
 const b64 = (u8) => Buffer.from(u8).toString('base64');
 c = await call('framaly_upload_media', { type: 'image', name: 'b64.png', data_base64: b64(PNG) }, TX);
@@ -86,6 +86,22 @@ c = await call('framaly_create_video_project', { title: 'Reutiliza imagen', scen
 ok('media_id devuelto → scenes[].image_media_id sin volver a subir', !c.isError && c.v.escenas === 1, c.v);
 const pr = DB.tables.framaly_projects.find((p) => p.id === c.v.project_id);
 ok('el clip del proyecto usa exactamente ese media_id', pr.data.clips[0].mediaId === id1);
+
+// herramienta de diagnóstico y compatibilidad con el diseño anterior
+c = await call('framaly_inspect_file', { file: { download_url: F + 'insp.png', file_id: 'file-x' } }, TX);
+ok('inspect_file: puede descargar, dice tipo y tamaño y NO guarda nada', !c.isError && c.v.can_download === true && c.v.detected_mime === 'image/png' && c.v.size_bytes > 0 && c.v.stored === false && c.v.credits_consumed === 0, c.v);
+c = await call('framaly_inspect_file', { file: { download_url: 'https://gone.example.com/x.png' } }, TX);
+ok('inspect_file: enlace vencido → can_download false con el error real (403)', !c.isError && c.v.can_download === false && /403/.test(c.v.error), c.v);
+ok('inspect_file no dejó el archivo en la biblioteca', !DB.tables.framaly_media.some((m) => m.name === 'insp.png'));
+c = await call('framaly_import_image', { images: [{ download_url: F + 'leg1.png?x=7', file_id: 'f' }] }, TX);
+ok('compatibilidad: images[] (oculto en el esquema) se sigue aceptando', !c.isError && c.v.media.id, c.v);
+c = await call('framaly_import_image', { openaiFileIdRefs: [{ name: 'viejo2.png', id: 'f', mime_type: 'image/png', download_url: F + 'leg2.png?x=8' }] }, TX);
+ok('compatibilidad: openaiFileIdRefs (oculto) se sigue aceptando', !c.isError && c.v.media.name === 'viejo2.png', c.v);
+r = await rpc('tools/list', {}, TX); const ti = r.body.result.tools.find((x) => x.name === 'framaly_import_image');
+ok('el esquema visible para ChatGPT NO contiene openaiFileIdRefs ni images', !('openaiFileIdRefs' in ti.inputSchema.properties) && !('images' in ti.inputSchema.properties) && ti.inputSchema.properties.image.required[0] === 'download_url', ti.inputSchema);
+c = await call('framaly_import_image', { cosa_rara: 1 }, TX);
+ok('argumento desconocido → error que dice lo recibido', c.isError && /desconocido/.test(c.v), c.v);
+
 // créditos y OpenAI
 ok('FRAMALY no llamó a OpenAI', openaiCalls() === o0);
 ok('no se descontó nada (framaly_usage intacto)', usage() === u0);

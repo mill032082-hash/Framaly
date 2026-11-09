@@ -8,7 +8,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { type Access, db, logError } from "./budget.ts";
 import { EXEC_MODES, INSTRUCTIONS, TOOLS, VERSION, checkArgs, openapi, rpcErr, rpcOk, sha256hex } from "./lib.ts";
-import { type Ctx, HANDLERS, ToolError } from "./tools.ts";
+import { type Ctx, HANDLERS, ToolError, describeArgs } from "./tools.ts";
 import { handleOAuth } from "./oauth.ts";
 
 const CORS = {
@@ -39,16 +39,17 @@ async function authenticate(req: Request, tokenInPath: string | null, base: stri
 /** Ejecuta una herramienta con permisos, límite de uso y registro */
 async function runTool(a: Auth, name: string, args: unknown): Promise<{ ok: boolean; value: unknown }> {
   const def = TOOLS.find((t) => t.name === name), t0 = Date.now();
+  if (/import|upload|inspect/.test(name)) console.log(`[llamada] ${name} · ${describeArgs(args)}`);
   const log = (ok: boolean, detail: string) => a.ctx.client.from("framaly_api_calls").insert({ token_id: a.tokenId, user_id: a.ctx.uid, tool: name, ok, ms: Date.now() - t0, detail: detail.slice(0, 300) }).then(() => {}, () => {});
   if (!def) return { ok: false, value: `No existe la herramienta «${name}».` };
   if (!a.scopes.includes(def.scope)) { await log(false, "sin permiso"); return { ok: false, value: "Esta clave no tiene permiso para esa herramienta." }; }
-  const bad = checkArgs(def, args); if (bad) { await log(false, bad); return { ok: false, value: bad }; }
+  const bad = checkArgs(def, args); if (bad) { await log(false, bad + " · recibido: " + describeArgs(args)); return { ok: false, value: bad }; }
   const since = new Date(Date.now() - 60_000).toISOString();
   const { count } = await a.ctx.client.from("framaly_api_calls").select("id", { count: "exact", head: true }).eq("token_id", a.tokenId).gte("created_at", since);
   if ((count ?? 0) >= RATE_PER_MIN) { await log(false, "límite por minuto"); return { ok: false, value: `Demasiadas llamadas (máx. ${RATE_PER_MIN} por minuto). Espera un momento.` }; }
   try {
     const value = await HANDLERS[name]({ ...a.ctx, tool: name }, args ?? {});
-    await log(true, "ok");
+    await log(true, /import|upload|inspect/.test(name) ? "ok · " + describeArgs(args) : "ok");
     return { ok: true, value };
   } catch (e) {
     if (e instanceof ToolError) { await log(false, e.message); return { ok: false, value: e.message }; }

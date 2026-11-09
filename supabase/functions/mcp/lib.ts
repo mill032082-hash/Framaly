@@ -1,6 +1,6 @@
 // FRAMALY Studio · piezas puras del servidor MCP / API (sin red ni base de datos: se pueden probar solas).
 
-export const VERSION = "1.5.0";
+export const VERSION = "1.6.0";
 
 /** Modo de ejecución de una conexión: external = FRAMALY no genera nada · no_openai = puede generar, pero OpenAI queda bloqueado · all = todo permitido */
 export type ExecMode = "external" | "no_openai" | "all";
@@ -118,9 +118,9 @@ export function parseJSON(text: string): any {
 }
 
 /* ---------- herramientas: nombre, texto y esquema (las usan el MCP y la API REST) ---------- */
-export type ToolDef = { name: string; title: string; description: string; scope: "read" | "write"; inputSchema: Record<string, unknown>; meta?: Record<string, unknown> };
+export type ToolDef = { name: string; title: string; description: string; scope: "read" | "write"; inputSchema: Record<string, unknown>; meta?: Record<string, unknown>; legacy?: string[] };
 /** Archivo que ChatGPT entrega a una herramienta MCP (campo declarado en _meta["openai/fileParams"]): ChatGPT rellena download_url y file_id */
-const fileObj = { type: "object", description: "Imagen generada o subida en ChatGPT (ChatGPT rellena download_url y file_id).", properties: { download_url: { type: "string" }, file_id: { type: "string" }, name: { type: "string" }, mime_type: { type: "string" } } };
+const fileObj = { type: "object", description: "Archivo de ChatGPT (ChatGPT rellena download_url y file_id).", properties: { download_url: { type: "string" }, file_id: { type: "string" } }, required: ["download_url"] };
 const urls = { type: "array", maxItems: 12, items: { type: "string" }, description: "Enlaces https públicos de imágenes (PNG, JPG, WEBP o GIF) que ya tengas." };
 const fileRefs = { type: "array", maxItems: 12, description: "Imágenes de la conversación de ChatGPT (ChatGPT las rellena solo).", items: { type: "object", properties: { name: { type: "string" }, id: { type: "string" }, mime_type: { type: "string" }, download_link: { type: "string" } } } };
 const aurls = { type: "array", maxItems: 12, items: { type: "string" }, description: "Enlaces https públicos de audios (MP3, WAV, M4A u OGG) que ya tengas." };
@@ -147,10 +147,14 @@ export const TOOLS: ToolDef[] = [
       provider: { type: "string", enum: ["openai", "gemini"] }, name: { type: "string", description: "Nombre en la biblioteca." } } } },
   { name: "framaly_import_image", title: "Importar imágenes", scope: "write",
     description: "Recibe en la biblioteca de FRAMALY las imágenes que ChatGPT generó (campo image / images) o imágenes de enlaces https. No genera nada ni gasta créditos. Devuelve media_id, nombre y tipo.",
-    meta: { "openai/fileParams": ["image", "images"] },
+    meta: { "openai/fileParams": ["image"] },
+    legacy: ["images", "openaiFileIdRefs", "files", "file"],   // se siguen aceptando por compatibilidad, pero ya no se muestran a ChatGPT
     inputSchema: { type: "object", additionalProperties: false, properties: {
-      image: fileObj, images: { type: "array", maxItems: 12, items: fileObj, description: "Varias imágenes de ChatGPT." },
-      image_urls: urls, openaiFileIdRefs: fileRefs, name: { type: "string", description: "Nombre del archivo (ej: caballo_volador_andes.png). Si se omite se usa el que traiga la imagen." } } } },
+      image: fileObj, image_urls: urls, name: { type: "string", description: "Nombre del archivo (ej: caballo_volador_andes.png). Si se omite se usa el que traiga la imagen." } } } },
+  { name: "framaly_inspect_file", title: "Diagnosticar archivo de ChatGPT", scope: "read",
+    description: "Diagnóstico: recibe un archivo de ChatGPT y dice si FRAMALY puede descargar sus bytes (tipo, tamaño, error real). No guarda nada ni gasta créditos.",
+    meta: { "openai/fileParams": ["file"] },
+    inputSchema: { type: "object", required: ["file"], additionalProperties: false, properties: { file: fileObj } } },
   { name: "framaly_import_audio", title: "Importar audios", scope: "write",
     description: "Trae a la biblioteca de FRAMALY audios que ya existen (narración, música o efectos en MP3, WAV, M4A u OGG) desde enlaces https o desde los archivos de la conversación. Devuelve el id y la duración de cada uno.",
     inputSchema: { type: "object", additionalProperties: false, properties: { audio_urls: aurls, openaiFileIdRefs: fileRefs, name: { type: "string", description: "Nombre base en la biblioteca." } } } },
@@ -222,7 +226,7 @@ export function checkArgs(def: ToolDef, args: any): string | null {
   if (typeof a !== "object" || Array.isArray(a)) return "Los argumentos deben ser un objeto.";
   for (const k of s.required ?? []) if (a[k] === undefined || a[k] === null || a[k] === "") return `Falta «${k}».`;
   for (const [k, v] of Object.entries(a)) {
-    const p = s.properties?.[k]; if (!p) return `Argumento desconocido: «${k}».`;
+    const p = s.properties?.[k] ?? (def.legacy?.includes(k) ? {} : undefined); if (!p) return `Argumento desconocido: «${k}».`;
     if (p.type === "string" && typeof v !== "string") return `«${k}» debe ser texto.`;
     if (p.type === "string" && p.maxLength && (v as string).length > p.maxLength) return `«${k}» es demasiado largo (máx. ${p.maxLength}).`;
     if (p.enum && !p.enum.includes(v)) return `«${k}» debe ser uno de: ${p.enum.join(", ")}.`;

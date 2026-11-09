@@ -191,7 +191,7 @@ const fileRefsOf = (a: any): FileRef[] => {
   return out;
 };
 /** Qué recibimos exactamente (solo la forma, nunca los enlaces, que llevan firma): sirve para explicar un fallo real */
-const describeArgs = (a: any): string => {
+export const describeArgs = (a: any): string => {
   const parts = Object.keys(a ?? {}).map((k) => { const v = a[k]; const one = (x: any) => (typeof x === "string" ? "texto" : x && typeof x === "object" ? `objeto{${Object.keys(x).join(",")}}` : typeof x); return `${k}=${Array.isArray(v) ? `lista(${v.length})[${v.slice(0, 3).map(one).join(" | ")}]` : one(v)}`; });
   return parts.length ? parts.join("; ") : "ning\u00fan argumento";
 };
@@ -282,6 +282,19 @@ Devuelve JSON: {"title":"título atractivo (máx. 70 caracteres)","scenes":[{"na
     return { success: fallos.length === 0, provider: "chatgpt_external", stored_in_library: true, media: ok[0], images: ok, credits_consumed: 0, failures: fallos,
       importadas: ok.map((m) => ({ media_id: m.id, url_temporal: m.temporary_url, duplicado: m.duplicate })), fallos,
       next_step: "Usa media.id como scenes[].image_media_id en framaly_create_video_project (sin volver a subir la imagen) y comprueba con framaly_list_media." };
+  },
+
+  /** Diagnóstico puro: ¿podemos obtener los bytes del archivo que entrega ChatGPT? No guarda nada. */
+  async framaly_inspect_file(ctx, a) {
+    const ref = asRef(a.file);
+    if (!ref) throw new ToolError(`No llegó ningún enlace de descarga. Recibí: ${describeArgs(a)}.`);
+    const u = new URL(ref.url);
+    try {
+      const d = await download(ref.url);
+      return { can_download: true, host: u.hostname, file_id_present: !!ref.id, name: ref.name ?? null, detected_mime: d.mime, size_bytes: d.bytes.length, stored: false, credits_consumed: 0 };
+    } catch (e) {
+      return { can_download: false, host: u.hostname, file_id_present: !!ref.id, error: (e as Error).message, stored: false, credits_consumed: 0 };
+    }
   },
 
   async framaly_import_audio(ctx, a) {
