@@ -75,6 +75,7 @@
     /* ----- personas con acceso (solo administrador) ----- */
     let people = [], invites = [];
     const open = new Set();
+    const edit = new Map();   // borradores: nada se guarda hasta pulsar «Guardar cambios»
     const SECS = [['editor', 'Editor de video'], ['flujos', 'Flujos y agentes'], ['guiones', 'Guiones'], ['imagenes', 'Imágenes'], ['voces', 'Voces'], ['efectos', 'Efectos y transiciones'], ['biblioteca', 'Biblioteca'], ['publicar', 'Publicar'], ['integraciones', 'Integraciones API'], ['ajustes', 'Ajustes']];
     const AIS = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini'], ['minimax', 'MiniMax']];
     const MODES = [['shared', 'Clave de FRAMALY'], ['own', 'Que ponga la suya'], ['off', 'Sin IA']];
@@ -91,12 +92,16 @@
           : p.status === 'approved'
             ? `<button class="btn sm danger" data-p="${p.user_id}" data-s="blocked">Quitar acceso</button>`
             : `<button class="btn sm primary" data-p="${p.user_id}" data-s="approved">Aprobar</button>${p.status === 'pending' ? `<button class="btn sm" data-p="${p.user_id}" data-s="blocked">Rechazar</button>` : ''}`;
-        const perms = p.perms || {}, ai = p.ai || {};
+        const dr = edit.get(p.user_id), editing = !!dr, perms = (dr || p).perms || {}, ai = (dr || p).ai || {}, daily = (dr || p).daily_usd ?? 2, dis = editing ? '' : 'disabled';
+        const bar = editing
+          ? `<div class="row" style="gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn primary sm" data-save="${p.user_id}">Guardar cambios</button><button class="btn sm" data-cancel="${p.user_id}">Cancelar</button><span class="mini" style="color:var(--or2)">Los cambios se aplican al pulsar Guardar.</span></div>`
+          : `<div class="row" style="gap:8px;margin-top:14px"><button class="btn sm" data-edit="${p.user_id}">Editar</button><span class="mini">Pulsa Editar para cambiar sus permisos y sus IA.</span></div>`;
         const panel = open.has(p.user_id) && p.role !== 'admin' ? `<div class="perms">
-            <b class="small">Puede usar:</b><div class="perm-grid">${SECS.map(([k, n]) => `<label class="check"><input type="checkbox" data-pp="${p.user_id}" data-pk="${k}" ${perms[k] === false ? '' : 'checked'}> ${n}</label>`).join('')}</div>
+            <b class="small">Puede usar:</b><div class="perm-grid">${SECS.map(([k, n]) => `<label class="check"><input type="checkbox" data-pp="${p.user_id}" data-pk="${k}" ${perms[k] === false ? '' : 'checked'} ${dis}> ${n}</label>`).join('')}</div>
             <b class="small" style="display:block;margin-top:14px">IA: ¿con qué clave trabaja?</b>
-            <div class="ai-grid">${AIS.map(([k, n]) => `<div><label class="lbl">${n}</label><select data-pai="${p.user_id}" data-pak="${k}">${MODES.map(([v, l]) => `<option value="${v}" ${(ai[k] || 'own') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`).join('')}
-              <div><label class="lbl">Tope diario con clave de FRAMALY (US$)</label><input type="number" min="0" step="0.5" data-pdaily="${p.user_id}" value="${p.daily_usd ?? 2}"></div></div>
+            <div class="ai-grid">${AIS.map(([k, n]) => `<div><label class="lbl">${n}</label><select data-pai="${p.user_id}" data-pak="${k}" ${dis}>${MODES.map(([v, l]) => `<option value="${v}" ${(ai[k] || 'own') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`).join('')}
+              <div><label class="lbl">Tope diario con clave de FRAMALY (US$)</label><input type="number" min="0" step="0.5" data-pdaily="${p.user_id}" value="${daily}" ${dis}></div></div>
+            ${bar}
             <p class="hint">«Clave de FRAMALY»: usa tu clave sin verla y cuenta para tus límites. «Que ponga la suya»: ve Integraciones API para pegar su clave. «Sin IA»: esa API queda desactivada.</p></div>` : '';
         const permBtn = p.role === 'admin' || me ? '' : `<button class="btn sm" data-perm="${p.user_id}">${open.has(p.user_id) ? 'Cerrar' : 'Permisos'}</button>`;
         return `<div class="person"><span class="em"><b>${F.esc(p.email || 'Sin correo')}</b>${me ? ' <span class="small muted">(tú)</span>' : ''}<br><span class="small muted">${inv ? 'esperando que se registre' : F.ago(new Date(p.created_at).getTime())}</span></span>${p.role === 'admin' ? '<span class="tag or">Administrador</span>' : ''}<span class="tag ${cls}">${lbl}</span>${permBtn}${acts}${panel}</div>`;
@@ -111,7 +116,20 @@
     const find = (id) => (String(id).startsWith('inv:') ? invites.find((i) => 'inv:' + i.email === id) : people.find((x) => x.user_id === id));
     q('#aPeople').addEventListener('click', async (e) => {
       const pb = e.target.closest('[data-perm]');
-      if (pb) { const id = pb.dataset.perm; open.has(id) ? open.delete(id) : open.add(id); return renderPeople(); }
+      if (pb) { const id = pb.dataset.perm; if (open.has(id)) { open.delete(id); edit.delete(id); } else open.add(id); return renderPeople(); }
+      const ed = e.target.closest('[data-edit]');
+      if (ed) { const p = find(ed.dataset.edit); if (p) edit.set(ed.dataset.edit, { perms: { ...(p.perms || {}) }, ai: { anthropic: 'own', openai: 'own', elevenlabs: 'own', gemini: 'own', minimax: 'own', ...(p.ai || {}) }, daily_usd: p.daily_usd ?? 2 }); return renderPeople(); }
+      const cn = e.target.closest('[data-cancel]');
+      if (cn) { edit.delete(cn.dataset.cancel); return renderPeople(); }
+      const sv = e.target.closest('[data-save]');
+      if (sv) {
+        const id = sv.dataset.save, d = edit.get(id), p = find(id); if (!d || !p) return;
+        const v = +d.daily_usd; if (!(v >= 0)) return F.toast('Escribe un monto válido para el tope diario');
+        F.busy(sv, true, 'Guardando…');
+        try { await C.setPerson(id, { perms: d.perms, ai: d.ai, daily_usd: v }); p.perms = d.perms; p.ai = d.ai; p.daily_usd = v; edit.delete(id); F.toast('Cambios guardados', 'ok'); renderPeople(); }
+        catch (err) { F.toast(err.message, 'error'); F.busy(sv, false); }
+        return;
+      }
       const del = e.target.closest('[data-invdel]');
       if (del) { try { await C.removeInvite(del.dataset.invdel); F.toast('Correo quitado', 'ok'); await loadPeople(); } catch (err) { F.toast(err.message, 'error'); } return; }
       const b = e.target.closest('[data-p]'); if (!b) return;
@@ -123,30 +141,21 @@
       const mail = q('#aInvMail').value.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) return F.toast('Escribe un correo válido');
       if (people.some((p) => (p.email || '').toLowerCase() === mail)) return F.toast('Esa persona ya tiene cuenta. Cambia sus ajustes con el botón Permisos.');
-      try { await C.addInvite(mail); open.add('inv:' + mail); F.toast('Correo preparado. Ajusta sus permisos y sus IA aquí abajo.', 'ok'); await loadPeople(); } catch (err) { F.toast(err.message, 'error'); }
+      try { await C.addInvite(mail); open.add('inv:' + mail); F.toast('Correo preparado. Ajusta sus permisos y sus IA y pulsa Guardar cambios.', 'ok'); await loadPeople(); const np = find('inv:' + mail); if (np) { edit.set('inv:' + mail, { perms: { ...(np.perms || {}) }, ai: { anthropic: 'own', openai: 'own', elevenlabs: 'own', gemini: 'own', minimax: 'own', ...(np.ai || {}) }, daily_usd: np.daily_usd ?? 2 }); renderPeople(); } } catch (err) { F.toast(err.message, 'error'); }
     });
-    q('#aPeople').addEventListener('change', async (e) => {
-      const t = e.target;
-      const id = t.dataset.pp || t.dataset.pai || t.dataset.pdaily; if (!id) return;
-      const p = find(id); if (!p) return;
-      try {
-        if (t.dataset.pp) {
-          const perms = { ...(p.perms || {}) };
-          if (t.checked) delete perms[t.dataset.pk]; else perms[t.dataset.pk] = false;
-          await C.setPerson(id, { perms }); p.perms = perms;
-        } else if (t.dataset.pai) {
-          const ai = { anthropic: 'own', openai: 'own', elevenlabs: 'own', gemini: 'own', minimax: 'own', ...(p.ai || {}), [t.dataset.pak]: t.value };
-          // quien pega su propia clave necesita ver Integraciones; quien no, no
-          const perms = { ...(p.perms || {}) };
-          if (Object.values(ai).includes('own')) delete perms.integraciones; else perms.integraciones = false;
-          await C.setPerson(id, { ai, perms }); p.ai = ai; p.perms = perms; renderPeople();
-        } else {
-          const v = +t.value; if (!(v >= 0)) throw new Error('Escribe un monto válido');
-          await C.setPerson(id, { daily_usd: v }); p.daily_usd = v;
-        }
-        F.toast('Guardado', 'ok', 1400);
-      } catch (err) { F.toast(err.message, 'error'); loadPeople(); }
-    });
+    const draftChange = (e) => {
+      const t = e.target, id = t.dataset.pp || t.dataset.pai || t.dataset.pdaily; if (!id) return;
+      const d = edit.get(id); if (!d) return;
+      if (t.dataset.pp) { if (t.checked) delete d.perms[t.dataset.pk]; else d.perms[t.dataset.pk] = false; }
+      else if (t.dataset.pai) {
+        d.ai[t.dataset.pak] = t.value;
+        // quien pega su propia clave necesita ver Integraciones; quien no, no (se puede ajustar a mano después)
+        if (Object.values(d.ai).includes('own')) delete d.perms.integraciones; else d.perms.integraciones = false;
+        renderPeople();
+      } else d.daily_usd = t.value;
+    };
+    q('#aPeople').addEventListener('change', draftChange);
+    q('#aPeople').addEventListener('input', (e) => { if (e.target.dataset.pdaily) draftChange(e); });
 
     /* ----- opciones sueltas: se guardan al cambiar ----- */
     el.addEventListener('change', (e) => {
