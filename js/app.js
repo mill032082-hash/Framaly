@@ -132,9 +132,16 @@
       ${p ? `<a class="proj-chip" href="#/editor" title="Proyecto actual">${I('film')}<span>${F.esc(p.name)}</span></a>` : ''}
       ${window.FRAMALY_DEMO ? '<span class="tag or" title="Vista de demostración: la IA y las descargas funcionan en la app instalada en tu PC">Vista demo</span>' : ''}
       ${F.cloud?.isAdmin() ? `<button class="icon-btn bell" id="tbBell" title="Avisos de consumo y personas" aria-label="Avisos">${I('bell')}<span class="n" id="tbBellN" style="display:none"></span></button>` : ''}
+      <button class="btn sm" id="tbUpd" title="Guarda tus cambios en la nube y carga la última versión de FRAMALY">${I('refresh')}<span class="bt">Actualizar</span></button>
       <button class="btn sm" id="tbHelp" title="Instrucciones de esta sección">${I('script')}<span class="bt">Instrucciones</span></button>
       <button class="btn primary sm" id="tbNew" title="Nuevo proyecto">${I('plus')}<span class="bt">Nuevo proyecto</span></button>`;
     F.$('#tbNew').onclick = () => F.views.newProject();
+    F.$('#tbUpd').onclick = async (e) => {
+      const b = e.currentTarget; F.busy(b, true, 'Actualizando…');
+      // primero se envían a la nube los cambios pendientes; después se carga la última versión de la app
+      try { if (F.cloud?.configured?.() && F.cloud.user) await F.cloud.sync({ manual: true }); } catch (err) { /* si falla la nube, igual se actualiza la app */ }
+      location.reload();
+    };
     const bl = F.$('#tbBell'); if (bl) bl.onclick = bellModal;
     bell();
     F.$('#tbHelp').onclick = () => F.showHelp(r.id);
