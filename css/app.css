@@ -620,3 +620,10 @@ body.has-ask #toasts { bottom: 82px; }
 .spark i:hover { opacity: 1; }
 .shared-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 10px; font-size: 12.5px; color: var(--muted); }
 .shared-line b { color: var(--ok, #34d399); }
+.fw-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px; margin: 6px 0 10px; border: 1px solid var(--line2); background: var(--panel3); font-size: 13px; }
+.fw-banner.ok { background: rgba(60, 207, 145, .1); border-color: rgba(60, 207, 145, .35); }
+.fw-banner.ok > div > b { color: var(--ok); }
+.fw-banner.warn { background: var(--or-soft); border-color: rgba(255, 150, 60, .35); }
+.fw-banner.warn > div > b { color: var(--or2); }
+.own-sec { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line2); }
+.fw-banner .tag, .own-sec .tag { white-space: nowrap; flex: none; }

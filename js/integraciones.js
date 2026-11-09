@@ -55,7 +55,7 @@
     const ownTag = (k) => !F.api.has(k) ? ['Sin configurar', ''] : data.own[k] === 'ok' ? ['Conectado', 'ok'] : data.own[k] === 'fail' ? ['No funciona', 'err'] : ['Falta probar', 'or'];
     const ownCard = (a) => `<div class="card int-card">${head(a, ...ownTag(a.k))}
       <label class="lbl">API key</label><div class="keyrow"><input type="password" data-key="${a.k}" value="${esc(S.keys[a.k])}" placeholder="Pega tu clave aquí" autocomplete="off" spellcheck="false"><button class="icon-btn" data-eye="${a.k}" title="Mostrar">${I('eye')}</button><button class="btn" data-test="${a.k}">Probar</button></div>
-      ${cloudOn && C.aiBaseMode(a.k) === 'both' && !C.isAdmin() ? `<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn sm" data-src="${a.k}:shared">Volver a la clave de FRAMALY</button><span class="mini">El administrador comparte esta API contigo.</span></div>` : ''}
+      ${cloudOn && C.aiBaseMode(a.k) === 'both' && !C.isAdmin() ? `<div class="fw-banner ${stOf(a.k) === 'ok' ? 'ok' : 'warn'}"><div><b>${stOf(a.k) === 'ok' ? 'Tienes disponible la API de FRAMALY (del administrador)' : 'La API de FRAMALY (del administrador) no está disponible ahora'}</b><div class="mini">Ahora estás usando tu propia API.</div></div><button class="btn sm" data-src="${a.k}:shared">Usar la de FRAMALY</button></div>` : ''}
       ${a.k === 'minimax' ? '<p class="mini" style="margin:8px 0 0">MiniMax suele no permitir llamadas directas desde el navegador: funciona mejor con la clave de FRAMALY.</p>' : ''}${models(a.k)}${feats(a)}</div>`;
     /* --- saldo del proveedor + historial de la API (administrador) --- */
     const history = (a) => {
@@ -108,18 +108,22 @@
         <details style="margin-top:10px" class="small muted"><summary style="cursor:pointer;color:var(--or2)">Modelos</summary>${models(a.k)}</details></div>`;
     };
     /* --- clave de FRAMALY, vista de una persona --- */
-    /* Opción para que cada persona agregue su propia clave aunque FRAMALY comparta la suya */
-    const ownOption = (a) => `<details class="own-opt" style="margin-top:10px"${S.keys[a.k] ? ' open' : ''}><summary style="cursor:pointer;color:var(--or2)" class="small">Usar mi propia clave de ${esc(a.name.split(' · ')[0])} (opcional)</summary>
-        <p class="mini" style="margin:8px 0">Si pegas tu clave, tus usos se cobran a tu cuenta del proveedor y no cuentan en el tope de FRAMALY.</p>
+    /* Aviso: ¿estás conectado a la API de FRAMALY (la del administrador)? */
+    const fwBanner = (a, active) => {
+      const ok = stOf(a.k) === 'ok', nm = esc(a.name.split(' · ')[0]);
+      return `<div class="fw-banner ${ok ? 'ok' : 'warn'}"><div><b>${ok ? `Estás conectado a la API de FRAMALY (del administrador)` : 'La API de FRAMALY (del administrador) no está disponible ahora'}</b><div class="mini">${ok ? `${nm} funciona con la clave que el administrador comparte contigo.` : 'El administrador todavía no la ha conectado o está fallando.'}</div></div><span class="tag ${active ? 'ok' : ''}">${active ? 'En uso' : 'Disponible'}</span></div>`;
+    };
+    /* Sección propia: cada persona puede conectar su API cuando el administrador lo permite */
+    const ownSection = (a, active) => `<div class="own-sec"><div class="row2"><b style="color:var(--text)">Tu propia API de ${esc(a.name.split(' · ')[0])} (opcional)</b><span class="tag ${active ? 'ok' : ''}">${active ? 'En uso' : S.keys[a.k] ? 'Guardada' : 'Sin conectar'}</span></div>
+        <p class="mini" style="margin:6px 0 8px">Si pegas tu clave, tus usos se cobran a tu cuenta del proveedor y no cuentan en el tope de FRAMALY. Se guarda solo en este navegador.</p>
         <div class="keyrow"><input type="password" data-key="${a.k}" value="${esc(S.keys[a.k])}" placeholder="Pega tu clave aquí" autocomplete="off" spellcheck="false"><button class="icon-btn" data-eye="${a.k}" title="Mostrar">${I('eye')}</button></div>
-        <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn sm primary" data-src="${a.k}:own">Usar mi clave</button><span class="mini">Se guarda solo en este navegador.</span></div></details>`;
+        <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn sm primary" data-src="${a.k}:own">Usar mi clave</button></div></div>`;
     const personCard = (a) => {
-      const cap = +C.access?.daily_usd || 0, used = +data.rep?.mine_today || 0, pct = cap > 0 ? Math.round((used / cap) * 100) : 0;
+      const cap = +C.access?.daily_usd || 0, used = +data.rep?.mine_today || 0, pct = cap > 0 ? Math.round((used / cap) * 100) : 0, both = cloudOn && C.aiBaseMode(a.k) === 'both';
       return `<div class="card int-card">${head(a, ...(stOf(a.k) === 'ok' ? ['Conectado', 'ok'] : ['No disponible aún', 'or']))}
-        ${stOf(a.k) === 'ok' ? '<div class="shared-line"><b>Conectado</b> · compartido contigo por el administrador</div>' : '<div class="shared-line"><b style="color:var(--or2)">No disponible aún</b> · el administrador todavía no la ha conectado o está fallando.</div>'}
-        <p class="mini" style="margin:0 0 8px">Usas la clave de FRAMALY. No necesitas configurar nada.</p>
+        ${fwBanner(a, true)}
         ${data.rep ? `${bar(pct, pct >= 80)}<div class="row2"><span>Hoy llevas ${usd(used)} de ${usd(cap)}</span><span>${pct}% de tu cupo</span></div>` : '<div class="mini">Cargando tu cupo…</div>'}
-        ${cloudOn && C.aiBaseMode(a.k) === 'both' ? ownOption(a) : ''}
+        ${both ? ownSection(a, false) : '<p class="mini" style="margin:8px 0 0">Esta API la maneja el administrador: no necesitas conectar nada.</p>'}
         ${feats(a)}</div>`;
     };
     const offCard = (a) => `<div class="card int-card">${head(a, 'No habilitada', '')}<p class="mini" style="margin:0">Esta IA no está habilitada para tu cuenta. Pídeselo a quien administra FRAMALY.</p>${feats(a)}</div>`;
@@ -144,12 +148,21 @@
         return `<div class="err-row"><div class="row" style="gap:8px;flex-wrap:wrap"><span class="tag ${cls}">${esc(lbl)}</span><b>${esc(who)}</b>${e.status ? `<span class="mini">código ${e.status}</span>` : ''}<span class="grow"></span><span class="mini">${esc(e.email || '')} · ${F.ago(new Date(e.created_at).getTime())}</span></div><div class="mini" style="margin-top:4px">${esc(e.message)}</div>${/key id used as api key/i.test(e.message) ? '<div class="mini" style="color:var(--or2)">Pegaste el ID de la clave, no la clave. Crea o rota la clave en el proveedor y copia el valor completo (empieza con «sk_») en el momento en que se muestra.</div>' : tip ? `<div class="mini" style="color:var(--or2)">${esc(tip)}</div>` : ''}</div>`; }).join('');
       return `<h2 class="sec-t" style="margin-top:22px">Errores recientes <span class="line"></span>${list.length ? '<button class="btn sm" data-errclear>Limpiar</button>' : ''}</h2><div class="card">${rows || '<p class="mini" style="margin:0">Sin errores. Aquí aparecerán los fallos de las APIs: clave rechazada, saldo agotado, límites alcanzados…</p>'}</div>`;
     };
+    /* Aviso general: qué APIs de FRAMALY (del administrador) tiene conectadas esta persona */
+    const fwNotice = () => {
+      if (!cloudOn || C.isAdmin()) return '';
+      const on = AIS.filter((a) => ['shared', 'both'].includes(C.aiBaseMode(a.k)) && stOf(a.k) === 'ok').map((a) => a.name.split(' · ')[0]);
+      return on.length
+        ? `<div class="fw-banner ok" style="margin-bottom:14px"><div><b>Estás conectado a la API de FRAMALY (del administrador)</b><div class="mini">APIs disponibles: ${on.map(esc).join(', ')}. Abajo, en cada una, también puedes conectar tu propia API si el administrador lo permite.</div></div></div>`
+        : '<div class="fw-banner warn" style="margin-bottom:14px"><div><b>Todavía no hay una API de FRAMALY conectada para ti</b><div class="mini">Pídeselo al administrador o conecta tu propia API en la tarjeta que lo permita.</div></div></div>';
+    };
     const draw = () => {
       if (dead) return;
       el.innerHTML = `<div class="page">
         <div class="notice">${I('shield')}<div>${cloudOn
           ? (anyOwn ? '<b>Tus claves propias se guardan solo en este navegador</b> y se envían directo a cada proveedor. Las claves de FRAMALY viven en el servidor y no se pueden ver.' : '<b>Las claves de FRAMALY viven en el servidor</b> y nadie las ve. Cada uso se mide y respeta los límites.')
           : '<b>Tus claves se guardan solo en este navegador</b> (almacenamiento local de tu PC) y se envían directamente a cada proveedor, sin servidores intermedios. No uses FRAMALY en equipos compartidos con tus claves guardadas.'}</div></div>
+        ${fwNotice()}
         <div class="int-grid">${AIS.map(aiCard).join('')}${ytCard}</div>${people()}${errors()}
         <div class="split even" style="margin-top:16px">
           <div class="card"><h3>${I('bot')} Preferencias de agentes</h3><label class="lbl">Proveedor de texto preferido</label><div class="seg" id="tp"><button data-v="anthropic">Claude</button><button data-v="openai">OpenAI</button><button data-v="gemini">Gemini</button><button data-v="minimax">MiniMax</button></div><p class="hint">Si el preferido no está disponible, se usa el otro automáticamente.</p></div>
