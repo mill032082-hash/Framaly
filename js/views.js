@@ -189,7 +189,23 @@
       <div><div class="card"><h3>${I('sparkles')} Resultados</h3><div class="img-grid" id="iRes"><div class="empty" style="grid-column:1/-1">${I('image')}<p class="small">Las imágenes nuevas aparecerán aquí y se guardan automáticamente en la biblioteca.</p></div></div></div>
       <div class="card"><h3>${I('grid')} Galería IA <span class="grow"></span><a class="btn sm ghost" href="#/biblioteca">Ver biblioteca</a></h3><div class="img-grid" id="iGal"></div></div></div>
     </div></div>`;
-    const cost = () => { const per = st.provider === 'gemini' ? 0.039 : st.provider === 'minimax' ? 0.0035 : { low: 0.016, medium: 0.063, high: 0.25 }[st.quality]; el.querySelector('#iCost').textContent = `Costo aproximado: US$${(per * st.n).toFixed(2)} · se guardan en tu biblioteca`; };
+    // Precio por imagen en US$ (cuadrada 1024×1024 / horizontal-vertical 1536×1024), por calidad. Estimados de OpenAI.
+    const GPT_PRICE = {
+      'gpt-image-2': { name: 'GPT Image 2', sq: { low: 0.006, medium: 0.053, high: 0.211 }, wide: { low: 0.005, medium: 0.041, high: 0.165 } },
+      'gpt-image-1.5': { name: 'GPT Image 1.5', sq: { low: 0.009, medium: 0.034, high: 0.133 }, wide: { low: 0.013, medium: 0.05, high: 0.2 } },
+    };
+    const cost = () => {
+      const out = el.querySelector('#iCost');
+      const gp = st.provider === 'openai' && GPT_PRICE[st.model];
+      if (gp) {
+        const per = gp[st.size === '1024x1024' ? 'sq' : 'wide'][st.quality];
+        const q = { low: 'baja', medium: 'media', high: 'alta' }[st.quality];
+        out.innerHTML = `<b>Costo con ${gp.name}: US$${(per * st.n).toFixed(3)}</b> (US$${per.toFixed(3)} por imagen, calidad ${q}${st.n > 1 ? ` × ${st.n}` : ''}) · estimado, se cobra en tu cuenta de OpenAI · se guardan en tu biblioteca`;
+        return;
+      }
+      const per = st.provider === 'gemini' ? 0.039 : st.provider === 'minimax' ? 0.0035 : { low: 0.016, medium: 0.063, high: 0.25 }[st.quality];
+      out.textContent = `Costo aproximado: US$${(per * st.n).toFixed(2)} · se guardan en tu biblioteca`;
+    };
     const gal = () => { const ai = F.media.images().filter((m) => m.source === 'ai').slice(0, 24); el.querySelector('#iGal').innerHTML = ai.length ? ai.map((m) => V.tile(m)).join('') : '<div class="small dim">Aún no generaste imágenes.</div>'; };
     cost(); gal();
     const off = F.on('media', gal);
@@ -197,7 +213,7 @@
     el.querySelector('#iPrompt').addEventListener('input', (e) => { st.prompt = e.target.value; save(); });
     el.querySelector('#iSty').addEventListener('click', (e) => { const c = e.target.closest('[data-s]'); if (!c) return; st.style = c.dataset.s; save(); el.querySelectorAll('#iSty .chip').forEach((x) => x.classList.toggle('on', x === c)); });
     el.querySelector('#iProv').addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (!b) return; st.provider = b.dataset.p; save(); el.querySelectorAll('#iProv button').forEach((x) => x.classList.toggle('on', x === b)); el.querySelector('#iModelRow').style.display = st.provider === 'openai' ? '' : 'none'; cost(); });
-    el.querySelector('#iModel').addEventListener('change', (e) => { st.model = e.target.value; save(); });
+    el.querySelector('#iModel').addEventListener('change', (e) => { st.model = e.target.value; save(); cost(); });
     for (const [id, k] of [['iSize', 'size'], ['iQ', 'quality'], ['iN', 'n']]) el.querySelector('#' + id).addEventListener('change', (e) => { st[k] = k === 'n' ? +e.target.value : e.target.value; save(); cost(); });
     el.querySelector('#iEnh').onclick = async (e) => {
       if (!st.prompt.trim()) return F.toast('Escribe primero una idea');
