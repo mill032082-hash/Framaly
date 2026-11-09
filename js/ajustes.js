@@ -75,6 +75,8 @@
     /* ----- personas con acceso (solo administrador) ----- */
     let people = [], invites = [];
     const open = new Set();
+    const editing = new Set(), draft = {};   // quién se está editando y los cambios aún sin guardar
+    const AI_DEFAULT = { anthropic: 'own', openai: 'own', elevenlabs: 'own', gemini: 'own', minimax: 'own' };
     const SECS = [['editor', 'Editor de video'], ['flujos', 'Flujos y agentes'], ['guiones', 'Guiones'], ['imagenes', 'Imágenes'], ['voces', 'Voces'], ['efectos', 'Efectos y transiciones'], ['biblioteca', 'Biblioteca'], ['publicar', 'Publicar'], ['integraciones', 'Integraciones API'], ['ajustes', 'Ajustes']];
     const AIS = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini'], ['minimax', 'MiniMax']];
     const MODES = [['shared', 'Clave de FRAMALY'], ['own', 'Que ponga la suya'], ['off', 'Sin IA']];
@@ -91,13 +93,17 @@
           : p.status === 'approved'
             ? `<button class="btn sm danger" data-p="${p.user_id}" data-s="blocked">Quitar acceso</button>`
             : `<button class="btn sm primary" data-p="${p.user_id}" data-s="approved">Aprobar</button>${p.status === 'pending' ? `<button class="btn sm" data-p="${p.user_id}" data-s="blocked">Rechazar</button>` : ''}`;
-        const perms = p.perms || {}, ai = p.ai || {};
-        const panel = open.has(p.user_id) && p.role !== 'admin' ? `<div class="perms">
+        const ed = editing.has(p.user_id), d = ed ? draft[p.user_id] : null;
+        const perms = (d ? d.perms : p.perms) || {}, ai = (d ? d.ai : p.ai) || {}, daily = d ? d.daily_usd : (p.daily_usd ?? 2);
+        const panel = open.has(p.user_id) && p.role !== 'admin' ? `<div class="perms"><fieldset ${ed ? '' : 'disabled'} style="border:0;margin:0;padding:0;min-width:0">
             <b class="small">Puede usar:</b><div class="perm-grid">${SECS.map(([k, n]) => `<label class="check"><input type="checkbox" data-pp="${p.user_id}" data-pk="${k}" ${perms[k] === false ? '' : 'checked'}> ${n}</label>`).join('')}</div>
             <b class="small" style="display:block;margin-top:14px">IA: ¿con qué clave trabaja?</b>
             <div class="ai-grid">${AIS.map(([k, n]) => `<div><label class="lbl">${n}</label><select data-pai="${p.user_id}" data-pak="${k}">${MODES.map(([v, l]) => `<option value="${v}" ${(ai[k] || 'own') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`).join('')}
-              <div><label class="lbl">Tope diario con clave de FRAMALY (US$)</label><input type="number" min="0" step="0.5" data-pdaily="${p.user_id}" value="${p.daily_usd ?? 2}"></div></div>
-            <p class="hint">«Clave de FRAMALY»: usa tu clave sin verla y cuenta para tus límites. «Que ponga la suya»: ve Integraciones API para pegar su clave. «Sin IA»: esa API queda desactivada.</p></div>` : '';
+              <div><label class="lbl">Tope diario con clave de FRAMALY (US$)</label><input type="number" min="0" step="0.5" data-pdaily="${p.user_id}" value="${daily}"></div></div></fieldset>
+            <p class="hint">«Clave de FRAMALY»: usa tu clave sin verla y cuenta para tus límites. «Que ponga la suya»: ve Integraciones API para pegar su clave. «Sin IA»: esa API queda desactivada.</p>
+            <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px">${ed
+              ? `<button class="btn primary" data-psave="${p.user_id}">${I('check')} Guardar cambios</button><button class="btn" data-pcancel="${p.user_id}">Cancelar</button><span class="small muted">Tienes cambios sin guardar hasta que pulses Guardar.</span>`
+              : `<button class="btn" data-pedit="${p.user_id}">${I('edit')} Editar</button><span class="small muted">Pulsa Editar para cambiar permisos o claves de esta persona.</span>`}</div></div>` : '';
         const permBtn = p.role === 'admin' || me ? '' : `<button class="btn sm" data-perm="${p.user_id}">${open.has(p.user_id) ? 'Cerrar' : 'Permisos'}</button>`;
         return `<div class="person"><span class="em"><b>${F.esc(p.email || 'Sin correo')}</b>${me ? ' <span class="small muted">(tú)</span>' : ''}<br><span class="small muted">${inv ? 'esperando que se registre' : F.ago(new Date(p.created_at).getTime())}</span></span>${p.role === 'admin' ? '<span class="tag or">Administrador</span>' : ''}<span class="tag ${cls}">${lbl}</span>${permBtn}${acts}${panel}</div>`;
       }).join('');
@@ -111,7 +117,31 @@
     const find = (id) => (String(id).startsWith('inv:') ? invites.find((i) => 'inv:' + i.email === id) : people.find((x) => x.user_id === id));
     q('#aPeople').addEventListener('click', async (e) => {
       const pb = e.target.closest('[data-perm]');
-      if (pb) { const id = pb.dataset.perm; open.has(id) ? open.delete(id) : open.add(id); return renderPeople(); }
+      if (pb) { const id = pb.dataset.perm; if (open.has(id)) { open.delete(id); editing.delete(id); delete draft[id]; } else open.add(id); return renderPeople(); }
+      const ebtn = e.target.closest('[data-pedit]');
+      if (ebtn) {
+        const id = ebtn.dataset.pedit, p = find(id); if (!p) return;
+        draft[id] = { perms: { ...(p.perms || {}) }, ai: { ...AI_DEFAULT, ...(p.ai || {}) }, daily_usd: p.daily_usd ?? 2 };
+        editing.add(id); return renderPeople();
+      }
+      const cbtn = e.target.closest('[data-pcancel]');
+      if (cbtn) { const id = cbtn.dataset.pcancel; editing.delete(id); delete draft[id]; return renderPeople(); }
+      const sbtn = e.target.closest('[data-psave]');
+      if (sbtn) {
+        const id = sbtn.dataset.psave, p = find(id), d = draft[id]; if (!p || !d) return;
+        const inp = [...q('#aPeople').querySelectorAll('[data-pdaily]')].find((x) => x.dataset.pdaily === id);
+        const v = inp ? +inp.value : +d.daily_usd;
+        if (!(v >= 0)) return F.toast('Escribe un monto válido para el tope diario');
+        F.busy(sbtn, true, 'Guardando…');
+        try {
+          await C.setPerson(id, { perms: d.perms, ai: d.ai, daily_usd: v });
+          p.perms = d.perms; p.ai = d.ai; p.daily_usd = v;
+          editing.delete(id); delete draft[id];
+          F.toast('Cambios guardados', 'ok');
+          renderPeople();
+        } catch (err) { F.toast(err.message, 'error'); F.busy(sbtn, false); }
+        return;
+      }
       const del = e.target.closest('[data-invdel]');
       if (del) { try { await C.removeInvite(del.dataset.invdel); F.toast('Correo quitado', 'ok'); await loadPeople(); } catch (err) { F.toast(err.message, 'error'); } return; }
       const b = e.target.closest('[data-p]'); if (!b) return;
@@ -128,24 +158,17 @@
     q('#aPeople').addEventListener('change', async (e) => {
       const t = e.target;
       const id = t.dataset.pp || t.dataset.pai || t.dataset.pdaily; if (!id) return;
-      const p = find(id); if (!p) return;
-      try {
-        if (t.dataset.pp) {
-          const perms = { ...(p.perms || {}) };
-          if (t.checked) delete perms[t.dataset.pk]; else perms[t.dataset.pk] = false;
-          await C.setPerson(id, { perms }); p.perms = perms;
-        } else if (t.dataset.pai) {
-          const ai = { anthropic: 'own', openai: 'own', elevenlabs: 'own', gemini: 'own', minimax: 'own', ...(p.ai || {}), [t.dataset.pak]: t.value };
-          // quien pega su propia clave necesita ver Integraciones; quien no, no
-          const perms = { ...(p.perms || {}) };
-          if (Object.values(ai).includes('own')) delete perms.integraciones; else perms.integraciones = false;
-          await C.setPerson(id, { ai, perms }); p.ai = ai; p.perms = perms; renderPeople();
-        } else {
-          const v = +t.value; if (!(v >= 0)) throw new Error('Escribe un monto válido');
-          await C.setPerson(id, { daily_usd: v }); p.daily_usd = v;
-        }
-        F.toast('Guardado', 'ok', 1400);
-      } catch (err) { F.toast(err.message, 'error'); loadPeople(); }
+      const d = draft[id]; if (!d || !editing.has(id)) return;   // solo se edita en modo Editar; nada se guarda hasta pulsar Guardar
+      if (t.dataset.pp) {
+        if (t.checked) delete d.perms[t.dataset.pk]; else d.perms[t.dataset.pk] = false;
+      } else if (t.dataset.pai) {
+        d.ai[t.dataset.pak] = t.value;
+        // quien pega su propia clave necesita ver Integraciones; quien no, no
+        if (Object.values(d.ai).includes('own')) delete d.perms.integraciones; else d.perms.integraciones = false;
+        renderPeople();
+      } else {
+        const v = +t.value; if (v >= 0) d.daily_usd = v;
+      }
     });
 
     /* ----- opciones sueltas: se guardan al cambiar ----- */
