@@ -1,14 +1,10 @@
 // FRAMALY Studio · Asesor IA (función segura de Supabase)
 // La clave de Anthropic vive solo aquí (secreto ANTHROPIC_API_KEY); nunca llega al navegador.
-// Solo responde a personas con sesión iniciada Y aprobadas, y limita las consultas por día.
+// Solo responde a personas con sesión iniciada Y aprobadas, limita las consultas por día,
+// respeta el límite mensual de Claude y registra su gasto junto al resto de las APIs.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { CORS, PRICE, checkBudget, db, fail, json, record, tokenCost, whoIs } from "./budget.ts";
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
 const DAILY_LIMIT = Number(Deno.env.get("ASESOR_DAILY_LIMIT") ?? "60");
 const MODEL = Deno.env.get("ASESOR_MODEL") ?? "claude-haiku-5-5";
 const MAX_CONTEXT = 14000, MAX_MSG = 1500, MAX_HISTORY = 8;
@@ -27,24 +23,18 @@ Reglas:
 - Para llevar a la persona a una sección, escribe un enlace así: [[#/ruta|Texto]]. Rutas válidas: #/inicio, #/editor, #/flujos, #/guiones, #/imagenes, #/voces, #/efectos, #/biblioteca, #/publicar, #/integraciones, #/ajustes.
 - Sé breve: normalmente menos de 180 palabras.`;
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
-
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
-  if (req.method !== "POST") return json({ error: "method" }, 405);
+  if (req.method !== "POST") return fail(405, "method", "Método no permitido.");
   try {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) return json({ error: "not_configured" });
 
     // 1) Quién es y si está aprobada
-    const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
-    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { data: auth, error: authErr } = await admin.auth.getUser(token);
-    if (authErr || !auth?.user) return json({ error: "unauthorized" }, 401);
-    const uid = auth.user.id;
-    const { data: acc } = await admin.from("framaly_access").select("status").eq("user_id", uid).maybeSingle();
-    if (acc?.status !== "approved") return json({ error: "forbidden" }, 403);
+    const client = db();
+    const who = await whoIs(client, req);
+    if (who instanceof Response) return who;
+    const { uid, acc } = who;
 
     // 2) Entrada validada
     const body = await req.json().catch(() => ({}));
@@ -54,13 +44,15 @@ Deno.serve(async (req: Request) => {
       .slice(-MAX_HISTORY)
       .map((m: any) => ({ role: m.role, content: m.content.slice(0, MAX_MSG) }));
     while (messages.length && messages[0].role !== "user") messages.shift();
-    if (!messages.length || messages[messages.length - 1].role !== "user") return json({ error: "bad_request" }, 400);
+    if (!messages.length || messages[messages.length - 1].role !== "user") return fail(400, "bad_request", "Pregunta no válida.");
     const context = String(body.context ?? "").slice(0, MAX_CONTEXT);
 
-    // 3) Límite diario
-    const { data: ok, error: hitErr } = await admin.rpc("framaly_advisor_hit", { p_user: uid, p_limit: DAILY_LIMIT });
-    if (hitErr) return json({ error: "server" }, 500);
+    // 3) Límite diario del asesor y límite mensual de Claude
+    const { data: ok, error: hitErr } = await client.rpc("framaly_advisor_hit", { p_user: uid, p_limit: DAILY_LIMIT });
+    if (hitErr) return fail(500, "server", "Error del servidor.");
     if (ok === false) return json({ error: "limit", limit: DAILY_LIMIT });
+    const stop = await checkBudget(client, "anthropic", uid, acc, false);
+    if (stop) return json({ error: "provider_limit" });
 
     // 4) Consulta a Claude
     const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -79,9 +71,11 @@ Deno.serve(async (req: Request) => {
     }
     const j = await r.json();
     const text = (j.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
+    const tin = Number(j.usage?.input_tokens ?? 0), tout = Number(j.usage?.output_tokens ?? 0);
+    await record(client, { uid, acc, provider: "anthropic", kind: "asesor", units: { in_tokens: tin, out_tokens: tout, model: MODEL }, cost: tokenCost(PRICE.anthropic.perMTok, PRICE.anthropic.fallback, MODEL, tin, tout) });
     return json({ text: text || "No pude generar una respuesta. Inténtalo de nuevo." });
   } catch (e) {
     console.error(e);
-    return json({ error: "server" }, 500);
+    return fail(500, "server", "Error del servidor.");
   }
 });

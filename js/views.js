@@ -575,44 +575,4 @@
     };
     return offEx;
   };
-
-  /* =================== INTEGRACIONES =================== */
-  V.integraciones = (el) => {
-    const S = F.settings;
-    const card = (k, logo, bg, name, sub, feats, extra = '') => `<div class="card int-card"><div class="hd"><div class="lg" style="background:${bg}">${logo}</div><div style="flex:1"><b>${name}</b><small>${sub}</small></div><span class="tag ${F.api.has(k) ? 'ok' : ''}" data-st="${k}">${F.api.has(k) ? 'Conectado' : 'Sin configurar'}</span></div>
-      <label class="lbl">${k === 'googleClientId' ? 'OAuth Client ID' : 'API key'}</label><div class="keyrow"><input type="${k === 'googleClientId' ? 'text' : 'password'}" data-key="${k}" value="${F.esc(S.keys[k])}" placeholder="${k === 'googleClientId' ? 'xxxxxxxx.apps.googleusercontent.com' : 'Pega tu clave aquí'}" autocomplete="off" spellcheck="false">${k !== 'googleClientId' ? `<button class="icon-btn" data-eye="${k}" title="Mostrar">${I('eye')}</button>` : ''}<button class="btn" data-test="${k}">${k === 'googleClientId' ? 'Conectar' : 'Probar'}</button></div>
-      ${extra}<div class="feat">${feats.map((f) => `<span class="tag">${f}</span>`).join('')}</div></div>`;
-    const model = (k, label, list) => `<label class="lbl">${label}</label><input type="text" data-model="${k}" value="${F.esc(S.models[k])}" list="dl-${k}"><datalist id="dl-${k}">${list.map((x) => `<option value="${x}">`).join('')}</datalist>`;
-    el.innerHTML = `<div class="page">
-      <div class="notice">${I('shield')}<div><b>Tus claves se guardan solo en este navegador</b> (almacenamiento local de tu PC) y se envían directamente a cada proveedor, sin servidores intermedios. No uses FRAMALY en equipos compartidos con tus claves guardadas.</div></div>
-      <div class="int-grid">
-        ${card('anthropic', 'A', 'linear-gradient(135deg,#d97757,#b4532a)', 'Claude · Anthropic', 'Agentes de texto: guiones, SEO, prompts', ['Guionista', 'SEO YouTube', 'Mejorar prompts'], model('anthropic', 'Modelo', ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5']))}
-        ${card('openai', 'AI', 'linear-gradient(135deg,#10a37f,#0b7a5e)', 'OpenAI', 'Imágenes, voces y texto', ['Imágenes', 'Voz TTS', 'Guionista', 'SEO'], `<div class="grid3">${model('image', 'Imágenes', ['gpt-image-1', 'gpt-image-1-mini', 'dall-e-3'])}${model('tts', 'Voz', ['gpt-4o-mini-tts', 'tts-1-hd', 'tts-1'])}${model('openai', 'Texto', ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini'])}</div>`)}
-        ${card('elevenlabs', 'XI', 'linear-gradient(135deg,#2b2b2b,#000)', 'ElevenLabs', 'Voces ultra realistas y clonadas', ['Voces premium', 'Multilingüe', 'Voces clonadas'], model('eleven', 'Modelo', ['eleven_multilingual_v2', 'eleven_turbo_v2_5', 'eleven_flash_v2_5', 'eleven_v3']))}
-        ${card('googleClientId', I('youtube'), 'linear-gradient(135deg,#ff3d3d,#c40000)', 'YouTube · Google', 'Subida directa a tu canal', ['Subir videos', 'Miniaturas', 'Metadatos'], `<details style="margin-top:12px" class="small muted"><summary style="cursor:pointer;color:var(--or2)">¿Cómo obtengo el Client ID?</summary><ol style="padding-left:18px;line-height:1.8">
-          <li>Entra a <b>console.cloud.google.com</b> y crea un proyecto.</li><li>En “APIs y servicios” habilita <b>YouTube Data API v3</b>.</li><li>Configura la pantalla de consentimiento OAuth (tipo Externo) y añádete como usuario de prueba.</li><li>Credenciales → Crear → <b>ID de cliente OAuth</b> → tipo “Aplicación web”.</li><li>En “Orígenes de JavaScript autorizados” añade <b>http://localhost:5577</b>.</li><li>Copia el Client ID aquí y abre FRAMALY con <b>Iniciar FRAMALY.bat</b>.</li></ol></details>`)}
-      </div>
-      <div class="split even" style="margin-top:16px">
-        <div class="card"><h3>${I('bot')} Preferencias de agentes</h3><label class="lbl">Proveedor de texto preferido</label><div class="seg" id="tp"><button data-v="anthropic">Claude (Anthropic)</button><button data-v="openai">OpenAI</button></div><p class="hint">Si el preferido no tiene clave, se usa el otro automáticamente.</p></div>
-      </div></div>`;
-    const q = (s) => el.querySelector(s);
-    const tp = () => q('#tp').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === S.textProvider));
-    tp();
-    q('#tp').addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (b) { S.textProvider = b.dataset.v; F.saveSettings(); tp(); } });
-    el.addEventListener('input', (e) => {
-      const k = e.target.dataset.key, m = e.target.dataset.model;
-      if (k) { S.keys[k] = e.target.value.trim(); F.saveSettings(); const t = q(`[data-st="${k}"]`); t.className = 'tag ' + (F.api.has(k) ? 'ok' : ''); t.textContent = F.api.has(k) ? 'Guardado' : 'Sin configurar'; }
-      if (m) { S.models[m] = e.target.value.trim(); F.saveSettings(); }
-    });
-    el.addEventListener('click', async (e) => {
-      const eye = e.target.closest('[data-eye]'); if (eye) { const i = q(`[data-key="${eye.dataset.eye}"]`); i.type = i.type === 'password' ? 'text' : 'password'; }
-      const t = e.target.closest('[data-test]');
-      if (t) {
-        const k = t.dataset.test; if (!F.api.has(k)) return F.toast('Escribe primero la clave');
-        F.busy(t, true, '');
-        try { F.toast(await F.api.test(k), 'ok'); const s = q(`[data-st="${k}"]`); s.className = 'tag ok'; s.textContent = 'Conectado'; } catch (err) { F.toast(err.message, 'error'); }
-        F.busy(t, false);
-      }
-    });
-  };
 })();

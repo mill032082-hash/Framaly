@@ -12,7 +12,7 @@
   const st = (F.cloud = {
     status: 'off', // off | signedout | idle | syncing | error
     user: null, error: '', progress: '', last: Number(ls(LS_LAST)) || 0,
-    access: null, pendingCount: 0, // permiso de esta persona: { status: pending|approved|blocked, role: admin|user }
+    access: null, pendingCount: 0, unread: 0, notifs: [], // permiso de esta persona: { status: pending|approved|blocked, role: admin|user }
   });
   const set = (p) => { Object.assign(st, p); F.emit('cloud'); };
   /* La conexión viene de js/config.js: la persona usuaria no ve ni toca nada técnico */
@@ -79,9 +79,9 @@
   /** ¿Esta persona puede usar la sección? Sin nube todo está permitido; el administrador siempre puede. */
   st.can = (section) => !st.configured() || !st.user || st.isAdmin() || st.access?.perms?.[section] !== false;
   async function loadAccess(s, uid) {
-    const { data, error } = await s.from('framaly_access').select('status,role,perms').eq('user_id', uid).maybeSingle();
+    const { data, error } = await s.from('framaly_access').select('status,role,perms,ai,daily_usd').eq('user_id', uid).maybeSingle();
     if (error) throw error;
-    st.access = data || { status: 'pending', role: 'user', perms: { integraciones: false } };
+    st.access = data || { status: 'pending', role: 'user', perms: { integraciones: false }, ai: { anthropic: 'own', openai: 'own', elevenlabs: 'own' }, daily_usd: 2 };
   }
   /** Entra una sesión: primero se consulta su permiso, después se muestra la app */
   async function enter(u) {
@@ -110,6 +110,63 @@
     const { error } = await s.from('framaly_access').update({ perms }).eq('user_id', userId);
     if (error) throw new Error(explain(error));
   };
+  /* ---------- IA: clave compartida del servidor o clave propia ---------- */
+  /** 'shared' = usa la clave de FRAMALY · 'own' = pone la suya · 'off' = sin esa IA. Sin nube, siempre 'own'. */
+  st.aiMode = (p) => {
+    if (!st.configured() || !st.user) return 'own';
+    return st.access?.ai?.[p] || (st.isAdmin() ? 'shared' : 'own');
+  };
+  /** Envía una llamada a la API por la puerta segura (la clave nunca llega al navegador) */
+  st.gateway = async (provider, url, init = {}) => {
+    const s = await sb();
+    const { data } = await s.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error('Tu sesión venció. Vuelve a iniciar sesión.');
+    const u = new URL(url), c = cfg();
+    let body; if (init.body) { try { body = JSON.parse(init.body); } catch (e) { body = undefined; } }
+    return fetch(c.url + '/functions/v1/ia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, apikey: c.key },
+      body: JSON.stringify({ provider, method: String(init.method || 'GET').toUpperCase(), path: u.pathname + u.search, body }),
+    });
+  };
+  const rows = async (q) => { const { data, error } = await q; if (error) throw new Error(explain(error)); return data; };
+  /** Consumo: el administrador ve todo; cada persona, lo suyo */
+  st.report = async () => { const s = await sb(); const { data, error } = await s.rpc('framaly_usage_report'); if (error) throw new Error(explain(error)); return data; };
+  st.limits = async () => { const s = await sb(); return rows(s.from('framaly_limits').select('provider,monthly_usd,alert_pct')); };
+  st.setLimit = async (provider, patch) => { const s = await sb(); await rows(s.from('framaly_limits').update({ ...patch, updated_at: new Date().toISOString() }).eq('provider', provider)); };
+  /** Avisos del administrador (campanita) */
+  st.refreshNotifs = async () => {
+    if (!st.isAdmin()) return [];
+    const s = await sb();
+    const list = await rows(s.from('framaly_notifications').select('id,level,title,body,provider,read,created_at').order('created_at', { ascending: false }).limit(40));
+    const unread = list.filter((n) => !n.read).length;
+    const fresh = list.filter((n) => !n.read && !st.notifs.some((o) => o.id === n.id));
+    const first = !st.notifs.length && !st._notifsLoaded;
+    st.notifs = list; st._notifsLoaded = true;
+    if (unread !== st.unread) { st.unread = unread; F.emit('cloud'); }
+    if (!first) fresh.filter((n) => n.level !== 'info').forEach((n) => F.toast(n.title, n.level === 'crit' ? 'error' : 'info', 6000));
+    return list;
+  };
+  st.markRead = async (ids) => {
+    const s = await sb();
+    await rows(s.from('framaly_notifications').update({ read: true }).in('id', ids));
+    st.notifs = st.notifs.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n));
+    st.unread = st.notifs.filter((n) => !n.read).length; F.emit('cloud');
+  };
+  /** Ajustes de una persona (o de un correo preparado, con id "inv:correo") */
+  st.setPerson = async (id, patch) => {
+    const s = await sb();
+    if (String(id).startsWith('inv:')) await rows(s.from('framaly_invites').update(patch).eq('email', id.slice(4)));
+    else await rows(s.from('framaly_access').update(patch).eq('user_id', id));
+  };
+  st.invites = async () => { const s = await sb(); return rows(s.from('framaly_invites').select('email,perms,ai,daily_usd,created_at').order('created_at', { ascending: false })); };
+  st.addInvite = async (email) => {
+    const s = await sb();
+    await rows(s.from('framaly_invites').upsert({ email: String(email).trim().toLowerCase() }, { onConflict: 'email', ignoreDuplicates: true }));
+  };
+  st.removeInvite = async (email) => { const s = await sb(); await rows(s.from('framaly_invites').delete().eq('email', email)); };
+
   /** Pregunta al Asesor IA (función segura del servidor; la clave nunca llega al navegador) */
   st.ask = async (body) => {
     const s = await sb();
@@ -156,7 +213,7 @@
   st.signOut = async () => {
     const s = await sb();
     await s.auth.signOut();
-    entering = ''; st.access = null;
+    entering = ''; st.access = null; st.notifs = []; st.unread = 0; st._notifsLoaded = false;
     set({ user: null, status: 'signedout', progress: '' });
   };
 

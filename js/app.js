@@ -29,6 +29,21 @@
       <div class="side-foot"><b style="color:var(--text);font-size:12px">Conexiones</b><div class="apis" id="apiDots"></div></div>`;
     nav(); dots(); acct();
   }
+  /** Campanita del administrador: cuántos avisos sin leer */
+  function bell() {
+    const el = F.$('#tbBellN'); if (!el) return;
+    const n = F.cloud?.unread || 0;
+    el.textContent = n > 9 ? '9+' : String(n); el.style.display = n ? '' : 'none';
+  }
+  async function bellModal() {
+    const C = F.cloud; let list = C.notifs;
+    try { list = await C.refreshNotifs(); } catch (e) { /* usa lo que ya había */ }
+    const body = list.length
+      ? list.map((n) => `<div class="notif ${n.read ? '' : 'unread'} ${n.level}"><b>${F.esc(n.title)}</b><small>${F.esc(n.body)}</small><small>${F.ago(new Date(n.created_at).getTime())}</small></div>`).join('')
+      : '<p class="muted" style="margin:0">No hay avisos. Aquí verás cuándo una API se acerque a su límite, cuando se acabe, o cuando una persona llegue a su tope diario.</p>';
+    const ids = list.filter((n) => !n.read).map((n) => n.id);
+    F.modal({ title: 'Avisos', body, actions: [...(ids.length ? [{ label: 'Marcar todo como leído', primary: true, onClick: () => C.markRead(ids).catch((e) => F.toast(e.message, 'error')) }] : []), { label: 'Cerrar' }] });
+  }
   /** Menú: solo las secciones que esta persona puede usar (y sin títulos vacíos) */
   function nav() {
     const el = F.$('#nav'); if (!el) return;
@@ -116,9 +131,12 @@
     F.$('#topbar').innerHTML = `<button class="icon-btn menu" id="mMenu" aria-label="Abrir menú">${I('menu')}</button><h1>${r.name}</h1><span class="sub">${r.sub || ''}</span><span class="grow"></span>
       ${p ? `<a class="proj-chip" href="#/editor" title="Proyecto actual">${I('film')}<span>${F.esc(p.name)}</span></a>` : ''}
       ${window.FRAMALY_DEMO ? '<span class="tag or" title="Vista de demostración: la IA y las descargas funcionan en la app instalada en tu PC">Vista demo</span>' : ''}
+      ${F.cloud?.isAdmin() ? `<button class="icon-btn bell" id="tbBell" title="Avisos de consumo y personas" aria-label="Avisos">${I('bell')}<span class="n" id="tbBellN" style="display:none"></span></button>` : ''}
       <button class="btn sm" id="tbHelp" title="Instrucciones de esta sección">${I('script')}<span class="bt">Instrucciones</span></button>
       <button class="btn primary sm" id="tbNew" title="Nuevo proyecto">${I('plus')}<span class="bt">Nuevo proyecto</span></button>`;
     F.$('#tbNew').onclick = () => F.views.newProject();
+    const bl = F.$('#tbBell'); if (bl) bl.onclick = bellModal;
+    bell();
     F.$('#tbHelp').onclick = () => F.showHelp(r.id);
     F.$('#mMenu').onclick = () => menu(true);
   }
@@ -208,16 +226,16 @@
     });
     let started = false;
     const sync = () => {
-      acct(); nav();
+      acct(); nav(); bell();
       if (needGate()) { F.asesor?.unmount(); openGate(); if (gate.view !== (F.cloud.user ? 'pending' : 'login')) drawGate(); F.$('#view').innerHTML = ''; return; }
       if (gateEl) closeGate();
       F.asesor?.mount();
-      if (F.cloud?.isAdmin()) F.cloud.people().catch(() => {});
+      if (F.cloud?.isAdmin()) { F.cloud.people().catch(() => {}); F.cloud.refreshNotifs().catch(() => {}); }
       if (!started) { started = true; render().then(() => { if (!localStorage.getItem('framaly.onboarded')) F.onboarding(); }); }
       else if (F.cloud.user && gateOpened) { gateOpened = false; render(); }
     };
     // el administrador ve las solicitudes nuevas; los demás reciben sus permisos actualizados
-    setInterval(() => { const C = F.cloud; if (!C?.user) return; if (C.isAdmin()) C.people().catch(() => {}); else if (C.approved()) C.recheck().catch(() => {}); }, 60000);
+    setInterval(() => { const C = F.cloud; if (!C?.user) return; if (C.isAdmin()) { C.people().catch(() => {}); C.refreshNotifs().catch(() => {}); } else if (C.approved()) C.recheck().catch(() => {}); }, 60000);
     let gateOpened = false;
     F.on('cloud', () => { if (needGate()) gateOpened = true; sync(); });
     if (F.cloud?.configured()) await F.cloud.ready.catch(() => {});

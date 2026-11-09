@@ -211,7 +211,30 @@ Después, en [[#/publicar|Publicar]], pulsa **Conectar y subir**. Si no quieres 
 3. **Claude** (opcional, para guiones): en console.anthropic.com → API keys. Si no la pones, se usa OpenAI.
 4. **ElevenLabs** (opcional): elevenlabs.io → tu perfil → API key.
 5. Si quieres, cambia el **Modelo** de cada proveedor.
-Las claves se guardan **solo en este navegador** y se envían directo a cada proveedor. No se suben a la nube.` },
+Las claves propias se guardan **solo en este navegador** y se envían directo a cada proveedor. No se suben a la nube.
+Si tu cuenta usa la **clave de FRAMALY**, no necesitas ninguna: la IA ya viene conectada.` },
+
+    { id: 'integraciones.compartida', sec: 'integraciones', t: 'Usar la IA con la clave de FRAMALY (sin poner mi clave)', k: 'clave compartida framaly sin clave no veo clave cupo tope diario limite gasto usar ia sin configurar listo para usar',
+      a: `Si tu cuenta usa la **clave de FRAMALY**, no tienes que configurar nada:
+1. En [[#/integraciones|Integraciones API]] verás cada IA con la etiqueta **Listo para usar**.
+2. Úsalas normalmente: guiones, imágenes y voces funcionan sin pegar ninguna clave.
+3. Cada persona tiene un **tope diario**. La barra de la tarjeta muestra cuánto llevas hoy.
+4. Si llegas al tope, verás un aviso y podrás seguir al día siguiente.
+Si una IA aparece como **No habilitada**, pídele a quien administra FRAMALY que te la active.` },
+    { id: 'ajustes.ia', sec: 'ajustes', t: 'Elegir con qué clave trabaja cada persona y preparar correos (administrador)', k: 'personas ia clave de framaly que ponga la suya sin ia modo api tope diario preparar correo invitar permisos administrador cuenta nueva',
+      a: `En [[#/ajustes|Ajustes]] → **Personas con acceso** (solo administrador):
+1. Pulsa **Permisos** en una persona. Abajo, en **IA: ¿con qué clave trabaja?**, elige para cada API (Claude, OpenAI, ElevenLabs): **Clave de FRAMALY**, **Que ponga la suya** o **Sin IA**.
+2. Con **Clave de FRAMALY** la persona usa tu clave sin verla y cuenta para tus límites. Con **Que ponga la suya** verá Integraciones API para pegar la suya.
+3. Ajusta el **Tope diario** (en dólares) que esa persona puede gastar con tu clave.
+**Preparar un correo:** escribe el correo en **Preparar acceso** y deja sus permisos antes de que se registre. Si entra con Google queda aprobado al instante; si usa contraseña queda pendiente con sus ajustes ya cargados y tú pulsas **Aprobar**.` },
+    { id: 'integraciones.limites', sec: 'integraciones', t: 'Límites de gasto, consumo y avisos (administrador)', k: 'limite mensual gasto consumo tokens avisos campanita campana notificacion notificaciones para que sirve la campanita presupuesto cuanto se ha gastado barra porcentaje alerta',
+      a: `Solo lo ve quien administra FRAMALY, en [[#/integraciones|Integraciones API]]:
+1. Cada API tiene su tarjeta con lo gastado este mes, una **barra de progreso** y el detalle (tokens, imágenes o caracteres).
+2. Escribe el **Límite mensual (US$)** y pulsa **Guardar**. Al llegar al límite, esa IA se pausa para las personas que usan la clave de FRAMALY.
+3. Elige **Avisarme al llegar a** 80 %, 90 % o 100 %.
+4. La **campanita** de arriba muestra los avisos sin leer: una API cerca de su límite, que se agotó, o que una persona llegó a su tope diario. **Marcar todo como leído** limpia el contador.
+5. Abajo ves el **consumo por persona**.
+Los montos son **estimados** a partir de los precios de cada proveedor.` },
 
     /* ================= AJUSTES ================= */
     { id: 'ajustes.generales', sec: 'ajustes', t: 'Qué se puede cambiar en Ajustes', k: 'ajustes preferencias configuracion cambiar formato duracion estilo fps calidad visibilidad idioma tono voz',

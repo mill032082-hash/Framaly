@@ -45,6 +45,20 @@ Para cerrar el registro del todo, cuando ya estén tus personas, apaga **Allow n
 
 Cómo se sincroniza: automático, gana el cambio más reciente, y borrar algo en un dispositivo lo borra en los demás. Las claves de OpenAI, Claude y ElevenLabs **no se suben nunca**: siguen solo en cada navegador. Si `js/config.js` está vacío, la app funciona sin cuentas y guarda todo solo en el dispositivo.
 
+## Claves de IA compartidas, límites y avisos
+Las claves de Claude, OpenAI y ElevenLabs pueden vivir **en el servidor** (Supabase), donde nadie las ve. Las personas usan la IA a través de una función segura que mide cada uso, respeta los límites y avisa al administrador.
+
+**Preparación (una vez):**
+1. Ejecuta en el SQL Editor de Supabase, en este orden: `supabase/schema.sql`, `supabase/access.sql`, `supabase/asesor.sql` y `supabase/budget.sql`.
+2. Despliega las funciones `supabase/functions/ia` y `supabase/functions/asesor` (cada una con su `budget.ts`, que es idéntico en las dos).
+3. En Supabase → Edge Functions → Secrets guarda: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` y `ELEVENLABS_API_KEY`. Usa claves creadas solo para FRAMALY y pon además un límite de gasto en cada proveedor como red de seguridad.
+
+**Cómo se usa (administrador):**
+- **Ajustes → Personas con acceso → Permisos:** para cada persona y cada API eliges **Clave de FRAMALY**, **Que ponga la suya** o **Sin IA**, y un **tope diario** en dólares.
+- **Preparar acceso:** deja un correo listo antes de que se registre (con Google entra aprobado; con contraseña queda pendiente con sus ajustes).
+- **Integraciones API:** por API ves lo gastado, el límite mensual y el aviso (80/90/100 %), y el consumo por persona.
+- **Campanita:** avisos de límites y topes. Los montos son estimados; los precios se ajustan en `budget.ts`.
+
 ## Asesor IA (botón flotante)
 El botón **Asesor IA** (abajo a la derecha) explica paso a paso cómo hacer cualquier cosa en FRAMALY. Sabe en qué sección estás y respeta los permisos de tu cuenta. Responde de tres formas:
 1. **Con IA desde el servidor** (recomendada): la clave de Claude vive solo en Supabase y nadie la ve. Requiere ejecutar **`supabase/asesor.sql`**, desplegar la función **`supabase/functions/asesor`** y crear el secreto **`ANTHROPIC_API_KEY`** en Supabase (Edge Functions → Secrets). Cada persona tiene un límite diario de consultas (60 por defecto; se cambia con el secreto `ASESOR_DAILY_LIMIT`, y el modelo con `ASESOR_MODEL`).

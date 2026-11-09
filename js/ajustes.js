@@ -72,42 +72,79 @@
     });
 
     /* ----- personas con acceso (solo administrador) ----- */
-    let people = [];
+    let people = [], invites = [];
     const open = new Set();
-    const SECS = [['editor', 'Editor de video'], ['flujos', 'Flujos y agentes'], ['guiones', 'Guiones'], ['imagenes', 'Imágenes'], ['voces', 'Voces'], ['efectos', 'Efectos y transiciones'], ['biblioteca', 'Biblioteca'], ['publicar', 'Publicar'], ['integraciones', 'Integraciones API (claves de IA)'], ['ajustes', 'Ajustes']];
-    const ST = { pending: ['Pendiente', 'or'], approved: ['Aprobada', 'ok'], blocked: ['Rechazada', 'err'] };
+    const SECS = [['editor', 'Editor de video'], ['flujos', 'Flujos y agentes'], ['guiones', 'Guiones'], ['imagenes', 'Imágenes'], ['voces', 'Voces'], ['efectos', 'Efectos y transiciones'], ['biblioteca', 'Biblioteca'], ['publicar', 'Publicar'], ['integraciones', 'Integraciones API'], ['ajustes', 'Ajustes']];
+    const AIS = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs']];
+    const MODES = [['shared', 'Clave de FRAMALY'], ['own', 'Que ponga la suya'], ['off', 'Sin IA']];
+    const ST = { pending: ['Pendiente', 'or'], approved: ['Aprobada', 'ok'], blocked: ['Rechazada', 'err'], invited: ['Preparado', 'or'] };
+    const everyone = () => [...invites.map((i) => ({ user_id: 'inv:' + i.email, email: i.email, status: 'invited', role: 'user', perms: i.perms, ai: i.ai, daily_usd: i.daily_usd, created_at: i.created_at })), ...people];
     const renderPeople = () => {
       const box = q('#aPeople');
       if (!C?.isAdmin()) { box.style.display = 'none'; return; }
       box.style.display = '';
-      const rows = people.map((p) => {
-        const me = p.user_id === C.user.id, [lbl, cls] = ST[p.status] || ST.pending;
-        const acts = me || p.role === 'admin' ? '' : p.status === 'approved'
-          ? `<button class="btn sm danger" data-p="${p.user_id}" data-s="blocked">Quitar acceso</button>`
-          : `<button class="btn sm primary" data-p="${p.user_id}" data-s="approved">Aprobar</button>${p.status === 'pending' ? `<button class="btn sm" data-p="${p.user_id}" data-s="blocked">Rechazar</button>` : ''}`;
-        const perms = p.perms || {};
-        const panel = open.has(p.user_id) && p.role !== 'admin' ? `<div class="perms"><b class="small">Puede usar:</b><div class="perm-grid">${SECS.map(([k, n]) => `<label class="check"><input type="checkbox" data-pp="${p.user_id}" data-pk="${k}" ${perms[k] === false ? '' : 'checked'}> ${n}</label>`).join('')}</div></div>` : '';
+      const rows = everyone().map((p) => {
+        const me = p.user_id === C.user.id, [lbl, cls] = ST[p.status] || ST.pending, inv = p.status === 'invited';
+        const acts = me || p.role === 'admin' ? '' : inv
+          ? `<button class="btn sm danger" data-invdel="${F.esc(p.email)}">Quitar</button>`
+          : p.status === 'approved'
+            ? `<button class="btn sm danger" data-p="${p.user_id}" data-s="blocked">Quitar acceso</button>`
+            : `<button class="btn sm primary" data-p="${p.user_id}" data-s="approved">Aprobar</button>${p.status === 'pending' ? `<button class="btn sm" data-p="${p.user_id}" data-s="blocked">Rechazar</button>` : ''}`;
+        const perms = p.perms || {}, ai = p.ai || {};
+        const panel = open.has(p.user_id) && p.role !== 'admin' ? `<div class="perms">
+            <b class="small">Puede usar:</b><div class="perm-grid">${SECS.map(([k, n]) => `<label class="check"><input type="checkbox" data-pp="${p.user_id}" data-pk="${k}" ${perms[k] === false ? '' : 'checked'}> ${n}</label>`).join('')}</div>
+            <b class="small" style="display:block;margin-top:14px">IA: ¿con qué clave trabaja?</b>
+            <div class="ai-grid">${AIS.map(([k, n]) => `<div><label class="lbl">${n}</label><select data-pai="${p.user_id}" data-pak="${k}">${MODES.map(([v, l]) => `<option value="${v}" ${(ai[k] || 'own') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`).join('')}
+              <div><label class="lbl">Tope diario con clave de FRAMALY (US$)</label><input type="number" min="0" step="0.5" data-pdaily="${p.user_id}" value="${p.daily_usd ?? 2}"></div></div>
+            <p class="hint">«Clave de FRAMALY»: usa tu clave sin verla y cuenta para tus límites. «Que ponga la suya»: ve Integraciones API para pegar su clave. «Sin IA»: esa API queda desactivada.</p></div>` : '';
         const permBtn = p.role === 'admin' || me ? '' : `<button class="btn sm" data-perm="${p.user_id}">${open.has(p.user_id) ? 'Cerrar' : 'Permisos'}</button>`;
-        return `<div class="person"><span class="em"><b>${F.esc(p.email || 'Sin correo')}</b>${me ? ' <span class="small muted">(tú)</span>' : ''}<br><span class="small muted">${F.ago(new Date(p.created_at).getTime())}</span></span>${p.role === 'admin' ? '<span class="tag or">Administrador</span>' : ''}<span class="tag ${cls}">${lbl}</span>${permBtn}${acts}${panel}</div>`;
+        return `<div class="person"><span class="em"><b>${F.esc(p.email || 'Sin correo')}</b>${me ? ' <span class="small muted">(tú)</span>' : ''}<br><span class="small muted">${inv ? 'esperando que se registre' : F.ago(new Date(p.created_at).getTime())}</span></span>${p.role === 'admin' ? '<span class="tag or">Administrador</span>' : ''}<span class="tag ${cls}">${lbl}</span>${permBtn}${acts}${panel}</div>`;
       }).join('');
-      box.innerHTML = `<h3>${I('shield')} Personas con acceso</h3><p class="desc">Quien se registra queda pendiente hasta que tú lo apruebes aquí.</p>${rows ? `<div class="people">${rows}</div>` : '<p class="muted">Todavía no se ha registrado nadie más.</p>'}`;
+      box.innerHTML = `<h3>${I('shield')} Personas con acceso</h3><p class="desc">Quien se registra queda pendiente hasta que tú lo apruebes aquí. También puedes dejar un correo preparado antes de que se registre.</p>
+        <form class="invite-form" id="aInv" novalidate><input type="text" inputmode="email" id="aInvMail" placeholder="correo@ejemplo.com" autocomplete="off" autocapitalize="none" spellcheck="false"><button class="btn primary" type="submit">${I('plus')} Preparar acceso</button></form>
+        ${rows ? `<div class="people">${rows}</div>` : '<p class="muted">Todavía no se ha registrado nadie más.</p>'}
+        <p class="hint">Un correo preparado que entra con <b>Google</b> queda aprobado al instante con lo que dejaste. Si entra con contraseña, queda pendiente con sus ajustes ya cargados y tú pulsas Aprobar.</p>`;
     };
-    const loadPeople = () => C?.isAdmin() ? C.people().then((l) => { people = l; renderPeople(); }).catch((e) => F.toast(e.message, 'error')) : renderPeople();
+    const loadPeople = () => C?.isAdmin() ? Promise.all([C.people(), C.invites()]).then(([l, i]) => { people = l; invites = i; renderPeople(); }).catch((e) => F.toast(e.message, 'error')) : renderPeople();
     loadPeople();
+    const find = (id) => (String(id).startsWith('inv:') ? invites.find((i) => 'inv:' + i.email === id) : people.find((x) => x.user_id === id));
     q('#aPeople').addEventListener('click', async (e) => {
       const pb = e.target.closest('[data-perm]');
       if (pb) { const id = pb.dataset.perm; open.has(id) ? open.delete(id) : open.add(id); return renderPeople(); }
+      const del = e.target.closest('[data-invdel]');
+      if (del) { try { await C.removeInvite(del.dataset.invdel); F.toast('Correo quitado', 'ok'); await loadPeople(); } catch (err) { F.toast(err.message, 'error'); } return; }
       const b = e.target.closest('[data-p]'); if (!b) return;
       F.busy(b, true, '…');
       try { await C.decide(b.dataset.p, b.dataset.s); F.toast(b.dataset.s === 'approved' ? 'Persona aprobada' : 'Acceso quitado', 'ok'); await loadPeople(); } catch (err) { F.toast(err.message, 'error'); F.busy(b, false); }
     });
-
+    q('#aPeople').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const mail = q('#aInvMail').value.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) return F.toast('Escribe un correo válido');
+      if (people.some((p) => (p.email || '').toLowerCase() === mail)) return F.toast('Esa persona ya tiene cuenta. Cambia sus ajustes con el botón Permisos.');
+      try { await C.addInvite(mail); open.add('inv:' + mail); F.toast('Correo preparado. Ajusta sus permisos y sus IA aquí abajo.', 'ok'); await loadPeople(); } catch (err) { F.toast(err.message, 'error'); }
+    });
     q('#aPeople').addEventListener('change', async (e) => {
-      const t = e.target, id = t.dataset.pp, k = t.dataset.pk; if (!id) return;
-      const p = people.find((x) => x.user_id === id); if (!p) return;
-      const perms = { ...(p.perms || {}) };
-      if (t.checked) delete perms[k]; else perms[k] = false;
-      try { await C.setPerms(id, perms); p.perms = perms; F.toast('Permisos guardados', 'ok', 1400); } catch (err) { t.checked = !t.checked; F.toast(err.message, 'error'); }
+      const t = e.target;
+      const id = t.dataset.pp || t.dataset.pai || t.dataset.pdaily; if (!id) return;
+      const p = find(id); if (!p) return;
+      try {
+        if (t.dataset.pp) {
+          const perms = { ...(p.perms || {}) };
+          if (t.checked) delete perms[t.dataset.pk]; else perms[t.dataset.pk] = false;
+          await C.setPerson(id, { perms }); p.perms = perms;
+        } else if (t.dataset.pai) {
+          const ai = { anthropic: 'own', openai: 'own', elevenlabs: 'own', ...(p.ai || {}), [t.dataset.pak]: t.value };
+          // quien pega su propia clave necesita ver Integraciones; quien no, no
+          const perms = { ...(p.perms || {}) };
+          if (Object.values(ai).includes('own')) delete perms.integraciones; else perms.integraciones = false;
+          await C.setPerson(id, { ai, perms }); p.ai = ai; p.perms = perms; renderPeople();
+        } else {
+          const v = +t.value; if (!(v >= 0)) throw new Error('Escribe un monto válido');
+          await C.setPerson(id, { daily_usd: v }); p.daily_usd = v;
+        }
+        F.toast('Guardado', 'ok', 1400);
+      } catch (err) { F.toast(err.message, 'error'); loadPeople(); }
     });
 
     /* ----- opciones sueltas: se guardan al cambiar ----- */
