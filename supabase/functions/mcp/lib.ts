@@ -1,6 +1,6 @@
 // FRAMALY Studio · piezas puras del servidor MCP / API (sin red ni base de datos: se pueden probar solas).
 
-export const VERSION = "1.2.0";
+export const VERSION = "1.3.0";
 
 export const sha256hex = async (s: string): Promise<string> => {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
@@ -82,6 +82,22 @@ export function audioDuration(b: Uint8Array, mime: string): number {
     }
   }
   return b.length / 16000;   // estimación (~128 kbps)
+}
+
+/* ---------- OAuth ---------- */
+export const b64url = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+/** PKCE (S256): base64url(SHA-256(verifier)) */
+export const pkceChallenge = async (verifier: string) => b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+export const randomHex = (bytes: number) => [...crypto.getRandomValues(new Uint8Array(bytes))].map((x) => x.toString(16).padStart(2, "0")).join("");
+/** Comparación en tiempo constante */
+export const sameText = (a: string, b: string) => { if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; };
+/** Direcciones de retorno aceptables: https (o http solo en localhost), sin credenciales ni fragmento */
+export function validRedirectUri(u: unknown): boolean {
+  if (typeof u !== "string" || u.length > 500) return false;
+  let x: URL; try { x = new URL(u); } catch { return false; }
+  if (x.hash || x.username || x.password) return false;
+  if (x.protocol === "https:") return true;
+  return x.protocol === "http:" && (x.hostname === "localhost" || x.hostname === "127.0.0.1" || x.hostname === "[::1]");
 }
 
 export const ASPECTS = ["16:9", "9:16", "1:1", "4:5"] as const;

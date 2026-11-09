@@ -89,11 +89,8 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare v_id text := 'fmc_' || encode(gen_random_bytes(12), 'hex');
 begin
   if coalesce(array_length(p_redirects, 1), 0) = 0 or array_length(p_redirects, 1) > 5 then raise exception 'redirects'; end if;
-  -- tope de clientes registrados: se borran los más antiguos sin permisos activos
-  if (select count(*) from public.framaly_oauth_clients) >= 300 then
-    delete from public.framaly_oauth_clients c where c.client_id in (
-      select client_id from public.framaly_oauth_clients o where not exists (select 1 from public.framaly_oauth_grants g where g.client_id = o.client_id) order by created_at limit 50);
-  end if;
+  -- tope de clientes registrados (evita que alguien llene la tabla)
+  if (select count(*) from public.framaly_oauth_clients) >= 2000 then raise exception 'too_many_clients'; end if;
   insert into public.framaly_oauth_clients (client_id, client_name, redirect_uris) values (v_id, left(coalesce(nullif(btrim(p_name), ''), 'Aplicación'), 80), p_redirects);
   return v_id;
 end $$;
@@ -108,7 +105,6 @@ language plpgsql security definer set search_path = public as $$
 declare v_id uuid;
 begin
   if not exists (select 1 from public.framaly_oauth_clients where client_id = p_client and p_redirect = any (redirect_uris)) then raise exception 'client'; end if;
-  delete from public.framaly_oauth_requests where expires_at < now() - interval '1 day';
   insert into public.framaly_oauth_requests (client_id, redirect_uri, code_challenge, state, scope) values (p_client, p_redirect, p_challenge, left(p_state, 500), left(p_scope, 200)) returning id into v_id;
   return v_id;
 end $$;
@@ -137,8 +133,6 @@ begin
   select id into v_grant from public.framaly_oauth_grants where user_id = p_user and client_id = p_client and revoked_at is null order by created_at desc limit 1;
   if v_grant is null then insert into public.framaly_oauth_grants (user_id, client_id) values (p_user, p_client) returning id into v_grant; end if;
   select client_name into v_name from public.framaly_oauth_clients where client_id = p_client;
-  delete from public.framaly_api_tokens where kind = 'oauth' and expires_at < now() - interval '1 day';
-  delete from public.framaly_oauth_refresh where expires_at < now();
   insert into public.framaly_api_tokens (user_id, name, token_hash, prefix, kind, grant_id, expires_at)
   values (p_user, left(coalesce(v_name, 'Aplicación') || ' (OAuth)', 60), p_access_hash, p_access_prefix, 'oauth', v_grant, now() + make_interval(secs => p_ttl));
   insert into public.framaly_oauth_refresh (token_hash, grant_id, client_id, user_id) values (p_refresh_hash, v_grant, p_client, p_user);

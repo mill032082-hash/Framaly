@@ -17,6 +17,7 @@
     { id: 'publicar', name: 'Publicar', icon: 'youtube', sub: 'Exporta, optimiza y sube a YouTube' },
     { id: 'integraciones', name: 'Integraciones API', icon: 'plug', sub: 'Imagen, audio, efectos, video y texto' },
     { id: 'ajustes', name: 'Ajustes', icon: 'sliders', sub: 'Cuenta, videos y datos' },
+    { id: 'conectar', name: 'Conectar aplicación', icon: 'plug', sub: 'Autoriza el acceso de otra IA a tu cuenta', hidden: true },
   ];
   const viewFn = (id) => (id === 'editor' ? F.editor.view : id === 'flujos' ? F.flows.view : F.views[id]);
   let destroy = null, rendering = false;
@@ -49,7 +50,7 @@
   /** Menú: solo las secciones que esta persona puede usar (y sin títulos vacíos) */
   function nav() {
     const el = F.$('#nav'); if (!el) return;
-    const ok = ROUTES.filter((r) => r.sec || !F.cloud || F.cloud.can(r.id));
+    const ok = ROUTES.filter((r) => !r.hidden && (r.sec || !F.cloud || F.cloud.can(r.id)));
     const list = ok.filter((r, i) => !r.sec || (ok[i + 1] && !ok[i + 1].sec));
     el.innerHTML = list.map((r) => (r.sec ? `<div class="nav-sec">${r.sec}</div>` : `<a href="#/${r.id}" data-r="${r.id}">${I(r.icon)}<span>${r.name}</span>${r.badge ? `<span class="badge">${r.badge}</span>` : ''}</a>`)).join('');
     const cur = (location.hash.replace(/^#\/?/, '') || 'inicio').split('?')[0];

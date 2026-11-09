@@ -9,6 +9,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { type Access, db, logError } from "./budget.ts";
 import { INSTRUCTIONS, TOOLS, VERSION, checkArgs, openapi, rpcErr, rpcOk, sha256hex } from "./lib.ts";
 import { type Ctx, HANDLERS, ToolError } from "./tools.ts";
+import { handleOAuth } from "./oauth.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -21,10 +22,10 @@ const RATE_PER_MIN = 30;
 
 type Auth = { ctx: Ctx; tokenId: string; scopes: string[] };
 
-async function authenticate(req: Request, tokenInPath: string | null): Promise<Auth | Response> {
+async function authenticate(req: Request, tokenInPath: string | null, base: string): Promise<Auth | Response> {
   const h = req.headers.get("authorization") ?? "";
   const token = (h.match(/^Bearer\s+(.+)$/i)?.[1] ?? req.headers.get("x-api-key") ?? tokenInPath ?? "").trim();
-  const bad = (m: string) => J({ error: { type: "unauthorized", message: m } }, 401, { "WWW-Authenticate": 'Bearer realm="FRAMALY"' });
+  const bad = (m: string) => J({ error: { type: "unauthorized", message: m } }, 401, { "WWW-Authenticate": `Bearer realm="FRAMALY", resource_metadata="${base}/.well-known/oauth-protected-resource"` });
   if (!/^fmk_[0-9a-f]{48}$/.test(token)) return bad("Falta la clave de conexión de FRAMALY (empieza con fmk_). Créala en FRAMALY → Ajustes → Conectar con ChatGPT y otras IAs.");
   const client = db();
   const { data } = await client.rpc("framaly_token_auth", { p_hash: await sha256hex(token) });
@@ -89,13 +90,18 @@ Deno.serve(async (req: Request) => {
   const base = (Deno.env.get("SUPABASE_URL") ?? url.origin) + "/functions/v1/mcp";
 
   try {
+    // Inicio de sesión OAuth (descubrimiento, registro, permiso y token)
+    if (/^\/(\.well-known\/|register$|authorize$|token$)/.test(path)) {
+      const o = await handleOAuth(req, path, base, (Deno.env.get("FRAMALY_APP_URL") ?? "https://framaly.vercel.app").replace(/\/+$/, ""));
+      if (o) return o;
+    }
     // Información y especificación: públicas (no contienen claves)
     if (req.method === "GET" && path === "/openapi.json") return J(openapi(base));
     if (req.method === "GET" && (path === "/" || path === "/info")) return J({ name: "FRAMALY Studio", version: VERSION, mcp: base, openapi: base + "/openapi.json", tools: TOOLS.map((t) => t.name), auth: "Authorization: Bearer fmk_…" });
     if (req.method === "GET" || req.method === "DELETE") return J({ error: { type: "method", message: "Usa POST." } }, 405, { Allow: "POST, OPTIONS" });
     if (req.method !== "POST") return J({ error: { type: "method", message: "Método no permitido." } }, 405);
 
-    const a = await authenticate(req, tokenInPath);
+    const a = await authenticate(req, tokenInPath, base);
     if (a instanceof Response) return a;
 
     // API REST: POST /api/<herramienta> con los argumentos como JSON

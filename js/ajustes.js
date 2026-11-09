@@ -9,6 +9,38 @@
   const TONES = ['informativo y entretenido', 'misterioso e intrigante', 'motivacional e inspirador', 'humorístico y cercano', 'educativo y claro', 'épico y dramático', 'emotivo y narrativo', 'enérgico estilo viral'];
   const VERSION = '1.0';
 
+  /* Pantalla a la que llega el conector (ChatGPT, Claude…) para pedir permiso */
+  V.conectar = (el) => {
+    const C = F.cloud, req = new URLSearchParams((location.hash.split('?')[1] || '')).get('req') || '';
+    el.innerHTML = `<div class="page"><div class="card" id="cnx" style="max-width:560px;margin:24px auto"><p class="muted" style="margin:0">Cargando…</p></div></div>`;
+    const box = el.querySelector('#cnx'); let dead = false;
+    const fail = (m) => { box.innerHTML = `<h3>${I('shield')} Conectar aplicación</h3><p class="muted">${F.esc(m)}</p><a class="btn" href="#/inicio">Ir al inicio</a>`; };
+    (async () => {
+      if (!/^[0-9a-f-]{36}$/.test(req)) return fail('Este enlace no es válido. Vuelve a la aplicación e inténtalo de nuevo.');
+      if (!C?.configured() || !C.user || !C.approved()) return fail('Primero inicia sesión en FRAMALY con una cuenta aprobada.');
+      let info; try { info = await C.oauthInfo(req); } catch (e) { return fail(e.message); }
+      if (dead) return;
+      if (!info) return fail('Esta solicitud venció o ya se respondió. Vuelve a la aplicación e inténtalo de nuevo.');
+      box.innerHTML = `<h3>${I('plug')} Conectar «${F.esc(info.client_name)}» con FRAMALY</h3>
+        <p><b>${F.esc(info.client_name)}</b> <span class="mini">(${F.esc(info.redirect_host || '')})</span> quiere usar tu cuenta <b>${F.esc(C.user.email || '')}</b> para:</p>
+        <ul class="small" style="line-height:1.9;padding-left:18px"><li>Escribir guiones, generar imágenes y voces con tus claves de IA, <b>respetando tus topes de gasto</b>.</li><li>Traer imágenes y audios a tu biblioteca.</li><li>Crear proyectos de video y ver tus proyectos y tu biblioteca.</li></ul>
+        <p class="mini">No podrá ver tus claves de IA ni cambiar tus ajustes. Puedes quitarle el acceso cuando quieras en <b>Ajustes → Conectar con ChatGPT y otras IAs</b>.</p>
+        <div class="row" style="gap:8px;margin-top:14px"><button class="btn primary" id="cnxOk">Permitir</button><button class="btn" id="cnxNo">Cancelar</button></div>`;
+      const go = async (allow) => {
+        const b = box.querySelector(allow ? '#cnxOk' : '#cnxNo'); F.busy(b, true, allow ? 'Conectando…' : '…');
+        try {
+          const r = await C.oauthDecide(req, allow), u = new URL(r.redirect_uri);
+          if (r.error) u.searchParams.set('error', r.error); else u.searchParams.set('code', r.code);
+          if (r.state) u.searchParams.set('state', r.state);
+          box.innerHTML = `<h3>${I('check')} ${allow ? 'Listo' : 'Cancelado'}</h3><p class="muted">${allow ? 'Volviendo a la aplicación…' : 'No se dio acceso.'}</p>`;
+          location.href = u.toString();
+        } catch (e) { F.toast(e.message, 'error', 6000); fail(e.message); }
+      };
+      box.querySelector('#cnxOk').onclick = () => go(true); box.querySelector('#cnxNo').onclick = () => go(false);
+    })();
+    return () => { dead = true; };
+  };
+
   V.ajustes = (el) => {
     const S = F.settings;
     const au = load('auto', { topic: '', aspect: '16:9', duration: 60, style: 'cine', exportAfter: true });
@@ -76,7 +108,7 @@
     /* ----- conectar con ChatGPT y otras IAs (servidor MCP + API) ----- */
     const TOOLS_INFO = [['framaly_status', 'Qué IAs tienes disponibles y cuánto llevas gastado hoy'], ['framaly_write_script', 'Escribe el guion de un video en escenas'], ['framaly_generate_image', 'Genera una imagen y la guarda en tu biblioteca'], ['framaly_import_image', 'Trae a tu biblioteca imágenes que ya tienes (por ejemplo, las de ChatGPT)'], ['framaly_import_audio', 'Trae audios que ya tienes: narración, música o efectos (MP3, WAV, M4A)'], ['framaly_generate_voice', 'Convierte un texto en narración (MP3)'], ['framaly_seo_metadata', 'Título, descripción y etiquetas para YouTube'], ['framaly_create_video_project', 'Crea un proyecto de video completo, listo para el editor'], ['framaly_list_projects', 'Lista tus proyectos'], ['framaly_list_media', 'Lista tu biblioteca de imágenes y audios']];
     const GPT_TXT = 'Cuando el usuario cree o suba imágenes o audios en esta conversación y pida un video, llama a framaly_create_video_project pasando todos esos archivos en openaiFileIdRefs: las imágenes en el orden en que deben salir; un solo audio será la música de fondo y varios audios serán la narración de cada escena, en orden. Añade un título y, si hay texto para narrar, una escena por imagen con su "narration". No generes imágenes ni voces nuevas si ya existen. Al terminar, di al usuario que abra FRAMALY, pulse Actualizar y exporte el MP4 desde el Editor.';
-    const conn = { tokens: null, calls: [], fresh: null, busy: false };
+    const conn = { tokens: null, calls: [], grants: [], fresh: null, busy: false };
     const copyBtn = (v, label = 'Copiar') => `<button class="btn sm" data-copy="${F.esc(v)}">${I('copy')} ${label}</button>`;
     const renderConn = () => {
       const box = q('#aConn'); if (!box) return;
@@ -88,10 +120,15 @@
         <div class="keyrow" style="margin-top:8px"><input type="text" readonly value="${F.esc(conn.fresh.token)}" id="aTokV" onclick="this.select()">${copyBtn(conn.fresh.token)}</div></div></div>` : '';
       const rows = toks.filter((t) => !t.revoked_at).map((t) => `<div class="row2 prow"><span><b>${F.esc(t.name)}</b> <span class="mini">· ${F.esc(t.prefix)}••••••••</span></span><span class="mini">${t.last_used_at ? 'usada ' + F.ago(new Date(t.last_used_at).getTime()) : 'sin usar'} <button class="btn sm danger" data-revoke="${t.id}" style="margin-left:8px">Revocar</button></span></div>`).join('');
       const calls = (conn.calls || []).map((c) => `<div class="row2 prow"><span><span class="tag ${c.ok ? 'ok' : 'err'}">${c.ok ? 'ok' : 'error'}</span> <b>${F.esc(c.tool)}</b> <span class="mini">${F.esc(c.token_name || '')}${c.ok ? '' : ' · ' + F.esc(c.detail || '')}</span></span><span class="mini">${F.ago(new Date(c.created_at).getTime())}${c.ms ? ' · ' + (c.ms / 1000).toFixed(1) + ' s' : ''}</span></div>`).join('');
+      const apps = (conn.grants || []).map((g) => `<div class="row2 prow"><span><b>${F.esc(g.client_name)}</b> <span class="tag ok">OAuth</span></span><span class="mini">${g.last_used_at ? 'usada ' + F.ago(new Date(g.last_used_at).getTime()) : 'sin usar'} <button class="btn sm danger" data-revgrant="${g.id}" style="margin-left:8px">Quitar acceso</button></span></div>`).join('');
       box.innerHTML = `<h3>${I('plug')} Conectar con ChatGPT y otras IAs</h3>
         <p class="desc">Deja que ChatGPT, Claude u otro agente use FRAMALY por ti: escribir guiones, generar imágenes y voces y <b>crear proyectos de video</b> que aparecen en tu editor. Usa tus claves de IA y respeta tus topes de gasto.</p>
         <label class="lbl">Dirección del servidor MCP</label><div class="keyrow"><input type="text" readonly value="${F.esc(url)}" onclick="this.select()">${copyBtn(url)}</div>
         <label class="lbl">Especificación de la API (OpenAPI)</label><div class="keyrow"><input type="text" readonly value="${F.esc(url)}/openapi.json" onclick="this.select()">${copyBtn(url + '/openapi.json')}</div>
+        <div class="sep"></div>
+        <b style="color:var(--text)">Aplicaciones conectadas con inicio de sesión (OAuth)</b>
+        <p class="mini" style="margin:4px 0 8px">Cuando conectas ChatGPT o Claude con «OAuth», aparece una ventana de FRAMALY para que pulses <b>Permitir</b>. No copias ninguna clave. Aquí las ves y les quitas el acceso.</p>
+        <div>${apps || '<p class="mini" style="margin:0">Todavía no hay aplicaciones conectadas.</p>'}</div>
         <div class="sep"></div>
         <b style="color:var(--text)">Tus claves de conexión</b>
         <p class="mini" style="margin:4px 0 8px">Cada IA o programa usa su propia clave. Si una se filtra, la revocas aquí y deja de funcionar al instante.</p>
@@ -100,7 +137,8 @@
         <div style="margin-top:10px">${rows || '<p class="mini" style="margin:0">Todavía no tienes claves de conexión.</p>'}</div>
         <div class="sep"></div>
         <details class="small"><summary style="cursor:pointer;color:var(--or2)">Cómo conectarlo con ChatGPT</summary><ol class="help-steps">
-          <li><b>GPT personalizado (más sencillo):</b> en ChatGPT entra a <b>Explorar GPT → Crear</b> → pestaña <b>Configurar</b> → <b>Crear acción</b>.</li>
+          <li><b>Conector con OAuth (recomendado):</b> en ChatGPT → Ajustes → Complementos/Conectores → <b>Añadir</b> → «URL del servidor». Pega la <b>dirección del servidor MCP</b>, deja la autenticación en <b>OAuth</b> y pulsa <b>Crear</b>. Se abrirá FRAMALY: inicia sesión y pulsa <b>Permitir</b>.</li>
+          <li><b>GPT personalizado:</b> en ChatGPT entra a <b>Explorar GPT → Crear</b> → pestaña <b>Configurar</b> → <b>Crear acción</b>.</li>
           <li>Pulsa <b>Importar desde URL</b> y pega la <b>especificación de la API</b> de arriba.</li>
           <li>En <b>Autenticación</b> elige <b>Clave de API → Bearer</b> y pega tu clave <code>fmk_…</code>.</li>
           <li><b>Si ya habías importado la acción</b>, ábrela y pulsa de nuevo <b>Importar desde URL</b> para actualizarla: ChatGPT guarda una copia vieja de las herramientas. En <b>Autenticación</b> pon la clave (Bearer). <b>Para que use las imágenes y audios que crees en ChatGPT</b> y los convierta en video, pega esto en las <b>Instrucciones</b> del GPT: <div class="keyrow" style="margin-top:6px"><input type="text" readonly value="${F.esc(GPT_TXT)}" onclick="this.select()">${copyBtn(GPT_TXT)}</div></li>
@@ -117,11 +155,13 @@
         <b style="color:var(--text)">Uso reciente</b>
         <div style="margin-top:6px">${calls || '<p class="mini" style="margin:0">Todavía no hubo llamadas.</p>'}</div>`;
     };
-    const loadConn = async () => { if (!C?.configured() || !C.user || !C.approved()) return renderConn(); try { [conn.tokens, conn.calls] = await Promise.all([C.tokens(), C.apiCalls(10)]); } catch (e) { F.toast(e.message, 'error'); } renderConn(); };
+    const loadConn = async () => { if (!C?.configured() || !C.user || !C.approved()) return renderConn(); try { [conn.tokens, conn.calls, conn.grants] = await Promise.all([C.tokens(), C.apiCalls(10), C.grants().catch(() => [])]); } catch (e) { F.toast(e.message, 'error'); } renderConn(); };
     loadConn();
     q('#aConn').addEventListener('click', async (e) => {
       const cp = e.target.closest('[data-copy]');
       if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); F.toast('Copiado', 'ok', 1200); } catch (err) { F.toast('No se pudo copiar: selecciona el texto y usa Ctrl+C'); } return; }
+      const rg = e.target.closest('[data-revgrant]');
+      if (rg) { if (!(await F.confirm('Quitar acceso', 'Esa aplicación dejará de poder usar tu cuenta de FRAMALY. ¿Quitarle el acceso?', 'Quitar'))) return; try { await C.revokeGrant(rg.dataset.revgrant); F.toast('Acceso quitado', 'ok'); await loadConn(); } catch (err) { F.toast(err.message, 'error'); } return; }
       const rv = e.target.closest('[data-revoke]');
       if (rv) { if (!(await F.confirm('Revocar clave', 'La IA o el programa que use esta clave dejará de funcionar. ¿Revocarla?', 'Revocar'))) return; try { await C.revokeToken(rv.dataset.revoke); F.toast('Clave revocada', 'ok'); conn.fresh = null; await loadConn(); } catch (err) { F.toast(err.message, 'error'); } }
     });

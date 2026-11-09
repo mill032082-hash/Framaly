@@ -150,6 +150,11 @@
   st.createToken = async (name) => { const s = await sb(); const { data, error } = await s.rpc('framaly_token_create', { p_name: String(name || '').trim() }); if (error) throw new Error(tokMsg(error)); return data; };
   st.revokeToken = async (id) => { const s = await sb(); const { error } = await s.rpc('framaly_token_revoke', { p_id: id }); if (error) throw new Error(tokMsg(error)); };
   st.apiCalls = async (n = 10) => { const s = await sb(); const { data, error } = await s.rpc('framaly_api_calls_recent', { p_limit: n }); if (error) throw new Error(tokMsg(error)); return data || []; };
+  /* ---------- OAuth: pantalla «Permitir» y aplicaciones conectadas ---------- */
+  st.oauthInfo = async (id) => { const s = await sb(); const { data, error } = await s.rpc('framaly_oauth_request_info', { p_id: id }); if (error) throw new Error(explain(error)); return data; };
+  st.oauthDecide = async (id, allow) => { const s = await sb(); const { data, error } = await s.rpc('framaly_oauth_decide', { p_id: id, p_allow: !!allow }); if (error) throw new Error(/expired/.test(String(error.message)) ? 'Esta solicitud venció o ya se respondió. Vuelve a la aplicación e inténtalo de nuevo.' : explain(error)); return data; };
+  st.grants = async () => { const s = await sb(); const { data, error } = await s.rpc('framaly_grants_list'); if (error) throw new Error(explain(error)); return data || []; };
+  st.revokeGrant = async (id) => { const s = await sb(); const { error } = await s.rpc('framaly_grant_revoke', { p_id: id }); if (error) throw new Error(explain(error)); };
   st.overview = async (days = 30) => { const s = await sb(); const { data, error } = await s.rpc('framaly_api_overview', { p_days: days }); if (error) throw new Error(explain(error)); return data || {}; };
   st.limits = async () => { const s = await sb(); return rows(s.from('framaly_limits').select('provider,monthly_usd,alert_pct')); };
   st.setLimit = async (provider, patch) => { const s = await sb(); await rows(s.from('framaly_limits').update({ ...patch, updated_at: new Date().toISOString() }).eq('provider', provider)); };
