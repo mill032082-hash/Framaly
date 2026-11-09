@@ -662,3 +662,17 @@ body.has-ask #toasts { bottom: 82px; }
 .pal-it .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: #fff; flex: none; }
 .pal-it small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
 @media (max-width: 700px) { .fl-auto { flex-wrap: wrap; } .fl-auto input { flex: 1 1 100%; } }
+.zoomctl { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line2); border-radius: 10px; background: var(--bg2); padding: 2px; }
+.zoomctl .icon-btn { width: 28px; height: 28px; }
+.zoomctl .zv { border: 0; background: transparent; color: var(--text); font: 600 12px var(--font); min-width: 44px; height: 28px; cursor: pointer; border-radius: 8px; }
+.zoomctl .zv:hover { background: var(--panel3); }
+.node .nb .dsc { display: block; }
+.node.sz-mid .nb .dsc, .node.sz-mid .nb .ns { display: none; }
+.node.sz-mid .nb { padding-top: 7px; }
+.node.sz-min .nb { display: none; }
+.node.sz-min { width: 200px; }
+.node.sz-min .nh { border-bottom: 0; padding: 8px 10px; }
+.flows.max { position: fixed; inset: 0; z-index: 60; background: var(--bg); grid-template-columns: 0 minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr) 0; }
+.flows.max .fl-list, .flows.max .fl-log { display: none; }
+.flows.max .fl-canvas { grid-column: 2; }
+@media (max-width: 1000px) { .flows.max { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; } .flows.max .fl-insp { display: none; } .flows.max .fl-canvas { height: auto; grid-column: 1; } }

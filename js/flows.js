@@ -319,7 +319,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     for (const k of P.ORDER) cfg[k] = { ...DEF[k], ...((t.over || {})[k] || {}) };
     const on = { voice: true, music: false, seo: true };
     (t.off || []).forEach((k) => (on[k] = false));
-    return { id: F.uid(), tpl: tid, name: t.name, cfg, on, nodes: t.blank ? [] : P.ORDER.slice(), pos: JSON.parse(JSON.stringify(POS)) };
+    return { id: F.uid(), tpl: tid, name: t.name, cfg, on, nodes: t.blank ? [] : P.ORDER.slice(), size: {}, zoom: 1, pos: JSON.parse(JSON.stringify(POS)) };
   };
   P.makeFlow = makeFlow;
   P.cfgFrom = (fl) => ({
@@ -334,6 +334,8 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
   try { if (!localStorage.getItem('framaly.flowBlankV1')) { localStorage.setItem('framaly.flowBlankV1', '1'); flow = null; } } catch (e) { /* sin memoria */ }
   if (!flow || !flow.cfg) flow = makeFlow('blank');   // empieza vacío: tú agregas las tarjetas
   if (!flow.nodes) flow.nodes = P.ORDER.slice();
+  if (!flow.size) flow.size = {};
+  if (!flow.zoom) flow.zoom = 1;
   const has = (id) => flow.nodes.includes(id);
   const present = () => P.ORDER.filter(has);
   const saveDraft = F.debounce(() => { try { localStorage.setItem('framaly.flowDraft', JSON.stringify(flow)); } catch (e) {} }, 300);
@@ -369,9 +371,10 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     for (const id of present()) {
       const t = NT[id], [x, y] = flow.pos[id] || POS[id], st = states[id];
       const off = t.toggle && !flow.on[id];
-      area.insertAdjacentHTML('beforeend', `<div class="node ${selNode === id ? 'sel' : ''} ${off ? 'off' : ''} ${st ? st.s : ''}" data-n="${id}" style="left:${x}px;top:${y}px">
-        <div class="nh"><div class="ic" style="background:${t.color}">${I(t.icon)}</div><b>${P.NAMES[id]}</b>${t.toggle ? `<button class="sw ${flow.on[id] ? 'on' : ''}" data-sw="${id}" title="Activar / desactivar"></button>` : ''}<button class="rm" data-rm="${id}" title="Quitar esta tarjeta">${I('x')}</button></div>
-        <div class="nb">${t.desc}<div class="sum">${summary(id)}</div><div class="ns">${st ? (st.s === 'run' ? '<span class="spin"></span>' : st.s === 'done' ? I('check') : st.s === 'err' ? I('x') : '') + ' ' + F.esc(st.msg || '') : off ? 'Desactivado' : 'Listo'}</div></div></div>`);
+      const sz = flow.size[id] || 'full', szt = sz === 'full' ? 'Achicar' : sz === 'mid' ? 'Minimizar' : 'Expandir';
+      area.insertAdjacentHTML('beforeend', `<div class="node sz-${sz} ${selNode === id ? 'sel' : ''} ${off ? 'off' : ''} ${st ? st.s : ''}" data-n="${id}" style="left:${x}px;top:${y}px">
+        <div class="nh"><div class="ic" style="background:${t.color}">${I(t.icon)}</div><b>${P.NAMES[id]}</b>${t.toggle ? `<button class="sw ${flow.on[id] ? 'on' : ''}" data-sw="${id}" title="Activar / desactivar"></button>` : ''}<button class="rm" data-sz="${id}" title="${szt}">${I(sz === 'min' ? 'chevU' : 'chevD')}</button><button class="rm" data-rm="${id}" title="Quitar esta tarjeta">${I('x')}</button></div>
+        <div class="nb"><div class="dsc">${t.desc}</div><div class="sum">${summary(id)}</div><div class="ns">${st ? (st.s === 'run' ? '<span class="spin"></span>' : st.s === 'done' ? I('check') : st.s === 'err' ? I('x') : '') + ' ' + F.esc(st.msg || '') : off ? 'Desactivado' : 'Listo'}</div></div></div>`);
     }
     renderEdges();
     const c = root.querySelector('#flCost'); if (c) c.textContent = costEstimate();
@@ -449,6 +452,33 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     if (!quiet) { selNode = id; saveDraft(); renderNodes(); renderInsp(); }
     else saveDraft();
   }
+  /* ---------- pizarra: zoom y ampliar ---------- */
+  const clampZ = (z) => Math.min(1.6, Math.max(0.4, Math.round(z * 100) / 100));
+  function applyZoom() {
+    const area = root?.querySelector('#fla'); if (!area) return;
+    area.style.transform = `scale(${flow.zoom})`; area.style.transformOrigin = '0 0';
+    const z = root.querySelector('#flZoomV'); if (z) z.textContent = Math.round(flow.zoom * 100) + '%';
+  }
+  function setZoom(z, keep = true) { flow.zoom = clampZ(z); applyZoom(); if (keep) saveDraft(); }
+  function fitZoom() {
+    const c = root?.querySelector('#flc'); if (!c || !present().length) return setZoom(1);
+    const xs = present().map((id) => (flow.pos[id] || POS[id])[0]), ys = present().map((id) => (flow.pos[id] || POS[id])[1]);
+    const w = Math.max(...xs) + 260 - Math.min(...xs) + 40, h = Math.max(...ys) + 180 - Math.min(...ys) + 40;
+    setZoom(Math.min((c.clientWidth - 24) / w, (c.clientHeight - 110) / h, 1.2));
+    c.scrollLeft = 0; c.scrollTop = 0;
+  }
+  function toggleMax(on) {
+    const f = root?.querySelector('.flows'); if (!f) return;
+    f.classList.toggle('max', on ?? !f.classList.contains('max'));
+    const b = root.querySelector('#flMax'); if (b) { const m = f.classList.contains('max'); b.innerHTML = `${I(m ? 'minimize' : 'maximize')}<span class="bt">${m ? 'Reducir' : 'Ampliar'}</span>`; b.title = m ? 'Volver al tamaño normal (Esc)' : 'Ampliar la pizarra a pantalla completa'; }
+    setTimeout(() => { fitZoom(); renderEdges(); }, 60);   // al ampliar o reducir, la pizarra se ajusta sola
+  }
+  function cycleSize(id) {
+    const cur = flow.size[id] || 'full';
+    flow.size[id] = cur === 'full' ? 'mid' : cur === 'mid' ? 'min' : 'full';
+    saveDraft(); renderNodes();
+  }
+  function setAllSizes(v) { present().forEach((id) => (flow.size[id] = v)); saveDraft(); renderNodes(); }
   function removeCard(id) {
     flow.nodes = flow.nodes.filter((k) => k !== id); delete states[id];
     if (selNode === id) selNode = present()[0] || null;
@@ -504,7 +534,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
         <aside class="fl-list" id="flList"></aside>
         <div class="fl-canvas" id="flc" style="grid-column:2;grid-row:1">
           <div class="fl-bar"><input type="text" id="flName" title="Nombre del flujo"><select id="flTpl" class="fl-tpl" title="Cambiar de plantilla"></select><span class="pill">${I('bot')} 0 tarjetas</span><span class="grow"></span>
-            <button class="btn sm" id="flAdd">${I('plus')} Agregar tarjeta</button><button class="btn sm" id="flHelp" title="Instrucciones">${I('script')}<span class="bt">Cómo usarlo</span></button>
+            <button class="btn sm" id="flAdd">${I('plus')} Agregar tarjeta</button><span class="zoomctl"><button class="icon-btn" id="flZm" title="Alejar">${I('minus')}</button><button class="zv" id="flZoomV" title="Ajustar todo a la pantalla">100%</button><button class="icon-btn" id="flZp" title="Acercar">${I('plus')}</button></span><button class="icon-btn" id="flSizes" title="Achicar o expandir todas las tarjetas">${I('chevD')}</button><button class="btn sm" id="flMax" title="Ampliar la pizarra a pantalla completa">${I('maximize')}<span class="bt">Ampliar</span></button><button class="btn sm" id="flHelp" title="Instrucciones">${I('script')}<span class="bt">Cómo usarlo</span></button>
             <button class="btn sm ghost" id="flReset" title="Reordenar nodos">${I('grid')}</button>
             <button class="btn sm" id="flSave">${I('save')} Guardar</button><button class="btn primary" id="flRun"></button>
             <div class="fl-auto"><span class="tag or">Automático</span><input type="text" id="flAutoTopic" placeholder="Escribe de qué trata tu video y FRAMALY hace todo: guion, imágenes, voz, montaje y SEO…" autocomplete="off"><button class="btn primary sm" id="flAutoGo">${I('zap')} Crear video automático</button></div></div>
@@ -522,6 +552,15 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       el.querySelector('#flName').addEventListener('input', (e) => { flow.name = e.target.value; saveDraft(); });
       el.querySelector('#flRun').onclick = run;
       el.querySelector('#flAdd').onclick = openPalette;
+      el.querySelector('#flZm').onclick = () => setZoom(flow.zoom - 0.1);
+      el.querySelector('#flZp').onclick = () => setZoom(flow.zoom + 0.1);
+      el.querySelector('#flZoomV').onclick = fitZoom;
+      el.querySelector('#flMax').onclick = () => toggleMax();
+      el.querySelector('#flSizes').onclick = () => { const all = present().every((id) => (flow.size[id] || 'full') === 'min'); setAllSizes(all ? 'full' : 'min'); el.querySelector('#flSizes').innerHTML = I(all ? 'chevD' : 'chevU'); };
+      const onKey = (e) => { if (e.key === 'Escape' && el.querySelector('.flows.max') && !document.querySelector('.modal-bg')) toggleMax(false); };
+      document.addEventListener('keydown', onKey);
+      el.querySelector('#flc').addEventListener('wheel', (e) => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); setZoom(flow.zoom + (e.deltaY < 0 ? 0.08 : -0.08)); }, { passive: false });
+      applyZoom();
       el.querySelector('#flHelp').onclick = openGuide;
       el.querySelector('#flAutoGo').onclick = async () => { const t = el.querySelector('#flAutoTopic').value; if (!t.trim()) { el.querySelector('#flAutoTopic').focus(); return F.toast('Escribe primero de qué trata tu video'); } await F.auto.run({ topic: t, aspect: flow.cfg.idea.aspect, duration: flow.cfg.idea.duration }); };
       el.querySelector('#flAutoTopic').addEventListener('keydown', (e) => { if (e.key === 'Enter') el.querySelector('#flAutoGo').click(); });
@@ -536,7 +575,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       const loadFrom = (tpl, fl) => {
         if (running) { F.toast('Espera a que termine la ejecución'); return; }
         if (tpl) { const topic = flow.cfg.idea.topic; flow = makeFlow(tpl); flow.cfg.idea.topic = topic; selNode = present()[0] || 'idea'; }
-        else if (fl) { const s = F.settings.flows.find((x) => x.id === fl); if (!s) return; flow = JSON.parse(JSON.stringify(s)); if (!flow.nodes) flow.nodes = P.ORDER.slice(); }
+        else if (fl) { const s = F.settings.flows.find((x) => x.id === fl); if (!s) return; flow = JSON.parse(JSON.stringify(s)); if (!flow.nodes) flow.nodes = P.ORDER.slice(); if (!flow.size) flow.size = {}; if (!flow.zoom) flow.zoom = 1; }
         else return;
         states = {}; saveDraft(); el.querySelector('#flName').value = flow.name; renderList(); renderNodes(); renderInsp();
       };
@@ -567,16 +606,17 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       area.addEventListener('click', (e) => {
         const act = e.target.closest('[data-act]'); if (act) { act.dataset.act === 'add' ? openPalette() : fullFlow(); return; }
         const rm = e.target.closest('[data-rm]'); if (rm) { removeCard(rm.dataset.rm); return; }
+        const sz = e.target.closest('[data-sz]'); if (sz) { cycleSize(sz.dataset.sz); return; }
         const sw = e.target.closest('[data-sw]');
         if (sw) { flow.on[sw.dataset.sw] = !flow.on[sw.dataset.sw]; saveDraft(); renderNodes(); if (selNode === sw.dataset.sw) renderInsp(); }
       });
       area.addEventListener('pointerdown', (e) => {
-        const n = e.target.closest('[data-n]'); if (!n || e.target.closest('[data-sw]') || e.target.closest('[data-rm]')) return;
+        const n = e.target.closest('[data-n]'); if (!n || e.target.closest('[data-sw]') || e.target.closest('[data-rm]') || e.target.closest('[data-sz]')) return;
         const id = n.dataset.n, x0 = e.clientX, y0 = e.clientY, [px, py] = flow.pos[id];
         let moved = false;
         const mv = (ev) => {
-          const dx = ev.clientX - x0, dy = ev.clientY - y0;
-          if (!moved && Math.hypot(dx, dy) < 4) return; moved = true;
+          const dx = (ev.clientX - x0) / flow.zoom, dy = (ev.clientY - y0) / flow.zoom;
+          if (!moved && Math.hypot(dx, dy) * flow.zoom < 4) return; moved = true;
           flow.pos[id] = [Math.max(0, px + dx), Math.max(0, py + dy)];
           n.style.left = flow.pos[id][0] + 'px'; n.style.top = flow.pos[id][1] + 'px'; n.style.cursor = 'grabbing';
           renderEdges();
@@ -590,7 +630,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
         };
         window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
       });
-      return () => { root = null; };
+      return () => { root = null; document.removeEventListener('keydown', onKey); };
     },
   };
 
