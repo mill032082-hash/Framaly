@@ -37,7 +37,9 @@ La plataforma trae **inicio de sesión y base de datos integrados**. Las persona
 5. **Authentication → Providers → Email**: desactiva **Confirm email** para que las personas entren al crear su cuenta sin revisar el correo.
 6. Publica de nuevo (Vercel). Listo.
 
-**Dar acceso a solo dos personas:** cuando ellas ya hayan creado su cuenta, en **Authentication → Sign In / Providers** desactiva **Allow new users to sign up**. Así nadie más podrá registrarse.
+**Quién puede entrar (aprobación):** además de `supabase/schema.sql`, ejecuta **`supabase/access.sql`**. Con eso, cada persona que se registra queda **pendiente** y no ve nada hasta que el administrador la apruebe. El administrador es `mill032082@gmail.com`: la primera vez debe entrar con **Google** (o, si se registró con contraseña, hay que marcarla como administradora en la tabla `framaly_access`). Las aprobaciones se hacen en **Ajustes → Personas con acceso**, y el menú lateral avisa cuántas hay por aprobar. Para cambiar de administrador, edita el correo dentro de `framaly_on_user_created` en `access.sql`.
+
+Para cerrar el registro del todo, cuando ya estén tus personas, apaga **Allow new users to sign up** en Supabase (Authentication → Sign In / Providers).
 
 Cómo se sincroniza: automático, gana el cambio más reciente, y borrar algo en un dispositivo lo borra en los demás. Las claves de OpenAI, Claude y ElevenLabs **no se suben nunca**: siguen solo en cada navegador. Si `js/config.js` está vacío, la app funciona sin cuentas y guarda todo solo en el dispositivo.
 

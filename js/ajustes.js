@@ -21,6 +21,7 @@
     const txt = (g, k, label, ph = '') => `<div><label class="lbl">${label}</label><input type="text" data-g="${g}" data-k="${k}" value="${F.esc(groups[g][k])}" placeholder="${F.esc(ph)}"></div>`;
 
     el.innerHTML = `<div class="page">
+      <div class="card" id="aPeople" style="display:none;margin-bottom:16px"></div>
       <div class="split even">
         <div class="card" id="aCuenta"></div>
         <div class="card"><h3>${I('zap')} Ejecución de videos</h3><p class="desc">Valores con los que arrancan el modo automático y los proyectos nuevos.</p>
@@ -68,6 +69,30 @@
       const b = e.target.closest('button'); if (!b) return;
       if (b.id === 'aSync') { F.busy(b, true, 'Sincronizando…'); try { await C.sync({ manual: true }); } catch (err) { F.toast(err.message, 'error'); } if (b.isConnected) F.busy(b, false); }
       if (b.id === 'aOut') await C.signOut();
+    });
+
+    /* ----- personas con acceso (solo administrador) ----- */
+    let people = [];
+    const ST = { pending: ['Pendiente', 'or'], approved: ['Aprobada', 'ok'], blocked: ['Rechazada', 'err'] };
+    const renderPeople = () => {
+      const box = q('#aPeople');
+      if (!C?.isAdmin()) { box.style.display = 'none'; return; }
+      box.style.display = '';
+      const rows = people.map((p) => {
+        const me = p.user_id === C.user.id, [lbl, cls] = ST[p.status] || ST.pending;
+        const acts = me || p.role === 'admin' ? '' : p.status === 'approved'
+          ? `<button class="btn sm danger" data-p="${p.user_id}" data-s="blocked">Quitar acceso</button>`
+          : `<button class="btn sm primary" data-p="${p.user_id}" data-s="approved">Aprobar</button>${p.status === 'pending' ? `<button class="btn sm" data-p="${p.user_id}" data-s="blocked">Rechazar</button>` : ''}`;
+        return `<div class="person"><span class="em"><b>${F.esc(p.email || 'Sin correo')}</b>${me ? ' <span class="small muted">(tú)</span>' : ''}<br><span class="small muted">${F.ago(new Date(p.created_at).getTime())}</span></span>${p.role === 'admin' ? '<span class="tag or">Administrador</span>' : ''}<span class="tag ${cls}">${lbl}</span>${acts}</div>`;
+      }).join('');
+      box.innerHTML = `<h3>${I('shield')} Personas con acceso</h3><p class="desc">Quien se registra queda pendiente hasta que tú lo apruebes aquí.</p>${rows ? `<div class="people">${rows}</div>` : '<p class="muted">Todavía no se ha registrado nadie más.</p>'}`;
+    };
+    const loadPeople = () => C?.isAdmin() ? C.people().then((l) => { people = l; renderPeople(); }).catch((e) => F.toast(e.message, 'error')) : renderPeople();
+    loadPeople();
+    q('#aPeople').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-p]'); if (!b) return;
+      F.busy(b, true, '…');
+      try { await C.decide(b.dataset.p, b.dataset.s); F.toast(b.dataset.s === 'approved' ? 'Persona aprobada' : 'Acceso quitado', 'ok'); await loadPeople(); } catch (err) { F.toast(err.message, 'error'); F.busy(b, false); }
     });
 
     /* ----- opciones sueltas: se guardan al cambiar ----- */

@@ -12,6 +12,7 @@
   const st = (F.cloud = {
     status: 'off', // off | signedout | idle | syncing | error
     user: null, error: '', progress: '', last: Number(ls(LS_LAST)) || 0,
+    access: null, pendingCount: 0, // permiso de esta persona: { status: pending|approved|blocked, role: admin|user }
   });
   const set = (p) => { Object.assign(st, p); F.emit('cloud'); };
   /* La conexión viene de js/config.js: la persona usuaria no ve ni toca nada técnico */
@@ -23,7 +24,7 @@
   st.signedIn = () => !!st.user;
   st.google = () => !!window.FRAMALY_CLOUD?.google;
 
-  let client = null, clientSig = '', syncing = false, applying = false, timer = null;
+  let client = null, clientSig = '', syncing = false, applying = false, timer = null, entering = '';
 
   /* ---------- librería y cliente ---------- */
   function loadLib() {
@@ -47,9 +48,9 @@
     clientSig = sig;
     client.auth.onAuthStateChange((ev, session) => {
       const u = session?.user || null;
-      if (u?.id === st.user?.id && ev !== 'SIGNED_OUT') return;
-      set({ user: u, status: u ? 'idle' : 'signedout', error: '' });
-      if (u) setTimeout(() => st.sync(), 300);
+      if (!u) { entering = ''; st.access = null; set({ user: null, status: 'signedout', error: '' }); return; }
+      if (u.id === st.user?.id || u.id === entering) return;
+      setTimeout(() => enter(u), 0);
     });
     return client;
   }
@@ -60,6 +61,7 @@
     if (code === '42P01' || code === 'PGRST205' || /schema cache|does not exist|relation .* not exist/i.test(m)) return 'La base de datos todavía no está preparada. Avisa a quien administra la plataforma.';
     if (/bucket not found/i.test(m)) return 'El almacenamiento de archivos todavía no está preparado. Avisa a quien administra la plataforma.';
     if (/invalid api key|invalid jwt|apikey/i.test(m)) return 'La conexión con la base de datos no está bien configurada. Avisa a quien administra la plataforma.';
+    if (/framaly_access/i.test(m) && /does not exist|schema cache/i.test(m)) return 'El control de acceso todavía no está preparado. Avisa a quien administra la plataforma.';
     if (/provider is not enabled|unsupported provider/i.test(m)) return 'El acceso con Google todavía no está activado. Avisa a quien administra la plataforma.';
     if (/invalid login credentials/i.test(m)) return 'Correo o contraseña incorrectos.';
     if (/email not confirmed/i.test(m)) return 'Confirma tu correo: te enviamos un enlace al registrarte.';
@@ -71,6 +73,42 @@
   }
   const fail = (e) => { console.error(e); const msg = explain(e); set({ status: st.user ? 'error' : 'signedout', error: msg, progress: '' }); throw new Error(msg); };
 
+  /* ---------- aprobación: quién puede usar la plataforma ---------- */
+  st.approved = () => st.access?.status === 'approved';
+  st.isAdmin = () => st.approved() && st.access?.role === 'admin';
+  async function loadAccess(s, uid) {
+    const { data, error } = await s.from('framaly_access').select('status,role').eq('user_id', uid).maybeSingle();
+    if (error) throw error;
+    st.access = data || { status: 'pending', role: 'user' };
+  }
+  /** Entra una sesión: primero se consulta su permiso, después se muestra la app */
+  async function enter(u) {
+    entering = u.id;
+    try {
+      const s = await sb(); await loadAccess(s, u.id);
+      set({ user: u, status: 'idle', error: '' });
+      if (st.approved()) setTimeout(() => st.sync(), 300);
+    } catch (e) { st.access = null; set({ user: u, status: 'error', error: explain(e) }); }
+  }
+  st.recheck = async () => {
+    const s = await sb(); await loadAccess(s, st.user.id); set({ error: '' });
+    if (st.approved()) setTimeout(() => st.sync(), 300);
+  };
+  /** Solo administradores: lista de personas y sus permisos */
+  st.people = async () => {
+    const s = await sb();
+    const { data, error } = await s.from('framaly_access').select('user_id,email,status,role,created_at').order('created_at', { ascending: false });
+    if (error) throw new Error(explain(error));
+    const n = data.filter((p) => p.status === 'pending').length;
+    if (n !== st.pendingCount) { st.pendingCount = n; F.emit('cloud'); }
+    return data;
+  };
+  st.decide = async (userId, status) => {
+    const s = await sb();
+    const { error } = await s.from('framaly_access').update({ status, decided_at: new Date().toISOString() }).eq('user_id', userId);
+    if (error) throw new Error(explain(error));
+  };
+
   /* ---------- cuenta ---------- */
   st.init = async () => {
     if (!st.configured()) { set({ status: 'off' }); return; }
@@ -79,8 +117,8 @@
       const { data, error } = await s.auth.getSession();
       if (error) throw error;
       if (/[?&]code=/.test(location.search)) history.replaceState(null, '', location.pathname + location.hash);
-      set({ user: data.session?.user || null, status: data.session ? 'idle' : 'signedout', error: '' });
-      if (data.session) setTimeout(() => st.sync(), 800);
+      const u = data.session?.user || null;
+      if (u) await enter(u); else set({ user: null, status: 'signedout', error: '' });
     } catch (e) { set({ status: 'error', error: explain(e) }); }
   };
   st.signUp = async (email, password) => {
@@ -104,6 +142,7 @@
   st.signOut = async () => {
     const s = await sb();
     await s.auth.signOut();
+    entering = ''; st.access = null;
     set({ user: null, status: 'signedout', progress: '' });
   };
 
@@ -205,7 +244,7 @@
 
   /** Sincroniza ahora. manual=true muestra errores al llamador. */
   st.sync = async ({ manual = false } = {}) => {
-    if (syncing || !st.user) return;
+    if (syncing || !st.user || !st.approved()) return;
     syncing = true; clearTimeout(timer);
     const log = { up: 0, down: 0 };
     set({ status: 'syncing', error: '', progress: 'Conectando…' });
@@ -233,13 +272,13 @@
   };
 
   function schedule() {
-    if (!st.user || syncing || applying) return;
+    if (!st.user || !st.approved() || syncing || applying) return;
     clearTimeout(timer);
     timer = setTimeout(() => st.sync(), 5000);
   }
   F.on('projects', schedule);
   F.on('media', schedule);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && st.user && Date.now() - st.last > 60000) st.sync(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && st.user && st.approved() && Date.now() - st.last > 60000) st.sync(); });
 
   st.label = () => ({ off: 'Sin configurar', signedout: 'Sin sesión', idle: 'Conectado', syncing: 'Sincronizando…', error: 'Error' }[st.status]);
   st.ready = st.init();
