@@ -174,9 +174,9 @@
     const st = load('img', { prompt: '', style: 'cine', size: '1536x1024', quality: 'medium', n: 1, provider: 'openai' });
     const save = () => store('img', st);
     el.innerHTML = `<div class="page"><div class="split">
-      <div class="card sticky"><h2>${I('image')} Generador de imágenes</h2><p class="desc">Crea escenas, fondos y recursos para tus videos con <b>${F.esc(F.settings.models.image)}</b>.</p>
+      <div class="card sticky"><h2>${I('image')} Generador de imágenes</h2><p class="desc">Crea escenas, fondos y recursos para tus videos con <b id="iModel"></b>.</p>
         <label class="lbl">Describe la imagen</label><textarea id="iPrompt" rows="5" placeholder="Ej: un faro solitario en un acantilado durante una tormenta al atardecer">${F.esc(st.prompt)}</textarea>
-        <div class="row" style="margin-top:8px"><button class="btn sm outline" id="iEnh">${I('wand')} Mejorar prompt con IA</button></div>
+        <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap"><button class="btn sm outline" id="iEnh">${I('wand')} Mejorar prompt con IA</button><select id="iEnhP" style="width:auto" title="IA que mejora el prompt">${opt([['auto', 'IA: según Integraciones'], ['anthropic', 'IA: Claude'], ['openai', 'IA: OpenAI (ChatGPT)'], ['gemini', 'IA: Gemini'], ['minimax', 'IA: MiniMax']], st.enhProvider || 'auto')}</select></div>
         <label class="lbl">Generador</label><div class="seg" id="iProv">${[['openai', 'OpenAI'], ['gemini', 'Gemini'], ['minimax', 'MiniMax']].map(([k, n]) => `<button data-p="${k}" class="${k === st.provider ? 'on' : ''}">${n}</button>`).join('')}</div>
         <label class="lbl">Estilo</label><div class="chips" id="iSty">${Object.entries(F.STYLES).map(([k, v]) => `<button class="chip ${k === st.style ? 'on' : ''}" data-s="${k}">${v.name}</button>`).join('')}</div>
         <div class="grid3"><div><label class="lbl">Formato</label><select id="iSize">${opt([['1536x1024', 'Horizontal'], ['1024x1536', 'Vertical'], ['1024x1024', 'Cuadrado']], st.size)}</select></div>
@@ -188,7 +188,9 @@
       <div><div class="card"><h3>${I('sparkles')} Resultados</h3><div class="img-grid" id="iRes"><div class="empty" style="grid-column:1/-1">${I('image')}<p class="small">Las imágenes nuevas aparecerán aquí y se guardan automáticamente en la biblioteca.</p></div></div></div>
       <div class="card"><h3>${I('grid')} Galería IA <span class="grow"></span><a class="btn sm ghost" href="#/biblioteca">Ver biblioteca</a></h3><div class="img-grid" id="iGal"></div></div></div>
     </div></div>`;
-    const cost = () => { const per = st.provider === 'gemini' ? 0.039 : st.provider === 'minimax' ? 0.0035 : { low: 0.016, medium: 0.063, high: 0.25 }[st.quality]; el.querySelector('#iCost').textContent = `Costo aproximado: US$${(per * st.n).toFixed(2)} · se guardan en tu biblioteca`; };
+    const IMG_MODEL = { openai: () => F.settings.models.image, gemini: () => F.settings.models.geminiImage, minimax: () => F.settings.models.minimaxImage }, IMG_NAME = { openai: 'OpenAI', gemini: 'Gemini', minimax: 'MiniMax' };
+    const modelLine = () => { el.querySelector('#iModel').textContent = `${IMG_NAME[st.provider] || 'OpenAI'} · ${(IMG_MODEL[st.provider] || IMG_MODEL.openai)()}`; };
+    const cost = () => { modelLine(); const per = st.provider === 'gemini' ? 0.039 : st.provider === 'minimax' ? 0.0035 : { low: 0.016, medium: 0.063, high: 0.25 }[st.quality]; el.querySelector('#iCost').textContent = `Costo aproximado: US$${(per * st.n).toFixed(2)} · se guardan en tu biblioteca`; };
     const gal = () => { const ai = F.media.images().filter((m) => m.source === 'ai').slice(0, 24); el.querySelector('#iGal').innerHTML = ai.length ? ai.map((m) => V.tile(m)).join('') : '<div class="small dim">Aún no generaste imágenes.</div>'; };
     cost(); gal();
     const off = F.on('media', gal);
@@ -197,11 +199,12 @@
     el.querySelector('#iSty').addEventListener('click', (e) => { const c = e.target.closest('[data-s]'); if (!c) return; st.style = c.dataset.s; save(); el.querySelectorAll('#iSty .chip').forEach((x) => x.classList.toggle('on', x === c)); });
     el.querySelector('#iProv').addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (!b) return; st.provider = b.dataset.p; save(); el.querySelectorAll('#iProv button').forEach((x) => x.classList.toggle('on', x === b)); cost(); });
     for (const [id, k] of [['iSize', 'size'], ['iQ', 'quality'], ['iN', 'n']]) el.querySelector('#' + id).addEventListener('change', (e) => { st[k] = k === 'n' ? +e.target.value : e.target.value; save(); cost(); });
+    el.querySelector('#iEnhP').addEventListener('change', (e) => { st.enhProvider = e.target.value; save(); });
     el.querySelector('#iEnh').onclick = async (e) => {
       if (!st.prompt.trim()) return F.toast('Escribe primero una idea');
       const b = e.currentTarget; F.busy(b, true, 'Mejorando…');
       try {
-        const t = await F.api.llm({ system: 'Eres un experto en prompts para generación de imágenes.', prompt: `Convierte esta idea en un prompt de imagen excelente, en inglés, de 40-70 palabras: sujeto, entorno, composición, iluminación, lente y atmósfera. Sin texto ni letras en la imagen. Devuelve SOLO el prompt.\nIdea: ${st.prompt}`, maxTokens: 400 });
+        const t = await F.api.llm({ provider: st.enhProvider || 'auto', system: 'Eres un experto en prompts para generación de imágenes.', prompt: `Convierte esta idea en un prompt de imagen excelente, en inglés, de 40-70 palabras: sujeto, entorno, composición, iluminación, lente y atmósfera. Sin texto ni letras en la imagen. Devuelve SOLO el prompt.\nIdea: ${st.prompt}`, maxTokens: 400 });
         st.prompt = t.trim().replace(/^"|"$/g, ''); el.querySelector('#iPrompt').value = st.prompt; save(); F.toast('Prompt mejorado', 'ok');
       } catch (err) { F.toast(err.message, 'error'); }
       F.busy(b, false);

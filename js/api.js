@@ -66,6 +66,10 @@
     /** Elige el proveedor de texto: el preferido si tiene key, si no el otro */
     textProvider(pref) {
       const p = pref && pref !== 'auto' ? pref : F.settings.textProvider;
+      if (pref && pref !== 'auto') {   // lo que eliges es lo que se usa: sin cambiar solo a otra IA
+        if (!this.has(pref)) { const L = { anthropic: 'Claude', openai: 'OpenAI', gemini: 'Gemini', minimax: 'MiniMax' }[pref] || pref; throw new Error(`${L} no está conectada o no está habilitada para tu cuenta. Conéctala en Integraciones API o elige otra IA.`); }
+        return pref;
+      }
       const found = [p, 'anthropic', 'openai', 'gemini', 'minimax'].find((x) => this.has(x) && canUse(x, 'text'));
       if (found) return found;
       throw new Error('Necesitas una API de texto (Claude, OpenAI, Gemini o MiniMax) para los agentes. Ve a Integraciones API.');
