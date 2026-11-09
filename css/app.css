@@ -611,3 +611,7 @@ body.has-ask #toasts { bottom: 82px; }
 .ai-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 14px; margin-top: 8px; }
 .invite-form { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 12px; }
 .invite-form input { flex: 1; min-width: 200px; }
+.err-row { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.err-row:last-child { border-bottom: 0; }
+.tag.err { background: rgba(255, 93, 93, .12); color: var(--err); }
+.sec-t .btn { margin-left: 8px; }

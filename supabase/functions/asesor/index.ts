@@ -3,7 +3,7 @@
 // Solo responde a personas con sesión iniciada Y aprobadas, limita las consultas por día,
 // respeta el límite mensual de Claude y registra su gasto junto al resto de las APIs.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { CORS, PRICE, checkBudget, db, fail, json, record, tokenCost, whoIs } from "./budget.ts";
+import { CORS, PRICE, checkBudget, db, fail, getKey, json, logError, record, tokenCost, whoIs } from "./budget.ts";
 
 const DAILY_LIMIT = Number(Deno.env.get("ASESOR_DAILY_LIMIT") ?? "60");
 const MODEL = Deno.env.get("ASESOR_MODEL") ?? "claude-haiku-5-5";
@@ -27,14 +27,13 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return fail(405, "method", "Método no permitido.");
   try {
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey) return json({ error: "not_configured" });
-
     // 1) Quién es y si está aprobada
     const client = db();
     const who = await whoIs(client, req);
     if (who instanceof Response) return who;
     const { uid, acc } = who;
+    const apiKey = await getKey(client, "anthropic", "ANTHROPIC_API_KEY");
+    if (!apiKey) return json({ error: "not_configured" });
 
     // 2) Entrada validada
     const body = await req.json().catch(() => ({}));
@@ -66,7 +65,9 @@ Deno.serve(async (req: Request) => {
       }),
     });
     if (!r.ok) {
-      console.error("anthropic", r.status, (await r.text()).slice(0, 300));
+      const t = (await r.text()).slice(0, 300);
+      console.error("anthropic", r.status, t);
+      await logError(client, { provider: "anthropic", uid, email: acc.email, kind: r.status === 401 || r.status === 403 ? "clave" : "proveedor", status: r.status, message: `Asesor: ${t}` });
       return json({ error: "upstream", status: r.status });
     }
     const j = await r.json();

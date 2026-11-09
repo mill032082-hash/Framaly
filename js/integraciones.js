@@ -8,6 +8,7 @@
   const I = F.icon, V = F.views, esc = F.esc;
   const usd = (n) => 'US$ ' + (+n || 0).toFixed(2).replace('.', ',');
   const num = (n) => { n = +n || 0; return n >= 1e6 ? (n / 1e6).toFixed(1).replace('.', ',') + ' M' : n >= 1e3 ? (n / 1e3).toFixed(1).replace('.', ',') + ' mil' : String(Math.round(n)); };
+  const KIND = { clave: ['Clave rechazada', 'err', 'Cambia la clave en la tarjeta de esa API.'], sin_clave: ['Falta la clave', 'err', 'Pega la clave en la tarjeta de esa API.'], proveedor: ['Error del proveedor', 'or', 'Suele ser saldo, cuota o un dato rechazado por el proveedor. Revisa su panel.'], limite: ['Límite mensual', 'or', 'Sube el límite mensual de esa API si quieres seguir.'], tope: ['Tope diario', 'or', 'La persona llegó a su tope. Súbelo en Ajustes → Personas.'], modo: ['Sin permiso', '', 'Esa persona intentó usar una clave que no tiene habilitada. Revisa su modo en Ajustes → Personas.'], servidor: ['Error interno', 'err', 'Un fallo de la función segura. Si se repite, revisa los registros en Supabase.'] };
   const SECRET = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', elevenlabs: 'ELEVENLABS_API_KEY' };
   const AIS = [
     { k: 'anthropic', logo: 'A', bg: 'linear-gradient(135deg,#d97757,#b4532a)', name: 'Claude · Anthropic', sub: 'Agentes de texto: guiones, SEO, prompts y asesor', feats: ['Guionista', 'SEO YouTube', 'Mejorar prompts'] },
@@ -20,7 +21,7 @@
 
   V.integraciones = (el) => {
     const S = F.settings, C = F.cloud, cloudOn = !!(C?.configured() && C.user);
-    const data = { rep: null, lims: null };
+    const data = { rep: null, lims: null, secrets: [], errors: null };
     let dead = false;
     const mode = (k) => (cloudOn ? C.aiMode(k) : 'own');
     const model = (k, label, list) => `<label class="lbl">${label}</label><input type="text" data-model="${k}" value="${esc(S.models[k])}" list="dl-${k}"><datalist id="dl-${k}">${list.map((x) => `<option value="${x}">`).join('')}</datalist>`;
@@ -38,6 +39,7 @@
     /* --- clave de FRAMALY, vista del administrador --- */
     const adminCard = (a) => {
       const p = data.rep?.providers?.[a.k] || { cost: 0, units: {} }, l = (data.lims || []).find((x) => x.provider === a.k) || { monthly_usd: 0, alert_pct: 80 };
+      const sec = (data.secrets || []).find((x) => x.provider === a.k);
       const pct = l.monthly_usd > 0 ? Math.round((p.cost / l.monthly_usd) * 100) : 0;
       return `<div class="card int-card">${head(a, 'Clave compartida activa', 'ok')}
         <div class="big">${usd(p.cost)}<span class="mini"> de ${usd(l.monthly_usd)} este mes</span></div>${bar(pct, pct >= l.alert_pct)}
@@ -46,7 +48,10 @@
         <label class="lbl">Límite mensual (US$)</label><div class="keyrow"><input type="number" min="0" step="1" data-lim="${a.k}" value="${l.monthly_usd}"><button class="btn" data-limsave="${a.k}">Guardar</button></div>
         <label class="lbl">Avisarme al llegar a</label><div class="seg">${[80, 90, 100].map((n) => `<button data-alert="${a.k}" data-v="${n}" class="${+l.alert_pct === n ? 'on' : ''}">${n}%</button>`).join('')}</div>
         <div class="sep"></div>
-        <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn sm" data-test="${a.k}">Probar conexión</button><span class="mini">La clave está guardada en Supabase y no se puede ver desde la app. Para cambiarla: Supabase → Edge Functions → Secrets → <code>${SECRET[a.k]}</code>.</span></div>
+        <label class="lbl">Clave de ${a.name.split(' · ')[0]}</label>
+        <p class="mini" style="margin:0 0 6px">${sec ? `Guardada en la plataforma (cifrada) · termina en ••••${esc(sec.last4)} · ${F.ago(new Date(sec.updated_at).getTime())}` : `No hay una clave guardada aquí. Si la dejaste en Supabase (secreto <code>${SECRET[a.k]}</code>), también funciona.`}</p>
+        <div class="keyrow"><input type="password" data-secret="${a.k}" placeholder="${sec ? 'Pega una clave nueva para reemplazarla' : 'Pega la clave aquí'}" autocomplete="off" spellcheck="false"><button class="btn" data-secsave="${a.k}">Guardar clave</button>${sec ? `<button class="btn danger" data-secdel="${a.k}">Quitar</button>` : ''}</div>
+        <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn sm" data-test="${a.k}">Probar conexión</button><span class="mini">Se guarda cifrada y no se puede volver a ver, solo reemplazar.</span></div>
         <details style="margin-top:10px" class="small muted"><summary style="cursor:pointer;color:var(--or2)">Modelos</summary>${models(a.k)}</details></div>`;
     };
     /* --- clave de FRAMALY, vista de una persona --- */
@@ -72,13 +77,20 @@
       if (!C?.isAdmin() || !list.length) return '';
       return `<h2 class="sec-t" style="margin-top:22px">Consumo por persona (este mes) <span class="line"></span></h2><div class="card">${list.sort((x, y) => y.month - x.month).map((p) => `<div class="row2 prow"><span><b>${esc(p.email || 'Sin correo')}</b></span><span>${usd(p.month)} este mes · ${usd(p.today)} hoy</span></div>`).join('')}</div>`;
     };
+    const errors = () => {
+      const list = data.errors;
+      if (!C?.isAdmin() || !list) return '';
+      const rows = list.map((e) => { const [lbl, cls, tip] = KIND[e.kind] || [e.kind, '', '']; const who = AIS.find((a) => a.k === e.provider)?.name.split(' · ')[0] || '';
+        return `<div class="err-row"><div class="row" style="gap:8px;flex-wrap:wrap"><span class="tag ${cls}">${esc(lbl)}</span><b>${esc(who)}</b>${e.status ? `<span class="mini">código ${e.status}</span>` : ''}<span class="grow"></span><span class="mini">${esc(e.email || '')} · ${F.ago(new Date(e.created_at).getTime())}</span></div><div class="mini" style="margin-top:4px">${esc(e.message)}</div>${tip ? `<div class="mini" style="color:var(--or2)">${esc(tip)}</div>` : ''}</div>`; }).join('');
+      return `<h2 class="sec-t" style="margin-top:22px">Errores recientes <span class="line"></span>${list.length ? '<button class="btn sm" data-errclear>Limpiar</button>' : ''}</h2><div class="card">${rows || '<p class="mini" style="margin:0">Sin errores. Aquí aparecerán los fallos de las APIs: clave rechazada, saldo agotado, límites alcanzados…</p>'}</div>`;
+    };
     const draw = () => {
       if (dead) return;
       el.innerHTML = `<div class="page">
         <div class="notice">${I('shield')}<div>${cloudOn
           ? (anyOwn ? '<b>Tus claves propias se guardan solo en este navegador</b> y se envían directo a cada proveedor. Las claves de FRAMALY viven en el servidor y no se pueden ver.' : '<b>Las claves de FRAMALY viven en el servidor</b> y nadie las ve. Cada uso se mide y respeta los límites.')
           : '<b>Tus claves se guardan solo en este navegador</b> (almacenamiento local de tu PC) y se envían directamente a cada proveedor, sin servidores intermedios. No uses FRAMALY en equipos compartidos con tus claves guardadas.'}</div></div>
-        <div class="int-grid">${AIS.map(aiCard).join('')}${ytCard}</div>${people()}
+        <div class="int-grid">${AIS.map(aiCard).join('')}${ytCard}</div>${people()}${errors()}
         <div class="split even" style="margin-top:16px">
           <div class="card"><h3>${I('bot')} Preferencias de agentes</h3><label class="lbl">Proveedor de texto preferido</label><div class="seg" id="tp"><button data-v="anthropic">Claude (Anthropic)</button><button data-v="openai">OpenAI</button></div><p class="hint">Si el preferido no está disponible, se usa el otro automáticamente.</p></div>
         </div></div>`;
@@ -88,7 +100,7 @@
     draw();
     if (cloudOn) {
       (async () => {
-        try { data.rep = await C.report(); if (C.isAdmin()) data.lims = await C.limits(); } catch (e) { F.toast(e.message, 'error'); }
+        try { data.rep = await C.report(); if (C.isAdmin()) { [data.lims, data.secrets, data.errors] = await Promise.all([C.limits(), C.secrets(), C.errors()]); } } catch (e) { F.toast(e.message, 'error'); }
         draw();
       })();
     }
@@ -116,6 +128,22 @@
         try { await C.setLimit(k, { monthly_usd: v }); const l = data.lims.find((x) => x.provider === k); if (l) l.monthly_usd = v; F.toast('Límite guardado', 'ok'); draw(); } catch (err) { F.toast(err.message, 'error'); F.busy(ls, false); }
         return;
       }
+      const ss = e.target.closest('[data-secsave]');
+      if (ss) {
+        const k = ss.dataset.secsave, inp = q(`[data-secret="${k}"]`), v = inp.value.trim();
+        if (!v) return F.toast('Pega primero la clave');
+        F.busy(ss, true, 'Guardando…');
+        try { await C.setSecret(k, v); inp.value = ''; data.secrets = await C.secrets(); F.toast('Clave guardada. Pulsa «Probar conexión» para confirmarla.', 'ok', 5000); draw(); } catch (err) { F.toast(err.message, 'error'); F.busy(ss, false); }
+        return;
+      }
+      const sd = e.target.closest('[data-secdel]');
+      if (sd) {
+        const k = sd.dataset.secdel, nm = AIS.find((a) => a.k === k).name.split(' · ')[0];
+        if (!(await F.confirm('Quitar la clave', `Se borrará la clave de ${nm} guardada en la plataforma. Si no hay otra en Supabase, esa IA dejará de funcionar para todos.`, 'Quitar'))) return;
+        try { await C.deleteSecret(k); data.secrets = await C.secrets(); F.toast('Clave quitada', 'ok'); draw(); } catch (err) { F.toast(err.message, 'error'); }
+        return;
+      }
+      if (e.target.closest('[data-errclear]')) { try { await C.clearErrors(); data.errors = []; draw(); } catch (err) { F.toast(err.message, 'error'); } return; }
       const al = e.target.closest('[data-alert]');
       if (al) { try { await C.setLimit(al.dataset.alert, { alert_pct: +al.dataset.v }); const l = data.lims.find((x) => x.provider === al.dataset.alert); if (l) l.alert_pct = +al.dataset.v; F.toast('Aviso guardado', 'ok'); draw(); } catch (err) { F.toast(err.message, 'error'); } }
     });

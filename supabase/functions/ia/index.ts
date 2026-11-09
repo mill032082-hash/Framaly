@@ -3,7 +3,7 @@
 // Cada llamada: verifica sesión y aprobación, comprueba que la persona use la clave compartida,
 // respeta los límites (mensual por API y diario por persona), registra el gasto y avisa al administrador.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { CORS, LABEL, PRICE, Provider, checkBudget, db, fail, notify, record, tokenCost, whoIs } from "./budget.ts";
+import { CORS, LABEL, PRICE, Provider, checkBudget, db, fail, getKey, logError, notify, record, tokenCost, whoIs } from "./budget.ts";
 
 const HOST: Record<Provider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", elevenlabs: "https://api.elevenlabs.io" };
 const SECRET: Record<Provider, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", elevenlabs: "ELEVENLABS_API_KEY" };
@@ -45,11 +45,13 @@ Deno.serve(async (req: Request) => {
 
     // 2) ¿Esta persona usa la clave compartida de esta API?
     if (acc.role !== "admin" && acc.ai?.[provider] !== "shared") {
+      await logError(client, { provider, uid, email: acc.email, kind: "modo", status: 403, message: `Intentó usar la clave compartida de ${LABEL[provider]}, pero su cuenta no la tiene habilitada.` });
       return fail(403, "mode", `Tu cuenta no usa la clave compartida de ${LABEL[provider]}.`);
     }
     // 3) ¿Está configurada la clave?
-    const key = Deno.env.get(SECRET[provider]);
+    const key = await getKey(client, provider, SECRET[provider]);
     if (!key) {
+      await logError(client, { provider, uid, email: acc.email, kind: "sin_clave", status: 503, message: `No hay clave de ${LABEL[provider]} guardada.` });
       await notify(client, { dedupe: `${provider}:nokey`, level: "warn", provider, title: `Falta la clave de ${LABEL[provider]}`, body: `Alguien intentó usar ${LABEL[provider]} pero el secreto ${SECRET[provider]} no está guardado en Supabase.` });
       return fail(503, "not_configured", `La clave compartida de ${LABEL[provider]} todavía no está configurada.`);
     }
@@ -75,8 +77,18 @@ Deno.serve(async (req: Request) => {
     const up = await fetch(HOST[provider] + path + (query ? "?" + query : ""), { method, headers: headersFor(provider, key), body: body ? JSON.stringify(body) : undefined });
     const type = up.headers.get("content-type") ?? "application/json";
     if (up.status === 401 || up.status === 403) {
+      await logError(client, { provider, uid, email: acc.email, kind: "clave", status: up.status, message: `${LABEL[provider]} rechazó la clave (${up.status}).` });
       await notify(client, { dedupe: `${provider}:badkey:${new Date().toISOString().slice(0, 10)}`, level: "crit", provider, title: `La clave de ${LABEL[provider]} fue rechazada`, body: `${LABEL[provider]} respondió ${up.status}: la clave guardada en Supabase no es válida, venció o no tiene saldo.` });
       return fail(502, "bad_key", `La clave compartida de ${LABEL[provider]} no es válida. Avisa a quien administra la plataforma.`);
+    }
+
+    // 6b) Otros errores del proveedor: se registran y se devuelven tal cual
+    if (!up.ok) {
+      const t = await up.text();
+      let msg = t;
+      try { const j = JSON.parse(t); msg = j?.error?.message ?? j?.detail?.message ?? (typeof j?.detail === "string" ? j.detail : "") ?? t; } catch { /* texto plano */ }
+      await logError(client, { provider, uid, email: acc.email, kind: "proveedor", status: up.status, message: String(msg || t) });
+      return new Response(t, { status: up.status, headers: { ...CORS, "Content-Type": type } });
     }
 
     // 7) Gasto (solo si salió bien)
@@ -107,6 +119,7 @@ Deno.serve(async (req: Request) => {
     return new Response(text, { status: up.status, headers: { ...CORS, "Content-Type": type } });
   } catch (e) {
     console.error(e);
+    try { await logError(db(), { kind: "servidor", status: 500, message: String(e) }); } catch { /* sin registro */ }
     return fail(500, "server", "Ocurrió un error inesperado. Inténtalo de nuevo.");
   }
 });

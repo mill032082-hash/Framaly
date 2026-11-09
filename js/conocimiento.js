@@ -236,6 +236,13 @@ Si una IA aparece como **No habilitada**, pídele a quien administra FRAMALY que
 5. Abajo ves el **consumo por persona**.
 Los montos son **estimados** a partir de los precios de cada proveedor.` },
 
+    { id: 'integraciones.claveadmin', sec: 'integraciones', t: 'Guardar o cambiar una clave de IA desde la plataforma (administrador)', k: 'guardar cambiar clave api pegar plataforma boveda cifrada quitar reemplazar probar conexion errores registro fallo error rechazada saldo',
+      a: `Solo lo ve quien administra FRAMALY, en [[#/integraciones|Integraciones API]]:
+1. En la tarjeta de la API, escribe la clave en **Clave de…** y pulsa **Guardar clave**. Se guarda **cifrada** y no se puede volver a ver, solo reemplazar. Verás solo cómo termina.
+2. Pulsa **Probar conexión** para confirmar que funciona.
+3. **Quitar** borra la clave guardada aquí. Si dejaste otra en Supabase, esa se sigue usando.
+Abajo, **Errores recientes** muestra cada fallo: clave rechazada, falta de saldo, límite alcanzado o una persona sin permiso, con una sugerencia de qué hacer. **Limpiar** vacía la lista.` },
+
     /* ================= AJUSTES ================= */
     { id: 'ajustes.generales', sec: 'ajustes', t: 'Qué se puede cambiar en Ajustes', k: 'ajustes preferencias configuracion cambiar formato duracion estilo fps calidad visibilidad idioma tono voz',
       a: `En [[#/ajustes|Ajustes]], cada cambio se guarda solo:

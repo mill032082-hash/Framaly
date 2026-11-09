@@ -135,6 +135,17 @@
   st.report = async () => { const s = await sb(); const { data, error } = await s.rpc('framaly_usage_report'); if (error) throw new Error(explain(error)); return data; };
   st.limits = async () => { const s = await sb(); return rows(s.from('framaly_limits').select('provider,monthly_usd,alert_pct')); };
   st.setLimit = async (provider, patch) => { const s = await sb(); await rows(s.from('framaly_limits').update({ ...patch, updated_at: new Date().toISOString() }).eq('provider', provider)); };
+  /** Claves guardadas desde la plataforma (cifradas en la bóveda de Supabase; nunca se pueden volver a ver) */
+  st.secrets = async () => { const s = await sb(); return rows(s.from('framaly_secret_meta').select('provider,last4,updated_at')); };
+  st.setSecret = async (provider, value) => {
+    const s = await sb();
+    const { error } = await s.rpc('framaly_set_secret', { p_provider: provider, p_value: String(value || '').trim() });
+    if (error) throw new Error(/invalid_key/.test(error.message) ? 'La clave no parece válida. Revisa que la copiaste completa y sin espacios.' : /forbidden/.test(error.message) ? 'Solo el administrador puede guardar claves.' : explain(error));
+  };
+  st.deleteSecret = async (provider) => { const s = await sb(); const { error } = await s.rpc('framaly_delete_secret', { p_provider: provider }); if (error) throw new Error(explain(error)); };
+  /** Errores recientes de las APIs (solo administrador) */
+  st.errors = async () => { const s = await sb(); return rows(s.from('framaly_errors').select('id,provider,email,kind,status,message,created_at').order('created_at', { ascending: false }).limit(40)); };
+  st.clearErrors = async () => { const s = await sb(); await rows(s.from('framaly_errors').delete().gte('id', 0)); };
   /** Avisos del administrador (campanita) */
   st.refreshNotifs = async () => {
     if (!st.isAdmin()) return [];

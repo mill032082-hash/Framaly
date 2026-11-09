@@ -52,6 +52,23 @@ export async function whoIs(client: ReturnType<typeof db>, req: Request): Promis
   return { uid: auth.user.id, acc: acc as Access };
 }
 
+/** La clave: primero la guardada desde la plataforma (bóveda cifrada); si no hay, el secreto de Supabase */
+export async function getKey(client: ReturnType<typeof db>, provider: Provider, envName: string): Promise<string | null> {
+  const { data } = await client.rpc("framaly_get_secret", { p_provider: provider });
+  if (typeof data === "string" && data) return data;
+  return Deno.env.get(envName) ?? null;
+}
+
+/** Quita de un mensaje cualquier cosa que parezca una clave antes de guardarlo */
+const cleanMsg = (m: string) => String(m ?? "").replace(/[A-Za-z0-9_\-]{24,}/g, "•••").slice(0, 300);
+
+/** Deja constancia de un error para que el administrador lo vea en la plataforma */
+export async function logError(client: ReturnType<typeof db>, o: { provider?: string; uid?: string | null; email?: string; kind: string; status?: number; message: string }) {
+  try {
+    await client.from("framaly_errors").insert({ provider: o.provider ?? null, user_id: o.uid ?? null, email: o.email ?? null, kind: o.kind, status: o.status ?? null, message: cleanMsg(o.message) });
+  } catch { /* un fallo al registrar nunca debe romper la respuesta */ }
+}
+
 export async function limitOf(client: ReturnType<typeof db>, provider: Provider) {
   const { data } = await client.from("framaly_limits").select("monthly_usd,alert_pct").eq("provider", provider).maybeSingle();
   return { monthly: Number(data?.monthly_usd ?? 10), alertPct: Number(data?.alert_pct ?? 80) };
@@ -67,9 +84,11 @@ export async function checkBudget(client: ReturnType<typeof db>, provider: Provi
   const [month, today] = await Promise.all([sum(client, provider, null, monthStart()), perPerson ? sum(client, null, uid, dayStart()) : Promise.resolve(0)]);
   if (month >= lim.monthly) {
     await notify(client, { dedupe: `${provider}:100:${ym()}`, level: "crit", provider, title: `${LABEL[provider]} llegó a su límite mensual`, body: `Se gastó ${usd(month)} de ${usd(lim.monthly)}. Las consultas con la clave compartida quedaron pausadas hasta el mes siguiente o hasta que subas el límite.` });
+    await logError(client, { provider, uid, email: acc.email, kind: "limite", status: 429, message: `Límite mensual de ${LABEL[provider]} alcanzado (${usd(month)} de ${usd(lim.monthly)}).` });
     return fail(429, "provider_limit", `FRAMALY alcanzó el límite mensual de ${LABEL[provider]}. Avisa a quien administra la plataforma.`);
   }
   if (perPerson && acc.role !== "admin" && today >= Number(acc.daily_usd)) {
+    await logError(client, { provider, uid, email: acc.email, kind: "tope", status: 429, message: `Tope diario alcanzado (${usd(Number(acc.daily_usd))}).` });
     return fail(429, "user_limit", `Llegaste a tu tope diario de uso de IA (${usd(Number(acc.daily_usd))}). Podrás seguir mañana.`);
   }
   return null;
