@@ -83,3 +83,11 @@ create policy "framaly_storage_delete" on storage.objects for delete to authenti
 -- Permisos por persona: solo se guarda lo que está en false (bloqueado); lo demás está permitido.
 -- Las personas nuevas arrancan sin acceso a Integraciones API. El administrador lo cambia en Ajustes.
 alter table public.framaly_access add column if not exists perms jsonb not null default '{"integraciones": false}'::jsonb;
+
+-- Las funciones de permisos solo las necesitan las reglas (RLS) de personas con sesión
+revoke execute on function public.framaly_is_admin() from public, anon;
+revoke execute on function public.framaly_is_approved() from public, anon;
+grant execute on function public.framaly_is_admin() to authenticated, service_role;
+grant execute on function public.framaly_is_approved() to authenticated, service_role;
+-- La función del disparador de registro no debe poder llamarse desde fuera
+revoke execute on function public.framaly_on_user_created() from public, anon, authenticated;
