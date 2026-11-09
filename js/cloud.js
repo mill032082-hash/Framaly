@@ -111,15 +111,15 @@
     if (error) throw new Error(explain(error));
   };
   /* ---------- IA: clave compartida del servidor o clave propia ---------- */
-  /** 'shared' = usa la clave de FRAMALY · 'own' = pone la suya · 'off' = sin esa IA. Sin nube, siempre 'own'. */
+  /** 'shared' = solo la clave de FRAMALY · 'both' = la de FRAMALY y, si quiere, la suya · 'own' = pone la suya · 'off' = sin esa IA. Sin nube, siempre 'own'. */
   st.aiBaseMode = (p) => {
     if (!st.configured() || !st.user) return 'own';
     return st.access?.ai?.[p] || (st.isAdmin() ? 'shared' : 'own');
   };
-  /** Cada persona (no el administrador) puede preferir su propia clave aunque el administrador comparta la suya. «Sin IA» sigue mandando. */
+  /** Con «Mi API + la suya», la persona elige cuál usar. «Solo mi API» y «Sin IA» mandan. */
   st.aiMode = (p) => {
     const m = st.aiBaseMode(p);
-    if (m === 'shared' && !st.isAdmin() && F.settings.useOwn?.[p] && F.settings.keys?.[p]) return 'own';
+    if (m === 'both') return !st.isAdmin() && F.settings.useOwn?.[p] && F.settings.keys?.[p] ? 'own' : 'shared';
     return m;
   };
   /** Envía una llamada a la API por la puerta segura (la clave nunca llega al navegador) */

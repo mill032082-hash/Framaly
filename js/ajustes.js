@@ -78,7 +78,9 @@
     const edit = new Map();   // borradores: nada se guarda hasta pulsar «Guardar cambios»
     const SECS = [['editor', 'Editor de video'], ['flujos', 'Flujos y agentes'], ['guiones', 'Guiones'], ['imagenes', 'Imágenes'], ['voces', 'Voces'], ['efectos', 'Efectos y transiciones'], ['biblioteca', 'Biblioteca'], ['publicar', 'Publicar'], ['integraciones', 'Integraciones API'], ['ajustes', 'Ajustes']];
     const AIS = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini'], ['minimax', 'MiniMax']];
-    const MODES = [['shared', 'Clave de FRAMALY'], ['own', 'Que ponga la suya'], ['off', 'Sin IA']];
+    // Cada API tiene dos espacios: «mi API» (FRAMALY) y «su propia API». Se guardan como un solo modo: shared · both · own · off
+    const slot = (m, w) => (w === 'mine' ? ['shared', 'both'] : ['own', 'both']).includes(m || 'own');
+    const toMode = (mine, own) => (mine && own ? 'both' : mine ? 'shared' : own ? 'own' : 'off');
     const ST = { pending: ['Pendiente', 'or'], approved: ['Aprobada', 'ok'], blocked: ['Rechazada', 'err'], invited: ['Preparado', 'or'] };
     const everyone = () => [...invites.map((i) => ({ user_id: 'inv:' + i.email, email: i.email, status: 'invited', role: 'user', perms: i.perms, ai: i.ai, daily_usd: i.daily_usd, created_at: i.created_at })), ...people];
     const renderPeople = () => {
@@ -98,11 +100,13 @@
           : `<div class="row" style="gap:8px;margin-top:14px"><button class="btn sm" data-edit="${p.user_id}">Editar</button><span class="mini">Pulsa Editar para cambiar sus permisos y sus IA.</span></div>`;
         const panel = open.has(p.user_id) && p.role !== 'admin' ? `<div class="perms">
             <b class="small">Puede usar:</b><div class="perm-grid">${SECS.map(([k, n]) => `<label class="check"><input type="checkbox" data-pp="${p.user_id}" data-pk="${k}" ${perms[k] === false ? '' : 'checked'} ${dis}> ${n}</label>`).join('')}</div>
-            <b class="small" style="display:block;margin-top:14px">IA: ¿con qué clave trabaja?</b>
-            <div class="ai-grid">${AIS.map(([k, n]) => `<div><label class="lbl">${n}</label><select data-pai="${p.user_id}" data-pak="${k}" ${dis}>${MODES.map(([v, l]) => `<option value="${v}" ${(ai[k] || 'own') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`).join('')}
-              <div><label class="lbl">Tope diario con clave de FRAMALY (US$)</label><input type="number" min="0" step="0.5" data-pdaily="${p.user_id}" value="${daily}" ${dis}></div></div>
+            <b class="small" style="display:block;margin-top:14px">Mi API (clave de FRAMALY): ¿puede usarla?</b>
+            <div class="ai-grid">${AIS.map(([k, n]) => `<div><label class="lbl">${n}</label><select data-pai="${p.user_id}" data-pak="${k}" data-slot="mine" ${dis}><option value="1" ${slot(ai[k], 'mine') ? 'selected' : ''}>Sí, con mi API</option><option value="0" ${slot(ai[k], 'mine') ? '' : 'selected'}>No</option></select></div>`).join('')}
+              <div><label class="lbl">Tope diario con mi API (US$)</label><input type="number" min="0" step="0.5" data-pdaily="${p.user_id}" value="${daily}" ${dis}></div></div>
+            <b class="small" style="display:block;margin-top:14px">Su propia API: ¿puede conectar la suya?</b>
+            <div class="ai-grid">${AIS.map(([k, n]) => `<div><label class="lbl">${n}</label><select data-pai="${p.user_id}" data-pak="${k}" data-slot="own" ${dis}><option value="1" ${slot(ai[k], 'own') ? 'selected' : ''}>Sí, puede poner la suya</option><option value="0" ${slot(ai[k], 'own') ? '' : 'selected'}>No</option></select></div>`).join('')}</div>
             ${bar}
-            <p class="hint">«Clave de FRAMALY»: usa tu clave sin verla y cuenta para tus límites. «Que ponga la suya»: ve Integraciones API para pegar su clave. «Sin IA»: esa API queda desactivada.</p></div>` : '';
+            <p class="hint">«Mi API»: usa tu clave sin verla y cuenta para tus límites. «Su propia API»: puede pegar su clave en Integraciones API. Con las dos en Sí elige cuál usar; con las dos en No, esa IA queda desactivada.</p></div>` : '';
         const permBtn = p.role === 'admin' || me ? '' : `<button class="btn sm" data-perm="${p.user_id}">${open.has(p.user_id) ? 'Cerrar' : 'Permisos'}</button>`;
         return `<div class="person"><span class="em"><b>${F.esc(p.email || 'Sin correo')}</b>${me ? ' <span class="small muted">(tú)</span>' : ''}<br><span class="small muted">${inv ? 'esperando que se registre' : F.ago(new Date(p.created_at).getTime())}</span></span>${p.role === 'admin' ? '<span class="tag or">Administrador</span>' : ''}<span class="tag ${cls}">${lbl}</span>${permBtn}${acts}${panel}</div>`;
       }).join('');
@@ -148,9 +152,10 @@
       const d = edit.get(id); if (!d) return;
       if (t.dataset.pp) { if (t.checked) delete d.perms[t.dataset.pk]; else d.perms[t.dataset.pk] = false; }
       else if (t.dataset.pai) {
-        d.ai[t.dataset.pak] = t.value;
+        const k = t.dataset.pak, cur = d.ai[k] || 'own', mine = t.dataset.slot === 'mine' ? t.value === '1' : slot(cur, 'mine'), own = t.dataset.slot === 'own' ? t.value === '1' : slot(cur, 'own');
+        d.ai[k] = toMode(mine, own);
         // quien pega su propia clave necesita ver Integraciones; quien no, no (se puede ajustar a mano después)
-        if (Object.values(d.ai).includes('own')) delete d.perms.integraciones;
+        if (Object.values(d.ai).some((v) => v === 'own' || v === 'both')) delete d.perms.integraciones;
         renderPeople();
       } else d.daily_usd = t.value;
     };

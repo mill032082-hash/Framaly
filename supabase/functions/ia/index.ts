@@ -3,7 +3,7 @@
 // Cada llamada: verifica sesión y aprobación, comprueba que la persona use la clave compartida,
 // respeta los límites (mensual por API y diario por persona), registra el gasto y avisa al administrador.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { CORS, LABEL, PRICE, Provider, checkBudget, db, fail, getKey, limitOf, logError, notify, record, tokenCost, whoIs } from "./budget.ts";
+import { CORS, LABEL, PRICE, Provider, checkBudget, db, fail, getKey, limitOf, logError, notify, openaiImageEach, record, tokenCost, whoIs } from "./budget.ts";
 
 const HOST: Record<Provider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", elevenlabs: "https://api.elevenlabs.io", gemini: "https://generativelanguage.googleapis.com", minimax: "https://api.minimax.io" };
 const SECRET: Record<Provider, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", elevenlabs: "ELEVENLABS_API_KEY", gemini: "GEMINI_API_KEY", minimax: "MINIMAX_API_KEY" };
@@ -56,7 +56,7 @@ Deno.serve(async (req: Request) => {
     if (query && !/^output_format=[a-z0-9_]{3,30}$/.test(query)) return fail(400, "bad_request", "Parámetros no permitidos.");
 
     // 2) ¿Esta persona usa la clave compartida de esta API?
-    if (acc.role !== "admin" && acc.ai?.[provider] !== "shared") {
+    if (acc.role !== "admin" && !["shared", "both"].includes(String(acc.ai?.[provider]))) {
       await logError(client, { provider, uid, email: acc.email, kind: "modo", status: 403, message: `Intentó usar la clave compartida de ${LABEL[provider]}, pero su cuenta no la tiene habilitada.` });
       return fail(403, "mode", `Tu cuenta no usa la clave compartida de ${LABEL[provider]}.`);
     }
@@ -173,8 +173,8 @@ Deno.serve(async (req: Request) => {
         }
       } else if (kind === "imagen") {
         const images = Array.isArray(j.data) ? j.data.length : Number(body?.n ?? 1);
-        const q = /dall-e-3/.test(String(body?.model)) ? "dalle3" : String(body?.quality ?? "medium");
-        await record(client, { uid, acc, provider, kind: "imagen", units: { images, quality: q }, cost: images * (PRICE.openai.image[q] ?? 0.063) });
+        const q = String(body?.quality ?? "medium"), mdl = String(body?.model ?? "gpt-image-1");
+        await record(client, { uid, acc, provider, kind: "imagen", units: { images, quality: q, model: mdl }, cost: images * openaiImageEach(mdl, q, String(body?.size ?? "1536x1024")) });
       } else if (provider === "anthropic") {
         const tin = Number(j.usage?.input_tokens ?? 0), tout = Number(j.usage?.output_tokens ?? 0);
         await record(client, { uid, acc, provider, kind: "texto", units: { in_tokens: tin, out_tokens: tout, model: String(body?.model ?? "") }, cost: tokenCost(PRICE.anthropic.perMTok, PRICE.anthropic.fallback, String(body?.model ?? j.model ?? ""), tin, tout) });

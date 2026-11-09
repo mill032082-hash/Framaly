@@ -55,7 +55,7 @@
     const ownTag = (k) => !F.api.has(k) ? ['Sin configurar', ''] : data.own[k] === 'ok' ? ['Conectado', 'ok'] : data.own[k] === 'fail' ? ['No funciona', 'err'] : ['Falta probar', 'or'];
     const ownCard = (a) => `<div class="card int-card">${head(a, ...ownTag(a.k))}
       <label class="lbl">API key</label><div class="keyrow"><input type="password" data-key="${a.k}" value="${esc(S.keys[a.k])}" placeholder="Pega tu clave aquí" autocomplete="off" spellcheck="false"><button class="icon-btn" data-eye="${a.k}" title="Mostrar">${I('eye')}</button><button class="btn" data-test="${a.k}">Probar</button></div>
-      ${cloudOn && C.aiBaseMode(a.k) === 'shared' && !C.isAdmin() ? `<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn sm" data-src="${a.k}:shared">Volver a la clave de FRAMALY</button><span class="mini">El administrador comparte esta API contigo.</span></div>` : ''}
+      ${cloudOn && C.aiBaseMode(a.k) === 'both' && !C.isAdmin() ? `<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn sm" data-src="${a.k}:shared">Volver a la clave de FRAMALY</button><span class="mini">El administrador comparte esta API contigo.</span></div>` : ''}
       ${a.k === 'minimax' ? '<p class="mini" style="margin:8px 0 0">MiniMax suele no permitir llamadas directas desde el navegador: funciona mejor con la clave de FRAMALY.</p>' : ''}${models(a.k)}${feats(a)}</div>`;
     /* --- saldo del proveedor + historial de la API (administrador) --- */
     const history = (a) => {
@@ -119,7 +119,7 @@
         ${stOf(a.k) === 'ok' ? '<div class="shared-line"><b>Conectado</b> · compartido contigo por el administrador</div>' : '<div class="shared-line"><b style="color:var(--or2)">No disponible aún</b> · el administrador todavía no la ha conectado o está fallando.</div>'}
         <p class="mini" style="margin:0 0 8px">Usas la clave de FRAMALY. No necesitas configurar nada.</p>
         ${data.rep ? `${bar(pct, pct >= 80)}<div class="row2"><span>Hoy llevas ${usd(used)} de ${usd(cap)}</span><span>${pct}% de tu cupo</span></div>` : '<div class="mini">Cargando tu cupo…</div>'}
-        ${ownOption(a)}
+        ${cloudOn && C.aiBaseMode(a.k) === 'both' ? ownOption(a) : ''}
         ${feats(a)}</div>`;
     };
     const offCard = (a) => `<div class="card int-card">${head(a, 'No habilitada', '')}<p class="mini" style="margin:0">Esta IA no está habilitada para tu cuenta. Pídeselo a quien administra FRAMALY.</p>${feats(a)}</div>`;

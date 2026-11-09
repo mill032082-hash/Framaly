@@ -21,7 +21,8 @@ export const db = () => createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get
 export const PRICE = {
   anthropic: { perMTok: { "claude-haiku-5-5": [1, 5], "claude-sonnet-5-5": [3, 15], "claude-opus-5-5": [5, 25] } as Record<string, number[]>, fallback: [3, 15] },
   openai: {
-    chatPerMTok: { "gpt-4.1-mini": [0.4, 1.6], "gpt-4.1": [2, 8], "gpt-4o-mini": [0.15, 0.6], "gpt-4o": [2.5, 10] } as Record<string, number[]>,
+    // el orden importa: el nombre más largo va antes que el corto (gpt-5-mini antes que gpt-5)
+    chatPerMTok: { "gpt-5-nano": [0.05, 0.4], "gpt-5-mini": [0.25, 2], "gpt-5": [1.25, 10], "gpt-4.1-nano": [0.1, 0.4], "gpt-4.1-mini": [0.4, 1.6], "gpt-4.1": [2, 8], "gpt-4o-mini": [0.15, 0.6], "gpt-4o": [2.5, 10], "o4-mini": [1.1, 4.4], "o3-mini": [1.1, 4.4] } as Record<string, number[]>,
     chatFallback: [2, 8],
     image: { low: 0.016, medium: 0.063, high: 0.25, auto: 0.25, dalle3: 0.08 } as Record<string, number>,
     ttsPerChar: 0.0000167,
@@ -34,6 +35,21 @@ export const PRICE = {
     imageEach: 0.039,
   },
   minimax: { perMTok: { "MiniMax-M2": [0.3, 1.2] } as Record<string, number[]>, fallback: [0.3, 1.2], ttsPerChar: 0.0001, imageEach: 0.0035 },
+};
+/** Imagen de OpenAI: US$ por imagen según modelo, calidad y tamaño (precios de referencia; gpt-image-2 estimado) */
+const IMG: Record<string, Record<string, number[]>> = {
+  "gpt-image-2": { low: [0.009, 0.013], medium: [0.034, 0.05], high: [0.133, 0.2] },
+  "gpt-image-1.5": { low: [0.009, 0.013], medium: [0.034, 0.05], high: [0.133, 0.2] },
+  "gpt-image-1-mini": { low: [0.005, 0.006], medium: [0.011, 0.015], high: [0.036, 0.052] },
+  "gpt-image-1": { low: [0.011, 0.016], medium: [0.042, 0.063], high: [0.167, 0.25] },
+};
+export const openaiImageEach = (model: string, quality: string, size: string): number => {
+  const big = size !== "1024x1024";
+  if (model.startsWith("dall-e-3")) return big ? 0.08 : 0.04;
+  if (model.startsWith("dall-e-2")) return 0.02;
+  const key = Object.keys(IMG).find((k) => model.startsWith(k));
+  const t = key ? IMG[key] : IMG["gpt-image-1"];
+  return (t[quality] ?? t.medium)[big ? 1 : 0];
 };
 export const tokenCost = (table: Record<string, number[]>, fallback: number[], model: string, tin: number, tout: number) => {
   const key = Object.keys(table).find((k) => model.startsWith(k));
