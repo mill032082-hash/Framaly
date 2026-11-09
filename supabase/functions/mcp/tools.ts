@@ -1,6 +1,6 @@
 // FRAMALY Studio · herramientas del servidor MCP / API. Usan las claves y los topes de la cuenta del usuario.
 import { LABEL, PRICE, type Provider, checkBudget, db, getKey, logError, openaiImageEach, record, tokenCost, type Access } from "./budget.ts";
-import { isPrivateHost, mp3Duration, newId, openaiSize, parseJSON, sniffImage } from "./lib.ts";
+import { audioDuration, isPrivateHost, mp3Duration, newId, openaiSize, parseJSON, sniffAudio, sniffImage } from "./lib.ts";
 
 export class ToolError extends Error {}
 export type Ctx = { client: ReturnType<typeof db>; uid: string; acc: Access };
@@ -120,8 +120,9 @@ async function voice(ctx: Ctx, o: { text: string; provider?: string; voice?: str
 }
 
 /* ---------- descargar una imagen de un enlace (con protección contra redes internas) ---------- */
-const MAX_IMG = 8 * 1024 * 1024;
-async function download(url: string): Promise<{ bytes: Uint8Array; mime: string }> {
+const MAX_IMG = 8 * 1024 * 1024, MAX_AUD = 25 * 1024 * 1024;
+async function download(url: string, kind: "image" | "audio" = "image"): Promise<{ bytes: Uint8Array; mime: string }> {
+  const MAX = kind === "image" ? MAX_IMG : MAX_AUD, W = kind === "image" ? "imagen" : "audio";
   let u: URL;
   try { u = new URL(url); } catch { throw new ToolError(`El enlace «${String(url).slice(0, 60)}» no es válido.`); }
   for (let hop = 0; hop < 4; hop++) {
@@ -131,20 +132,22 @@ async function download(url: string): Promise<{ bytes: Uint8Array; mime: string 
       if (ips.some((ip) => isPrivateHost(ip))) throw new ToolError("Ese enlace apunta a una red privada.");
     } catch (e) { if (e instanceof ToolError) throw e; /* sin DNS disponible: basta con la revisión del nombre */ }
     let r: Response;
-    try { r = await fetch(u, { redirect: "manual", signal: AbortSignal.timeout(15000), headers: { "user-agent": "FRAMALY-import/1.0" } }); } catch { throw new ToolError(`No pude descargar la imagen de ${u.hostname} (sin respuesta).`); }
+    try { r = await fetch(u, { redirect: "manual", signal: AbortSignal.timeout(15000), headers: { "user-agent": "FRAMALY-import/1.0" } }); } catch { throw new ToolError(`No pude descargar el ${W} de ${u.hostname} (sin respuesta).`); }
     if ([301, 302, 303, 307, 308].includes(r.status)) { const loc = r.headers.get("location"); if (!loc) throw new ToolError("El enlace redirige a ninguna parte."); u = new URL(loc, u); continue; }
-    if (!r.ok) throw new ToolError(`No pude descargar la imagen (${r.status}). Si el enlace es temporal, puede haber vencido.`);
-    if (Number(r.headers.get("content-length") ?? 0) > MAX_IMG) throw new ToolError("La imagen pesa más de 8 MB.");
+    if (!r.ok) throw new ToolError(`No pude descargar el ${W} (${r.status}). Si el enlace es temporal, puede haber vencido.`);
+    if (Number(r.headers.get("content-length") ?? 0) > MAX) throw new ToolError(`El ${W} pesa más de ${MAX / 1048576} MB.`);
     const chunks: Uint8Array[] = []; let n = 0;
     const rd = r.body?.getReader(); if (!rd) throw new ToolError("La descarga vino vacía.");
-    for (;;) { const { done, value } = await rd.read(); if (done) break; n += value.length; if (n > MAX_IMG) { await rd.cancel(); throw new ToolError("La imagen pesa más de 8 MB."); } chunks.push(value); }
+    for (;;) { const { done, value } = await rd.read(); if (done) break; n += value.length; if (n > MAX) { await rd.cancel(); throw new ToolError(`El ${W} pesa más de ${MAX / 1048576} MB.`); } chunks.push(value); }
     const bytes = new Uint8Array(n); let o = 0; for (const c of chunks) { bytes.set(c, o); o += c.length; }
-    const mime = sniffImage(bytes); if (!mime) throw new ToolError("Ese enlace no es una imagen PNG, JPG, WEBP o GIF.");
+    const mime = kind === "image" ? sniffImage(bytes) : sniffAudio(bytes); if (!mime) throw new ToolError(kind === "image" ? "Ese enlace no es una imagen PNG, JPG, WEBP o GIF." : "Ese enlace no es un audio MP3, WAV, M4A u OGG.");
     return { bytes, mime };
   }
   throw new ToolError("El enlace redirige demasiadas veces.");
 }
-const refUrls = (refs: unknown): string[] => (Array.isArray(refs) ? refs : []).map((f: any) => String(f?.download_link ?? "")).filter(Boolean);
+const isAudioRef = (f: any) => /^audio\//i.test(String(f?.mime_type ?? "")) || /\.(mp3|wav|m4a|ogg|aac)$/i.test(String(f?.name ?? ""));
+const refUrls = (refs: unknown, audio = false): string[] => (Array.isArray(refs) ? refs : []).filter((f: any) => isAudioRef(f) === audio).map((f: any) => String(f?.download_link ?? "")).filter(Boolean);
+const importAudio = async (ctx: Ctx, url: string, name: string) => { const d = await download(url, "audio"); const dur = audioDuration(d.bytes, d.mime); const m = await saveMedia(ctx, { type: "audio", bytes: d.bytes, mime: d.mime, name, meta: { imported: true }, duration: dur }); return { ...m, duration: dur }; };
 const importUrl = async (ctx: Ctx, url: string, name: string, meta: Record<string, unknown> = {}) => { const d = await download(url); const m = await saveMedia(ctx, { type: "image", bytes: d.bytes, mime: d.mime, name, meta: { ...meta, imported: true } }); return m; };
 
 /* ---------- biblioteca ---------- */
@@ -215,6 +218,16 @@ Devuelve JSON: {"title":"título atractivo (máx. 70 caracteres)","scenes":[{"na
     return { importadas: out.filter(Boolean), fallos, siguiente_paso: "Usa los media_id en framaly_create_video_project (image_media_id)." };
   },
 
+  async framaly_import_audio(ctx, a) {
+    const urls = [...(a.audio_urls ?? []), ...refUrls(a.openaiFileIdRefs, true)];
+    if (!urls.length) throw new ToolError("Pasa audio_urls (enlaces https) o los audios de la conversación (openaiFileIdRefs).");
+    if (urls.length > 12) throw new ToolError("Máximo 12 audios por llamada.");
+    const out: unknown[] = [], fallos: string[] = [];
+    await pool(urls, 3, async (u, i) => { try { const m = await importAudio(ctx, u, `${a.name || "Audio importado"} ${i + 1}`); out[i] = { media_id: m.id, duracion_segundos: Number(m.duration.toFixed(2)), url_temporal: m.url }; } catch (e) { fallos.push(`audio ${i + 1}: ${(e as Error).message}`); } });
+    if (!out.filter(Boolean).length) throw new ToolError(fallos.join(" · "));
+    return { importados: out.filter(Boolean), fallos, siguiente_paso: "Usa los media_id en framaly_create_video_project (voice_media_id por escena o music_media_id)." };
+  },
+
   async framaly_generate_voice(ctx, a) {
     const r = await voice(ctx, a);
     const m = await saveMedia(ctx, { type: "audio", bytes: r.bytes, mime: r.mime, name: a.name || a.text.slice(0, 48), meta: { text: a.text }, duration: r.duration });
@@ -234,13 +247,18 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
 
   async framaly_create_video_project(ctx, a) {
     const given = [...(a.image_urls ?? []), ...refUrls(a.openaiFileIdRefs)] as string[];
+    const audioGiven = [...(a.audio_urls ?? []), ...refUrls(a.openaiFileIdRefs, true)] as string[];
     let scenes: any[] = Array.isArray(a.scenes) ? a.scenes.map((s: any) => ({ ...s })) : [];
     if (!scenes.length) { if (!given.length) throw new ToolError("Pasa scenes o imágenes (image_urls / openaiFileIdRefs)."); scenes = given.slice(0, 12).map(() => ({ narration: "" })); }
     let gi = 0;
     for (const s of scenes) if (!s.image_media_id && !s.image_url && !String(s.image_prompt ?? "").trim() && gi < given.length) s.image_url = given[gi++];
+    // audios que ya existen: uno solo = música de fondo; varios = narración de cada escena, en orden
+    let musicUrl: string | null = a.music_url ?? null;
+    if (audioGiven.length === 1 && !musicUrl && !a.music_media_id) musicUrl = audioGiven[0];
+    else if (audioGiven.length > 1) { let ai = 0; for (const s of scenes) if (!s.voice_media_id && !s.voice_url && ai < audioGiven.length) s.voice_url = audioGiven[ai++]; }
     const aspect = a.aspect ?? "16:9", style = a.style ? ". " + a.style : "";
     const genImg = scenes.filter((s) => !s.image_media_id && !s.image_url).length, wantVoice = a.voice ?? true;
-    const genVoice = wantVoice ? scenes.filter((s) => !s.voice_media_id && String(s.narration ?? "").trim()).length : 0;
+    const genVoice = wantVoice ? scenes.filter((s) => !s.voice_media_id && !s.voice_url && String(s.narration ?? "").trim()).length : 0;
     if (scenes.some((s) => !s.image_media_id && !s.image_url && !String(s.image_prompt ?? "").trim())) throw new ToolError("Cada escena necesita image_prompt, image_url o image_media_id (o pasa image_urls / openaiFileIdRefs).");
     if (genImg > 6 || genVoice > 6) throw new ToolError("Máximo 6 imágenes y 6 voces generadas por llamada. Genéralas antes con framaly_generate_image / framaly_generate_voice y pasa image_media_id / voice_media_id.");
     if (genVoice) await pick(ctx, ["openai", "elevenlabs"], a.voice_provider).catch((e) => { if (a.voice === true || a.voice_provider) throw e; scenes.forEach((s) => { if (!s.voice_media_id) s.__skipVoice = true; }); });
@@ -252,6 +270,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
         if (!img) { const r = await image(ctx, { prompt: s.image_prompt + style, aspect, provider: a.image_provider }); const m = await saveMedia(ctx, { type: "image", bytes: r.bytes, mime: r.mime, name: `${a.title.slice(0, 40)} · escena ${i + 1}`, meta: { prompt: s.image_prompt } }); created.push(m.id); img = { id: m.id, type: "image", duration: null, name: "" }; }
         let vo: { id: string; duration: number } | null = null;
         if (s.voice_media_id) { const r = await mediaRow(ctx, s.voice_media_id, "audio"); vo = { id: r.id, duration: Number(r.duration ?? 0) }; }
+        else if (s.voice_url) { const m = await importAudio(ctx, String(s.voice_url), `${a.title.slice(0, 32)} · voz ${i + 1}`); created.push(m.id); vo = { id: m.id, duration: m.duration }; }
         else if (wantVoice && !s.__skipVoice && String(s.narration ?? "").trim()) {
           const r = await voice(ctx, { text: String(s.narration).slice(0, 4000), provider: a.voice_provider, voice: a.voice_name, voice_id: a.voice_id });
           const m = await saveMedia(ctx, { type: "audio", bytes: r.bytes, mime: r.mime, name: `${a.title.slice(0, 32)} · voz ${i + 1}`, meta: { text: s.narration }, duration: r.duration }); created.push(m.id); vo = { id: m.id, duration: r.duration };
@@ -260,6 +279,12 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       } catch (e) { failures.push(`escena ${i + 1}: ${(e as Error).message}`); return null; }
     });
     if (failures.length) throw new ToolError(`No se pudo crear el proyecto. ${failures.join(" · ")}. Archivos ya creados (reutilízalos con image_media_id / voice_media_id): ${created.join(", ") || "ninguno"}.`);
+
+    let music: { id: string } | null = null;
+    try {
+      if (a.music_media_id) { const r = await mediaRow(ctx, a.music_media_id, "audio"); music = { id: r.id }; }
+      else if (musicUrl) { const m = await importAudio(ctx, musicUrl, `${a.title.slice(0, 32)} · música`); music = { id: m.id }; }
+    } catch (e) { throw new ToolError(`No se pudo usar la música: ${(e as Error).message}`); }
 
     // montaje: mismas reglas que el Agente Editor de FRAMALY
     const TR = ["fade", "slideL", "zoom", "circle", "blur", "wipe", "black", "slideU"], MO = ["kenburns", "zoomIn", "panR", "zoomOut", "panL", "panU"], sub = a.subtitles ?? "narracion";
@@ -271,12 +296,13 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       if (r.vo) audio.push({ id: newId("a"), mediaId: r.vo.id, start: Math.round((t + 0.2) * 10) / 10, volume: 1, loop: false, fadeOut: false, kind: "voz" });
       t = Math.round((t + dur) * 10) / 10;
     });
+    if (music) audio.push({ id: newId("a"), mediaId: music.id, start: 0, volume: 0.18, loop: true, fadeOut: true, kind: "musica" });
     const pid = newId("p");
     const project = { id: pid, name: a.title, aspect, fps: 30, clips, audio, watermark: "", letterbox: false, progressBar: false, meta: { title: a.title, description: "", tags: "" },
       script: { title: a.title, scenes: scenes.map((s) => ({ narration: String(s.narration ?? ""), image_prompt: String(s.image_prompt ?? ""), on_screen_text: String(s.on_screen_text ?? "") })) }, created: now, updated: now };
     const { error } = await ctx.client.from("framaly_projects").insert({ user_id: ctx.uid, id: pid, data: project, updated: now, deleted: false });
     if (error) throw new ToolError("No se pudo guardar el proyecto: " + error.message);
-    return { project_id: pid, nombre: a.title, escenas: scenes.length, duracion_segundos: t, con_voz: audio.length > 0, siguiente_paso: "Abre FRAMALY, pulsa «Actualizar» y verás el proyecto en el Editor de video. Desde ahí puedes ajustarlo y exportar el MP4." };
+    return { project_id: pid, nombre: a.title, escenas: scenes.length, duracion_segundos: t, con_voz: audio.some((x: any) => x.kind === "voz"), con_musica: !!music, siguiente_paso: "Abre FRAMALY, pulsa «Actualizar» y verás el proyecto en el Editor de video. Desde ahí puedes ajustarlo y exportar el MP4." };
   },
 
   async framaly_list_projects(ctx, a) {

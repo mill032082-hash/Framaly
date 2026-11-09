@@ -7,8 +7,15 @@ const sha = async (s) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-2
 const calls = []; const realFetch = globalThis.fetch;
 const mp3 = new Uint8Array(417 * 40); for (let i = 0; i < 40; i++) mp3.set([0xff, 0xfb, 0x90, 0x00], i * 417);
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5, 6]);
+const wavB = (secs, rate = 8000) => { const n = secs * rate * 2, b = new Uint8Array(44 + n), dv = new DataView(b.buffer); b.set([0x52, 0x49, 0x46, 0x46], 0); dv.setUint32(4, 36 + n, true); b.set([0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20], 8); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); b.set([0x64, 0x61, 0x74, 0x61], 36); dv.setUint32(40, n, true); return b; };
 globalThis.fetch = async (url, init) => {
   const u = String(url);
+  if (u.startsWith('https://files.oaiusercontent.com/musica.wav')) return new Response(wavB(10), { status: 200 });
+  if (u.startsWith('https://files.oaiusercontent.com/voz1.wav')) return new Response(wavB(2), { status: 200 });
+  if (u.startsWith('https://files.oaiusercontent.com/voz2.wav')) return new Response(wavB(4), { status: 200 });
+  if (u.startsWith('https://files.oaiusercontent.com/voz.mp3')) return new Response(mp3, { status: 200 });
+  if (u.startsWith('https://evil.example.com/audio')) return new Response('<html>no soy audio</html>', { status: 200 });
+  if (u.startsWith('https://huge.example.com/')) return new Response(wavB(1), { status: 200, headers: { 'content-length': String(30 * 1024 * 1024) } });
   if (u.startsWith('https://files.oaiusercontent.com/')) return new Response(PNG, { status: 200, headers: { 'content-type': 'image/png' } });
   if (u.startsWith('https://cdn.example.com/redir')) return new Response(null, { status: 302, headers: { location: 'https://files.oaiusercontent.com/x.png' } });
   if (u.startsWith('https://evil.example.com/')) return new Response('<html>no soy imagen</html>', { status: 200, headers: { 'content-type': 'image/png' } });
@@ -38,7 +45,7 @@ const call = async (name, args, tok) => { const r = await rpc('tools/call', { na
 let r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp/openapi.json')); const spec = await r.json();
 ok('descripciones OpenAPI ≤ 300 caracteres (límite de ChatGPT)', Object.values(spec.paths).every((p) => p.post.description.length <= 300 && p.post.summary.length <= 300), Object.values(spec.paths).map((p) => p.post.description.length));
 ok('GET openapi.json público', r.status === 200 && spec.openapi === '3.1.0' && spec.servers[0].url === 'https://proj.supabase.co/functions/v1/mcp');
-r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp')); ok('GET info', r.status === 200 && (await r.json()).tools.length === 9);
+r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp')); ok('GET info', r.status === 200 && (await r.json()).tools.length === 10);
 r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp', { method: 'OPTIONS' })); ok('CORS preflight', r.status === 204 && r.headers.get('access-control-allow-headers').includes('authorization'));
 // --- autenticación
 r = await post('', { jsonrpc: '2.0', id: 1, method: 'ping' }, null); ok('sin clave → 401', r.status === 401 && r.headers.get('www-authenticate').startsWith('Bearer'));
@@ -50,7 +57,7 @@ r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp/t/' + T
 r = await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'chatgpt' } });
 ok('initialize', r.body.result.serverInfo.name === 'framaly' && r.body.result.capabilities.tools && r.body.result.protocolVersion === '2025-03-26' && r.body.result.instructions.includes('framaly_status'));
 r = await post('', { jsonrpc: '2.0', method: 'notifications/initialized' }); ok('notificación → 202', r.status === 202);
-r = await rpc('tools/list'); ok('tools/list (9, con esquema y anotaciones)', r.body.result.tools.length === 9 && r.body.result.tools.every((t) => t.inputSchema.type === 'object') && r.body.result.tools.find((t) => t.name === 'framaly_status').annotations.readOnlyHint === true);
+r = await rpc('tools/list'); ok('tools/list (10, con esquema y anotaciones)', r.body.result.tools.length === 10 && r.body.result.tools.every((t) => t.inputSchema.type === 'object') && r.body.result.tools.find((t) => t.name === 'framaly_status').annotations.readOnlyHint === true);
 r = await rpc('tools/list', {}, TOKEN2); ok('clave solo-lectura ve solo 3 herramientas', r.body.result.tools.length === 3, r.body.result.tools.map((t) => t.name));
 r = await rpc('método/raro'); ok('método desconocido → -32601', r.body.error.code === -32601);
 r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp', { method: 'POST', headers: { authorization: 'Bearer ' + TOKEN }, body: '{no json' })); ok('JSON roto → -32700', (await r.json()).error.code === -32700);
@@ -105,6 +112,26 @@ c = await call('framaly_create_video_project', { title: 'Mezcla', voice: false, 
 ok('mezcla: 1 imagen tuya + 1 generada + 1 de la biblioteca', !c.isError && c.v.escenas === 3, c.v);
 c = await call('framaly_create_video_project', { title: 'x', voice: false, image_urls: ['https://evil.example.com/a.png'] }); ok('imagen mala en el video → error claro y no crea proyecto', c.isError && /escena 1/.test(c.v) && !DB.tables.framaly_projects.some((p) => p.data.name === 'x'), c.v);
 c = await call('framaly_create_video_project', { title: 'x' }); ok('sin escenas ni imágenes → error claro', c.isError && /scenes o imágenes/.test(c.v), c.v);
+DB.tables.framaly_api_calls.length = 0;
+// --- audios que ya existen
+DB.tables.framaly_api_calls.length = 0;
+c = await call('framaly_import_audio', { audio_urls: ['https://files.oaiusercontent.com/voz.mp3', 'https://files.oaiusercontent.com/musica.wav'] }); ok('importar mp3 y wav con su duración', !c.isError && c.v.importados.length === 2 && Math.abs(c.v.importados[0].duracion_segundos - 40 * 1152 / 44100) < 0.01 && Math.abs(c.v.importados[1].duracion_segundos - 10) < 0.01 && DB.tables.framaly_media.filter((m) => m.type === 'audio' && m.meta.imported).length >= 2, c.v);
+c = await call('framaly_import_audio', { openaiFileIdRefs: [{ name: 'voz.wav', id: 'f1', mime_type: 'audio/wav', download_link: 'https://files.oaiusercontent.com/voz1.wav' }, { name: 'faro.png', id: 'f2', mime_type: 'image/png', download_link: 'https://files.oaiusercontent.com/1.png' }] }); ok('de openaiFileIdRefs solo toma los audios', !c.isError && c.v.importados.length === 1, c.v);
+c = await call('framaly_import_audio', { audio_urls: ['https://evil.example.com/audio'] }); ok('rechaza lo que no es audio', c.isError && /no es un audio/.test(c.v), c.v);
+c = await call('framaly_import_audio', { audio_urls: ['https://huge.example.com/a.wav'] }); ok('rechaza audios de más de 25 MB', c.isError && /25 MB/.test(c.v), c.v);
+c = await call('framaly_import_audio', { audio_urls: ['https://10.0.0.1/a.mp3'] }); ok('audio: rechaza redes privadas', c.isError && /https públicos/.test(c.v), c.v);
+DB.tables.framaly_api_calls.length = 0;
+c = await call('framaly_create_video_project', { title: 'Con música', voice: false, seconds_per_scene: 4, openaiFileIdRefs: [{ name: '1.png', id: 'a', mime_type: 'image/png', download_link: 'https://files.oaiusercontent.com/1.png' }, { name: '2.png', id: 'b', mime_type: 'image/png', download_link: 'https://files.oaiusercontent.com/2.png' }, { name: 'musica.wav', id: 'c', mime_type: 'audio/wav', download_link: 'https://files.oaiusercontent.com/musica.wav' }] });
+const pm = DB.tables.framaly_projects.find((p) => p.id === c.v.project_id);
+ok('un solo audio = música de fondo', !c.isError && c.v.con_musica === true && c.v.con_voz === false && pm.data.audio.length === 1 && pm.data.audio[0].kind === 'musica' && pm.data.audio[0].loop === true && pm.data.audio[0].volume === 0.18 && pm.data.audio[0].start === 0, c.v);
+c = await call('framaly_create_video_project', { title: 'Con narración propia', openaiFileIdRefs: [{ name: '1.png', id: 'a', mime_type: 'image/png', download_link: 'https://files.oaiusercontent.com/1.png' }, { name: '2.png', id: 'b', mime_type: 'image/png', download_link: 'https://files.oaiusercontent.com/2.png' }, { name: 'voz1.wav', id: 'c', mime_type: 'audio/wav', download_link: 'https://files.oaiusercontent.com/voz1.wav' }, { name: 'voz2.wav', id: 'd', mime_type: 'audio/wav', download_link: 'https://files.oaiusercontent.com/voz2.wav' }] });
+const pv = DB.tables.framaly_projects.find((p) => p.id === c.v.project_id);
+ok('varios audios = narración por escena (duración de cada audio)', !c.isError && c.v.con_voz === true && pv.data.audio.length === 2 && pv.data.audio.every((x) => x.kind === 'voz') && pv.data.clips[0].duration === 2.7 && pv.data.clips[1].duration === 4.7, [c.v, pv?.data.clips.map((x) => x.duration)]);
+ok('sin gasto de IA al usar tus audios e imágenes', !DB.tables.framaly_usage.some((u) => u.units.via === 'mcp' && u.kind === 'voz' && u.created_after));
+c = await call('framaly_create_video_project', { title: 'Todo tuyo', voice: false, image_urls: ['https://files.oaiusercontent.com/1.png'], music_url: 'https://files.oaiusercontent.com/musica.wav', scenes: [{ narration: 'Hola', voice_url: 'https://files.oaiusercontent.com/voz2.wav' }] });
+const pt = DB.tables.framaly_projects.find((p) => p.id === c.v.project_id);
+ok('imagen + voz por escena + música por enlaces', !c.isError && pt.data.audio.length === 2 && pt.data.audio.some((x) => x.kind === 'musica') && pt.data.audio.some((x) => x.kind === 'voz'), c);
+c = await call('framaly_create_video_project', { title: 'x', voice: false, image_urls: ['https://files.oaiusercontent.com/1.png'], music_url: 'https://evil.example.com/audio' }); ok('música inválida → error claro', c.isError && /No se pudo usar la música/.test(c.v), c.v);
 DB.tables.framaly_api_calls.length = 0;
 // --- aislamiento entre cuentas
 DB.tables.framaly_media.push({ user_id: 'u_otro', id: 'mOTRO', type: 'image', name: 'ajena', deleted: false });
