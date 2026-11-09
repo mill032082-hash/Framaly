@@ -139,10 +139,18 @@
   st.setLimit = async (provider, patch) => { const s = await sb(); await rows(s.from('framaly_limits').update({ ...patch, updated_at: new Date().toISOString() }).eq('provider', provider)); };
   /** Claves guardadas desde la plataforma (cifradas en la bóveda de Supabase; nunca se pueden volver a ver) */
   st.secrets = async () => { const s = await sb(); return rows(s.from('framaly_secret_meta').select('provider,last4,updated_at')); };
+  /** Limpia lo pegado: quita espacios, saltos de línea, comillas, "Bearer " y "NOMBRE=" del principio */
+  const cleanKey = (v) => String(v || '').trim().replace(/^bearer\s+/i, '').replace(/^[A-Z][A-Z0-9_]*\s*=\s*/, '').replace(/^["'`]+|["'`]+$/g, '').replace(/\s+/g, '');
+  st.cleanKey = cleanKey;
   st.setSecret = async (provider, value) => {
-    const s = await sb();
-    const { error } = await s.rpc('framaly_set_secret', { p_provider: provider, p_value: String(value || '').trim() });
-    if (error) throw new Error(/invalid_key/.test(error.message) ? 'La clave no parece válida. Revisa que la copiaste completa y sin espacios.' : /forbidden/.test(error.message) ? 'Solo el administrador puede guardar claves.' : explain(error));
+    const s = await sb(), v = cleanKey(value);
+    if (v.length < 10) throw new Error(`Lo que pegaste tiene solo ${v.length} caracteres: parece incompleto. Copia la clave completa desde el sitio del proveedor.`);
+    const { error } = await s.rpc('framaly_set_secret', { p_provider: provider, p_value: v });
+    if (error) {
+      const m = String(error.message || '');
+      const n = (/:(\d+)/.exec(m) || [])[1];
+      throw new Error(/key_short/.test(m) ? `La clave tiene solo ${n} caracteres: parece incompleta.` : /key_long/.test(m) ? `Lo pegado tiene ${n} caracteres, demasiados para una clave. Revisa que pegaste solo la clave.` : /forbidden/.test(m) ? 'Solo el administrador puede guardar claves.' : /invalid_key/.test(m) ? 'La base rechazó la clave (versión antigua de la validación). Recarga la página con Ctrl+F5 e inténtalo de nuevo.' : `No se pudo guardar la clave: ${explain(error)}`);
+    }
   };
   st.deleteSecret = async (provider) => { const s = await sb(); const { error } = await s.rpc('framaly_delete_secret', { p_provider: provider }); if (error) throw new Error(explain(error)); };
   /** Errores recientes de las APIs (solo administrador) */
