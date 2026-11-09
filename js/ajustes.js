@@ -205,7 +205,7 @@
     let people = [], invites = [];
     const open = new Set();
     const edit = new Map();   // borradores: nada se guarda hasta pulsar «Guardar cambios»
-    const SECS = [['editor', 'Editor de video'], ['flujos', 'Flujos y agentes'], ['guiones', 'Guiones'], ['imagenes', 'Imágenes'], ['voces', 'Voces'], ['efectos', 'Efectos y transiciones'], ['biblioteca', 'Biblioteca'], ['publicar', 'Publicar'], ['integraciones', 'Integraciones API'], ['ajustes', 'Ajustes']];
+    const SECS = [['editor', 'Editor de video'], ['plantillas', 'Plantillas'], ['flujos', 'Flujos y agentes'], ['guiones', 'Guiones'], ['imagenes', 'Imágenes'], ['voces', 'Voces'], ['efectos', 'Efectos y transiciones'], ['biblioteca', 'Biblioteca'], ['publicar', 'Publicar'], ['integraciones', 'Integraciones API'], ['ajustes', 'Ajustes']];
     const AIS = [['anthropic', 'Claude'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini'], ['minimax', 'MiniMax']];
     // Cada API tiene dos espacios: «mi API» (FRAMALY) y «su propia API». Se guardan como un solo modo: shared · both · own · off
     const slot = (m, w) => (w === 'mine' ? ['shared', 'both'] : ['own', 'both']).includes(m || 'own');

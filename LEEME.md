@@ -149,3 +149,6 @@ Las claves se guardan solo en tu navegador.
 
 ## Pestaña «Plantillas» (editor de video)
 Reúne el material reutilizable de la skill: formato del video (Meta/TikTok, reel, YouTube), archivo de contexto, intake, instrucciones para la máquina, reparto multicámara, b-roll y sonido, reporte de cortes, checklist antes de exportar, replicar/empaquetar estilo, fallos y reglas de oro. Cada una se copia con un clic; los formatos y los estilos guardados se aplican al proyecto. Código: `js/plantillas.js`.
+
+## Sección «Plantillas» (menú, debajo de Editor de video)
+Todas las combinaciones de la skill: 6 recetas completas (anuncio COD, reel, YouTube, multicámara con una cámara, replicar estilo, solo limpiar) que crean un proyecto ya configurado; un armador propio (destino, cortes, cámaras, b-roll, sonido); las matrices cámara×bloque, b-roll, instrucciones, destino y síntoma×arreglo; y las 12 combinaciones que no se hacen. La receta elegida entra al archivo de contexto del proyecto. Código: `js/recetas.js`.
