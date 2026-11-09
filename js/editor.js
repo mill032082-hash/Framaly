@@ -65,6 +65,7 @@
     </div>
     <div class="transport">
       <button class="icon-btn" id="tStart" title="Ir al inicio">${I('skip')}</button>
+      <button class="icon-btn" id="tMute" title="Prueba del sonido apagado: reproduce sin audio">${I('volume')}</button>
       <button class="play" id="tPlay" title="Reproducir (Espacio)">${I('play')}</button>
       <span class="tc"><b id="tCur">00:00.0</b> / <span id="tTot">00:00.0</span></span>
       <span class="grow"></span><span class="muted small" id="tInfo"></span>
@@ -269,7 +270,7 @@
     await Promise.all(p.clips.map((c) => F.media.image(c.mediaId).catch(() => null)));
     const tracks = await F.Engine.prepareAudio(p);
     const when = ac.currentTime + 0.06, t0 = E.t;
-    nodes = F.Engine.scheduleAudio(tracks, t0, tot, ac.destination, when, p.duck);
+    nodes = E.muted ? [] : F.Engine.scheduleAudio(tracks, t0, tot, ac.destination, when, p.duck);
     E.playing = true; setPlayIcon();
     const loop = () => {
       if (!E.playing) return;
@@ -309,7 +310,7 @@
         <div class="insp-thumb" style="${m ? `background-image:url('${F.media.url(m)}')` : ''}"></div>
         <div class="row" style="margin-top:10px;gap:6px"><button class="btn sm" data-act="left" title="Mover a la izquierda" ${i === 0 ? 'disabled' : ''}>←</button><button class="btn sm" data-act="right" title="Mover a la derecha" ${i === p.clips.length - 1 ? 'disabled' : ''}>→</button><button class="btn sm" data-act="dup">${I('copy')} Duplicar</button><button class="btn sm" data-act="replace">${I('image')} Cambiar</button><span class="grow"></span><button class="btn sm danger" data-act="del" title="Eliminar">${I('trash')}</button></div>
         ${sec('Tiempo y encuadre', `<label class="lbl">Duración (segundos)</label><input type="number" step="0.1" min="0.5" data-k="duration">
-          <label class="lbl">Encuadre</label><select data-k="fit"><option value="cover">Rellenar (recorta bordes)</option><option value="contain">Ajustar + fondo desenfocado</option></select>`, 'duration,fit')}
+          <label class="lbl">Encuadre</label><select data-k="fit"><option value="cover">Rellenar (recorta bordes)</option><option value="contain">Ajustar + fondo desenfocado</option><option value="black">Objeto sobre fondo negro (b-roll)</option></select>`, 'duration,fit')}
         ${sec('Movimiento de cámara', `<select data-k="motion">${R.opts(R.MOTIONS)}</select><label class="lbl">Intensidad</label><div class="rangeval"><input type="range" min="0.02" max="0.45" step="0.01" data-k="motionAmt"><span data-v="motionAmt"></span></div>`, 'motion,motionAmt')}
         ${sec('Filtro de color', `<select data-k="filter">${R.opts(R.filters())}</select><div class="hint"><a href="#/efectos">Crear filtro personalizado →</a></div>`, 'filter')}
         ${sec('Transición al siguiente clip', `<select data-k="transition">${R.opts(R.TRANSITIONS)}</select><label class="lbl">Duración de la transición</label><div class="rangeval"><input type="range" min="0.2" max="2" step="0.1" data-k="transDur"><span data-v="transDur"></span></div>`, 'transition,transDur')}
@@ -320,7 +321,7 @@
       const a = obj, m = F.media.byId(a.mediaId);
       el.innerHTML = `<h4>${I(a.kind === 'musica' ? 'music' : 'mic')} Pista de audio</h4><div class="muted small">${F.esc(m?.name || '(eliminado)')} · ${F.fmtS(m?.duration)}</div>
         ${m ? `<audio controls src="${F.media.url(m)}" style="width:100%;margin-top:12px;height:36px"></audio>` : ''}
-        ${sec('Ajustes', `<label class="lbl">Tipo de pista</label><select data-k="kind"><option value="voz">Voz / narración</option><option value="musica">Música de fondo</option></select>
+        ${sec('Ajustes', `<label class="lbl">Tipo de pista</label><select data-k="kind"><option value="voz">Voz / narración</option><option value="musica">Música de fondo</option><option value="sfx">Efecto de sonido</option></select>
           <label class="lbl">Volumen</label><div class="rangeval"><input type="range" min="0" max="1.5" step="0.05" data-k="volume"><span data-v="volume"></span></div>
           <label class="lbl">Empieza en (segundos)</label><input type="number" min="0" step="0.1" data-k="start">
           <label class="check"><input type="checkbox" data-k="loop"> Repetir en bucle hasta el final</label>
@@ -363,17 +364,25 @@
     });
   }
 
-  function splitAtPlayhead() {
+  async function splitAtPlayhead() {
+    let t = E.t; const v = p.audio.find((x) => x.kind === 'voz' && !x.loop);
+    if (v && F.golden?.pausePoints) {   // regla de la skill: el corte cae en el silencio más cercano (1,5 s)
+      try {
+        const snap = F.golden.nearestPause(await F.golden.pausePoints(E, v), t, 1.5);
+        if (snap !== null) t = F.round1(snap);
+        else if (!(await F.confirm('Aquí hay voz', 'No hay un silencio a menos de 1,5 s. Un corte a mitad de palabra se oye aunque la imagen sea impecable. ¿Cortar igual?', 'Cortar igual', false))) return;
+      } catch (err) { /* sin análisis: se corta donde está el cursor */ }
+    }
     const { items } = R.layout(p);
-    const it = items.find((x) => E.t > x.start + 0.25 && E.t < x.end - 0.25);
+    const it = items.find((x) => t > x.start + 0.25 && t < x.end - 0.25);
     if (!it) return F.toast('Coloca el cursor dentro de un clip (a más de 0,25 s de sus bordes) para dividirlo');
     commit();
-    const c = it.clip, d1 = F.round1(E.t - it.start), d2 = Math.max(0.5, F.round1(c.duration - d1));
+    const c = it.clip, d1 = F.round1(t - it.start), d2 = Math.max(0.5, F.round1(c.duration - d1));
     const n = { ...c, id: F.uid(), duration: d2, text: '' };
-    n.transition = c.transition; c.duration = d1; c.transition = 'none';
+    n.transition = c.transition; c.duration = d1; c.transition = 'none'; delete c.capTimes; delete n.capTimes;
     p.clips.splice(p.clips.indexOf(c) + 1, 0, n);
     select('clip', n.id, false); after({ insp: true });
-    F.toast('Clip dividido', 'ok', 1200);
+    F.toast(t !== E.t ? 'Clip dividido en el silencio más cercano' : 'Clip dividido', 'ok', 1400);
   }
 
   /** clip seleccionado o, si no hay, el que está bajo el cursor */
@@ -433,6 +442,7 @@
     q('#bExport').onclick = async () => { stop(); await F.projects.save(p); F.exportProject(p, { fps: p.fps || 30, format: 'mp4', quality: 'high' }); };
     q('#bProj').onclick = () => E.openProjects();
     q('#tPlay').onclick = play;
+    q('#tMute').onclick = () => { E.muted = !E.muted; q('#tMute').classList.toggle('on', E.muted); q('#tMute').style.opacity = E.muted ? '1' : ''; F.toast(E.muted ? 'Sonido apagado: mira si se entiende sin audio (el 85 % ve sin sonido)' : 'Sonido encendido', 'ok', 2200); if (E.playing) seek(E.t); };
     q('#tStart').onclick = () => { seek(0); q('#tlScroll').scrollLeft = 0; };
     q('#tlZoom').addEventListener('input', (e) => { E.pps = +e.target.value; renderTimeline(); });
     q('#bDel').onclick = deleteSelected;
@@ -446,7 +456,7 @@
     ed.addEventListener('dragleave', (ev) => { if (!ed.contains(ev.relatedTarget)) ed.classList.remove('dropping'); });
     ed.addEventListener('drop', (ev) => { ed.classList.remove('dropping'); if (!hasFiles(ev)) return; ev.preventDefault(); ev.stopPropagation(); upload(true, [...ev.dataTransfer.files]); });
     q('#bFit').onclick = () => {
-      const voices = p.audio.filter((a) => a.kind !== 'musica' && !a.loop);
+      const voices = p.audio.filter((a) => a.kind === 'voz' && !a.loop);
       if (!voices.length) return F.toast('Añade primero una pista de voz / narración');
       if (!p.clips.length) return F.toast('Añade imágenes al timeline');
       const end = Math.max(...voices.map((a) => a.start + (F.media.byId(a.mediaId)?.duration || 0))) + 0.5;
