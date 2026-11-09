@@ -16,7 +16,7 @@ create table if not exists public.framaly_projects (
 create table if not exists public.framaly_media (
   user_id    uuid    not null default auth.uid() references auth.users(id) on delete cascade,
   id         text    not null,
-  type       text    not null check (type in ('image', 'audio')),
+  type       text    not null check (type in ('image', 'audio', 'video')),
   name       text    not null default '',
   source     text    not null default 'upload',
   meta       jsonb   not null default '{}'::jsonb,
@@ -67,3 +67,7 @@ drop policy if exists "framaly_storage_delete" on storage.objects;
 create policy "framaly_storage_delete" on storage.objects
   for delete to authenticated
   using (bucket_id = 'framaly-media' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Videos MP4: la tabla de medios también acepta type = 'video'
+alter table public.framaly_media drop constraint if exists framaly_media_type_check;
+alter table public.framaly_media add constraint framaly_media_type_check check (type in ('image','audio','video'));
