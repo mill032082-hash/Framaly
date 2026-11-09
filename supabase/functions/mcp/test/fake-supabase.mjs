@@ -1,6 +1,7 @@
 // Supabase de mentira en memoria, solo para probar la lógica del servidor
-export const DB = globalThis.__DB ??= { tables: { framaly_access: [], framaly_media: [], framaly_projects: [], framaly_api_calls: [], framaly_usage: [], framaly_errors: [], framaly_limits: [], framaly_notifications: [] }, storage: {}, tokens: {}, secrets: {} };
-const match = (row, f) => f.every(([op, k, v]) => op === 'eq' ? row[k] === v : op === 'gte' ? String(row[k]) >= String(v) : op === 'in' ? v.includes(row[k]) : true);
+export const DB = globalThis.__DB ??= { tables: { framaly_access: [], framaly_media: [], framaly_projects: [], framaly_api_calls: [], framaly_usage: [], framaly_errors: [], framaly_limits: [], framaly_notifications: [], framaly_mcp_ledger: [] }, storage: {}, tokens: {}, secrets: {} };
+const get = (row, k) => k.includes('->') ? k.split(/->>?/).reduce((o, x) => (o == null ? o : o[x]), row) : row[k];
+const match = (row, f) => f.every(([op, k, v]) => op === 'eq' ? get(row, k) === v : op === 'gte' ? String(row[k]) >= String(v) : op === 'in' ? v.includes(row[k]) : true);
 class Q {
   constructor(t) { this.t = t; this.f = []; this.o = null; this.l = null; this.cnt = false; this.head = false; this.ins = null; this.single = false; }
   select(_c, opts) { if (opts?.count) { this.cnt = true; this.head = !!opts.head; } return this; }
@@ -38,7 +39,7 @@ export const createClient = () => ({
     return { data: null, error: { message: 'rpc ' + n } };
   },
   storage: { from: (b) => ({
-    upload: async (p, bytes, o) => { DB.storage[b + '/' + p] = { size: bytes.length, type: o?.contentType }; return { data: {}, error: null }; },
+    upload: async (p, bytes, o) => { DB.storage[b + '/' + p] = { size: bytes.length, type: o?.contentType, bytes }; return { data: {}, error: null }; },
     createSignedUrl: async (p) => ({ data: { signedUrl: 'https://signed.example/' + p + '?t=1' }, error: null }),
   }) },
 });

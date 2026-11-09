@@ -1,11 +1,17 @@
 // FRAMALY Studio · piezas puras del servidor MCP / API (sin red ni base de datos: se pueden probar solas).
 
-export const VERSION = "1.3.0";
+export const VERSION = "1.4.0";
+
+/** Modo de ejecución de una conexión: external = FRAMALY no genera nada · no_openai = puede generar, pero OpenAI queda bloqueado · all = todo permitido */
+export type ExecMode = "external" | "no_openai" | "all";
+export const EXEC_MODES: ExecMode[] = ["external", "no_openai", "all"];
 
 export const sha256hex = async (s: string): Promise<string> => {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 };
+
+export const sha256Bytes = async (b: Uint8Array): Promise<string> => [...new Uint8Array(await crypto.subtle.digest("SHA-256", b))].map((x) => x.toString(16).padStart(2, "0")).join("");
 
 export const newId = (prefix = "m") => prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
@@ -120,7 +126,7 @@ const asp = { type: "string", enum: [...ASPECTS], description: "Formato del vide
 
 export const TOOLS: ToolDef[] = [
   { name: "framaly_status", title: "Estado de FRAMALY", scope: "read",
-    description: "Muestra qué IAs tiene disponibles esta cuenta (texto, imágenes, voz), el tope diario y lo gastado hoy. Llámala primero.",
+    description: "Muestra el modo de esta conexión (si FRAMALY puede generar o solo recibe tus archivos), qué IAs hay, el tope diario y lo gastado hoy. Llámala primero.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "framaly_write_script", title: "Escribir guion", scope: "write",
     description: "Escribe el guion de un video narrado, dividido en escenas (narración, descripción de imagen y texto en pantalla). Devuelve JSON listo para framaly_create_video_project.",
@@ -143,6 +149,11 @@ export const TOOLS: ToolDef[] = [
   { name: "framaly_import_audio", title: "Importar audios", scope: "write",
     description: "Trae a la biblioteca de FRAMALY audios que ya existen (narración, música o efectos en MP3, WAV, M4A u OGG) desde enlaces https o desde los archivos de la conversación. Devuelve el id y la duración de cada uno.",
     inputSchema: { type: "object", additionalProperties: false, properties: { audio_urls: aurls, openaiFileIdRefs: fileRefs, name: { type: "string", description: "Nombre base en la biblioteca." } } } },
+  { name: "framaly_upload_media", title: "Subir imagen o audio", scope: "write",
+    description: "Sube a la biblioteca un archivo en base64 (imagen PNG, JPG, WEBP o GIF; audio MP3, WAV, M4A u OGG; hasta unos 10 MB). Devuelve su id y duración. Si ya tienes un enlace https usa framaly_import_image o framaly_import_audio. Un archivo idéntico no se duplica.",
+    inputSchema: { type: "object", required: ["type", "data_base64"], additionalProperties: false, properties: {
+      type: { type: "string", enum: ["image", "audio"] }, data_base64: { type: "string", maxLength: 14000000, description: "Contenido del archivo en base64 (sin saltos de línea)." },
+      name: { type: "string", description: "Nombre en la biblioteca." } } } },
   { name: "framaly_generate_voice", title: "Generar voz", scope: "write",
     description: "Convierte un texto en una narración de voz (MP3), la guarda en la biblioteca y devuelve su id, su duración y un enlace temporal.",
     inputSchema: { type: "object", required: ["text"], additionalProperties: false, properties: {
@@ -156,20 +167,22 @@ export const TOOLS: ToolDef[] = [
       topic: { type: "string" }, narration: { type: "string", description: "Texto completo de la narración (opcional)." },
       keywords: { type: "string" }, language: { type: "string" }, provider: { type: "string", enum: ["anthropic", "openai", "gemini"] } } } },
   { name: "framaly_create_video_project", title: "Crear proyecto de video", scope: "write",
-    description: "Crea un proyecto de video listo para el editor de FRAMALY, con transiciones y subtítulos. Usa tus imágenes y audios (image_urls, audio_urls, openaiFileIdRefs) o los genera con IA. Un solo audio es la música de fondo; varios son la narración de cada escena, en orden.",
+    description: "Crea un proyecto de video listo para el editor de FRAMALY, con transiciones y subtítulos. Usa tus imágenes y audios (image_urls, audio_urls, openaiFileIdRefs) o los genera con IA. Un solo audio es la música de fondo; varios son la narración de cada escena, en orden. Cada escena admite un efecto de sonido (sfx_url o sfx_media_id). Repetir la llamada no duplica el proyecto.",
     inputSchema: { type: "object", required: ["title"], additionalProperties: false, properties: {
       image_urls: urls, audio_urls: aurls, openaiFileIdRefs: fileRefs,
       music_url: { type: "string", description: "Enlace https de la música de fondo." }, music_media_id: { type: "string" },
       title: { type: "string", maxLength: 100 }, aspect: asp,
       scenes: { type: "array", minItems: 1, maxItems: 12, description: "Una por escena. Si se omite y se dan imágenes, se crea una escena por imagen.", items: { type: "object", additionalProperties: false, properties: {
         narration: { type: "string" }, image_url: { type: "string", description: "Enlace https de una imagen ya existente." }, voice_url: { type: "string", description: "Enlace https del audio de esta escena." }, image_prompt: { type: "string", description: "Qué mostrar (en español). Si hay image_media_id no hace falta." },
-        image_media_id: { type: "string" }, voice_media_id: { type: "string" }, on_screen_text: { type: "string" } } } },
+        image_media_id: { type: "string" }, voice_media_id: { type: "string" }, on_screen_text: { type: "string" },
+        sfx_url: { type: "string", description: "Enlace https de un efecto de sonido para esta escena." }, sfx_media_id: { type: "string" }, sfx_offset: { type: "number", minimum: 0, maximum: 60, description: "Segundos desde el inicio de la escena." }, sfx_volume: { type: "number", minimum: 0, maximum: 1 } } } },
       seconds_per_scene: { type: "number", minimum: 2.5, maximum: 30, description: "Segundos por escena cuando no hay voz. Por defecto 5." },
       voice: { type: "boolean", description: "Generar la narración con voz. Por defecto: sí si hay una API de voz disponible." },
       subtitles: { type: "string", enum: ["narracion", "pantalla", "ninguno"], description: "Qué texto mostrar en pantalla. Por defecto: narracion." },
       style: { type: "string", description: "Estilo visual que se añade a cada prompt (ej: «fotografía cinematográfica, luz dorada»)." },
       image_provider: { type: "string", enum: ["openai", "gemini"] }, voice_provider: { type: "string", enum: ["openai", "elevenlabs"] },
-      voice_name: { type: "string" }, voice_id: { type: "string" } } } },
+      voice_name: { type: "string" }, voice_id: { type: "string" },
+      idempotency_key: { type: "string", maxLength: 80, description: "Texto único para no crear el proyecto dos veces si repites la llamada. Opcional: si se omite, se detecta por el contenido." } } } },
   { name: "framaly_list_projects", title: "Listar proyectos", scope: "read",
     description: "Lista los proyectos de video de la cuenta (id, nombre, formato, clips, duración y fecha).",
     inputSchema: { type: "object", additionalProperties: false, properties: { limit: { type: "integer", minimum: 1, maximum: 50 } } } },
@@ -178,7 +191,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: { type: "object", additionalProperties: false, properties: { type: { type: "string", enum: ["image", "audio"] }, limit: { type: "integer", minimum: 1, maximum: 100 } } } },
 ];
 
-export const INSTRUCTIONS = "FRAMALY Studio crea videos con IA. Flujo recomendado: 1) framaly_status para ver qué IAs hay; 2) framaly_write_script con el tema; 3) framaly_create_video_project con las escenas del guion (si el usuario ya tiene imágenes o audios, pásalos con image_urls, audio_urls u openaiFileIdRefs y no se generan nuevos); 4) el usuario abre FRAMALY, pulsa Actualizar y exporta el MP4. Cada llamada usa las claves y los topes de la cuenta del usuario.";
+export const INSTRUCTIONS = "FRAMALY Studio monta videos con los recursos que le envías. Flujo: 1) framaly_status para ver el modo de la conexión; 2) en modo externo (por defecto) TÚ generas el guion, las imágenes, las narraciones y los efectos y los envías: framaly_import_image / framaly_import_audio (enlaces u openaiFileIdRefs) o framaly_upload_media (base64); FRAMALY NO genera nada ni gasta créditos de OpenAI; 3) framaly_create_video_project con las escenas (image_media_id / image_url, voice_media_id / voice_url, sfx_url, music_url): conserva el orden y no regenera lo que ya existe; 4) el usuario abre FRAMALY, pulsa Actualizar y exporta el MP4. Si el usuario eligió otro modo, framaly_write_script, framaly_generate_image y framaly_generate_voice generan con las claves de FRAMALY (OpenAI siempre bloqueado salvo modo «todo»).";
 
 /** Especificación OpenAPI 3.1 (para las Acciones de un GPT personalizado y cualquier cliente REST) */
 /** Las Acciones de ChatGPT aceptan descripciones de hasta 300 caracteres */

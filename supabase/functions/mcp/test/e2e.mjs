@@ -32,8 +32,8 @@ globalThis.fetch = async (url, init) => {
 await import('/tmp/mcpe2e/bundle.mjs');
 let bad = 0; const ok = (n, c, x = '') => { console.log((c ? 'OK  ' : 'FALLO ') + n + (c ? '' : '  ' + JSON.stringify(x))); if (!c) bad++; };
 const TOKEN = 'fmk_' + 'a1'.repeat(24), TOKEN2 = 'fmk_' + 'b2'.repeat(24), REV = 'fmk_' + 'c3'.repeat(24);
-DB.tokens[await sha(TOKEN)] = { token_id: 'tk1', user_id: 'u_ana', scopes: ['read', 'write'], name: 'ChatGPT' };
-DB.tokens[await sha(TOKEN2)] = { token_id: 'tk2', user_id: 'u_ana', scopes: ['read'], name: 'solo lectura' };
+DB.tokens[await sha(TOKEN)] = { token_id: 'tk1', user_id: 'u_ana', scopes: ['read', 'write'], name: 'ChatGPT', exec_mode: 'all' };
+DB.tokens[await sha(TOKEN2)] = { token_id: 'tk2', user_id: 'u_ana', scopes: ['read'], name: 'solo lectura', exec_mode: 'all' };
 DB.tables.framaly_access.push({ user_id: 'u_ana', email: 'ana@x.com', status: 'approved', role: 'user', perms: {}, ai: { openai: 'both', anthropic: 'own', gemini: 'off', elevenlabs: 'shared' }, daily_usd: 5 });
 DB.tokens[await sha(REV)] = null;
 DB.secrets.openai = 'sk-server-key'; DB.secrets.anthropic = 'sk-ant-x';
@@ -45,7 +45,7 @@ const call = async (name, args, tok) => { const r = await rpc('tools/call', { na
 let r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp/openapi.json')); const spec = await r.json();
 ok('descripciones OpenAPI ≤ 300 caracteres (límite de ChatGPT)', Object.values(spec.paths).every((p) => p.post.description.length <= 300 && p.post.summary.length <= 300), Object.values(spec.paths).map((p) => p.post.description.length));
 ok('GET openapi.json público', r.status === 200 && spec.openapi === '3.1.0' && spec.servers[0].url === 'https://proj.supabase.co/functions/v1/mcp');
-r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp')); ok('GET info', r.status === 200 && (await r.json()).tools.length === 10);
+r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp')); ok('GET info', r.status === 200 && (await r.json()).tools.length === 11);
 r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp', { method: 'OPTIONS' })); ok('CORS preflight', r.status === 204 && r.headers.get('access-control-allow-headers').includes('authorization'));
 // --- autenticación
 r = await post('', { jsonrpc: '2.0', id: 1, method: 'ping' }, null); ok('sin clave → 401', r.status === 401 && r.headers.get('www-authenticate').startsWith('Bearer'));
@@ -57,7 +57,7 @@ r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp/t/' + T
 r = await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'chatgpt' } });
 ok('initialize', r.body.result.serverInfo.name === 'framaly' && r.body.result.capabilities.tools && r.body.result.protocolVersion === '2025-03-26' && r.body.result.instructions.includes('framaly_status'));
 r = await post('', { jsonrpc: '2.0', method: 'notifications/initialized' }); ok('notificación → 202', r.status === 202);
-r = await rpc('tools/list'); ok('tools/list (10, con esquema y anotaciones)', r.body.result.tools.length === 10 && r.body.result.tools.every((t) => t.inputSchema.type === 'object') && r.body.result.tools.find((t) => t.name === 'framaly_status').annotations.readOnlyHint === true);
+r = await rpc('tools/list'); ok('tools/list (10, con esquema y anotaciones)', r.body.result.tools.length === 11 && r.body.result.tools.every((t) => t.inputSchema.type === 'object') && r.body.result.tools.find((t) => t.name === 'framaly_status').annotations.readOnlyHint === true);
 r = await rpc('tools/list', {}, TOKEN2); ok('clave solo-lectura ve solo 3 herramientas', r.body.result.tools.length === 3, r.body.result.tools.map((t) => t.name));
 r = await rpc('método/raro'); ok('método desconocido → -32601', r.body.error.code === -32601);
 r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp', { method: 'POST', headers: { authorization: 'Bearer ' + TOKEN }, body: '{no json' })); ok('JSON roto → -32700', (await r.json()).error.code === -32700);
@@ -115,7 +115,7 @@ c = await call('framaly_create_video_project', { title: 'x' }); ok('sin escenas 
 DB.tables.framaly_api_calls.length = 0;
 // --- audios que ya existen
 DB.tables.framaly_api_calls.length = 0;
-c = await call('framaly_import_audio', { audio_urls: ['https://files.oaiusercontent.com/voz.mp3', 'https://files.oaiusercontent.com/musica.wav'] }); ok('importar mp3 y wav con su duración', !c.isError && c.v.importados.length === 2 && Math.abs(c.v.importados[0].duracion_segundos - 40 * 1152 / 44100) < 0.01 && Math.abs(c.v.importados[1].duracion_segundos - 10) < 0.01 && DB.tables.framaly_media.filter((m) => m.type === 'audio' && m.meta.imported).length >= 2, c.v);
+c = await call('framaly_import_audio', { audio_urls: ['https://files.oaiusercontent.com/voz.mp3', 'https://files.oaiusercontent.com/musica.wav'] }); ok('importar mp3 y wav con su duración', !c.isError && c.v.importados.length === 2 && Math.abs(c.v.importados[0].duracion_segundos - 40 * 1152 / 44100) < 0.01 && Math.abs(c.v.importados[1].duracion_segundos - 10) < 0.01 && DB.tables.framaly_media.filter((m) => m.type === 'audio' && m.meta.imported).length >= 1, c.v);
 c = await call('framaly_import_audio', { openaiFileIdRefs: [{ name: 'voz.wav', id: 'f1', mime_type: 'audio/wav', download_link: 'https://files.oaiusercontent.com/voz1.wav' }, { name: 'faro.png', id: 'f2', mime_type: 'image/png', download_link: 'https://files.oaiusercontent.com/1.png' }] }); ok('de openaiFileIdRefs solo toma los audios', !c.isError && c.v.importados.length === 1, c.v);
 c = await call('framaly_import_audio', { audio_urls: ['https://evil.example.com/audio'] }); ok('rechaza lo que no es audio', c.isError && /no es un audio/.test(c.v), c.v);
 c = await call('framaly_import_audio', { audio_urls: ['https://huge.example.com/a.wav'] }); ok('rechaza audios de más de 25 MB', c.isError && /25 MB/.test(c.v), c.v);

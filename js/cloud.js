@@ -155,6 +155,13 @@
   st.oauthDecide = async (id, allow) => { const s = await sb(); const { data, error } = await s.rpc('framaly_oauth_decide', { p_id: id, p_allow: !!allow }); if (error) throw new Error(/expired/.test(String(error.message)) ? 'Esta solicitud venció o ya se respondió. Vuelve a la aplicación e inténtalo de nuevo.' : explain(error)); return data; };
   st.grants = async () => { const s = await sb(); const { data, error } = await s.rpc('framaly_grants_list'); if (error) throw new Error(explain(error)); return data || []; };
   st.revokeGrant = async (id) => { const s = await sb(); const { error } = await s.rpc('framaly_grant_revoke', { p_id: id }); if (error) throw new Error(explain(error)); };
+  /* ---------- modo de ejecución de las conexiones y auditoría de costes ---------- */
+  st.connModes = async () => { const s = await sb(); const { data, error } = await s.rpc('framaly_conn_modes'); if (error) throw new Error(explain(error)); return data || {}; };
+  st.setTokenMode = async (id, mode) => { const s = await sb(); const { error } = await s.rpc('framaly_token_set_mode', { p_id: id, p_mode: mode }); if (error) throw new Error(explain(error)); };
+  st.setGrantMode = async (id, mode) => { const s = await sb(); const { error } = await s.rpc('framaly_grant_set_mode', { p_id: id, p_mode: mode }); if (error) throw new Error(explain(error)); };
+  st.oauthSetMode = async (id, mode) => { const s = await sb(); const { error } = await s.rpc('framaly_oauth_set_mode', { p_id: id, p_mode: mode }); if (error) throw new Error(explain(error)); };
+  st.ledger = async (n = 12) => { const s = await sb(); const { data, error } = await s.rpc('framaly_mcp_ledger_recent', { p_limit: n }); if (error) throw new Error(explain(error)); return data || []; };
+  st.ledgerSummary = async () => { const s = await sb(); const { data, error } = await s.rpc('framaly_mcp_ledger_summary'); if (error) throw new Error(explain(error)); return data || []; };
   st.overview = async (days = 30) => { const s = await sb(); const { data, error } = await s.rpc('framaly_api_overview', { p_days: days }); if (error) throw new Error(explain(error)); return data || {}; };
   st.limits = async () => { const s = await sb(); return rows(s.from('framaly_limits').select('provider,monthly_usd,alert_pct')); };
   st.setLimit = async (provider, patch) => { const s = await sb(); await rows(s.from('framaly_limits').update({ ...patch, updated_at: new Date().toISOString() }).eq('provider', provider)); };

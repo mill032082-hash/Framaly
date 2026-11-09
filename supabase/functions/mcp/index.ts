@@ -7,7 +7,7 @@
 // Cada llamada usa las claves compartidas y respeta los topes de la cuenta dueña de la clave.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { type Access, db, logError } from "./budget.ts";
-import { INSTRUCTIONS, TOOLS, VERSION, checkArgs, openapi, rpcErr, rpcOk, sha256hex } from "./lib.ts";
+import { EXEC_MODES, INSTRUCTIONS, TOOLS, VERSION, checkArgs, openapi, rpcErr, rpcOk, sha256hex } from "./lib.ts";
 import { type Ctx, HANDLERS, ToolError } from "./tools.ts";
 import { handleOAuth } from "./oauth.ts";
 
@@ -32,7 +32,8 @@ async function authenticate(req: Request, tokenInPath: string | null, base: stri
   if (!data) return bad("La clave de conexión no es válida o fue revocada.");
   const { data: acc } = await client.from("framaly_access").select("status,role,perms,ai,daily_usd,email").eq("user_id", data.user_id).maybeSingle();
   if (!acc || acc.status !== "approved") return J({ error: { type: "forbidden", message: "La cuenta dueña de esta clave no está aprobada." } }, 403);
-  return { ctx: { client, uid: data.user_id, acc: acc as Access }, tokenId: data.token_id, scopes: data.scopes ?? ["read", "write"] };
+  const mode = EXEC_MODES.includes(data.exec_mode) ? data.exec_mode : "external"; // ante la duda, el modo más seguro
+  return { ctx: { client, uid: data.user_id, acc: acc as Access, mode, tokenId: data.token_id }, tokenId: data.token_id, scopes: data.scopes ?? ["read", "write"] };
 }
 
 /** Ejecuta una herramienta con permisos, límite de uso y registro */
@@ -46,7 +47,7 @@ async function runTool(a: Auth, name: string, args: unknown): Promise<{ ok: bool
   const { count } = await a.ctx.client.from("framaly_api_calls").select("id", { count: "exact", head: true }).eq("token_id", a.tokenId).gte("created_at", since);
   if ((count ?? 0) >= RATE_PER_MIN) { await log(false, "límite por minuto"); return { ok: false, value: `Demasiadas llamadas (máx. ${RATE_PER_MIN} por minuto). Espera un momento.` }; }
   try {
-    const value = await HANDLERS[name](a.ctx, args ?? {});
+    const value = await HANDLERS[name]({ ...a.ctx, tool: name }, args ?? {});
     await log(true, "ok");
     return { ok: true, value };
   } catch (e) {
