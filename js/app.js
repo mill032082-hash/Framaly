@@ -15,7 +15,7 @@
     { sec: 'Gestión' },
     { id: 'biblioteca', name: 'Biblioteca', icon: 'folder', sub: 'Todas tus imágenes, voces y música' },
     { id: 'publicar', name: 'Publicar', icon: 'youtube', sub: 'Exporta, optimiza y sube a YouTube' },
-    { id: 'integraciones', name: 'Integraciones API', icon: 'plug', sub: 'Conecta OpenAI, Claude, ElevenLabs y YouTube' },
+    { id: 'integraciones', name: 'Integraciones API', icon: 'plug', sub: 'Imagen, audio, efectos, video y texto' },
     { id: 'ajustes', name: 'Ajustes', icon: 'sliders', sub: 'Cuenta, videos y datos' },
   ];
   const viewFn = (id) => (id === 'editor' ? F.editor.view : id === 'flujos' ? F.flows.view : F.views[id]);

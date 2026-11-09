@@ -20,13 +20,23 @@
     { k: 'gemini', logo: 'G', bg: 'linear-gradient(135deg,#4285f4,#9b72cb)', name: 'Gemini · Google', sub: 'Texto, imágenes y voces con Gemini', feats: ['Guionista', 'Imágenes', 'Voz TTS', 'SEO'] },
     { k: 'minimax', logo: 'M', bg: 'linear-gradient(135deg,#f23f5d,#7b2ff7)', name: 'MiniMax', sub: 'Texto, imágenes y voces con MiniMax', feats: ['Guionista', 'Imágenes', 'Voz TTS', 'SEO'] },
   ];
+  /* APIs de video: Veo 3 usa la clave de Gemini; Higgsfield y VEED usan su propia clave (se guarda en este navegador) */
+  const VIDEO = [
+    { k: 'veo', logo: 'V3', bg: 'linear-gradient(135deg,#4285f4,#34a853)', name: 'Veo 3 · Google', sub: 'Video con audio, con tu clave de Gemini', feats: ['Texto a video', 'Con audio', 'Clips cortos'] },
+    { k: 'higgsfield', logo: 'H', bg: 'linear-gradient(135deg,#c6f432,#2a2a2a)', name: 'Higgsfield', sub: 'Video cinematográfico con movimientos de cámara', feats: ['Texto a video', 'Imagen a video', 'Cámara'] },
+    { k: 'veed', logo: 'VD', bg: 'linear-gradient(135deg,#7b2ff7,#2b1b6b)', name: 'VEED · Fabric', sub: 'Videos con personas que hablan (vía fal.ai)', feats: ['Imagen + voz a video', 'Avatares hablando'] },
+  ];
+  const NOTE = { higgsfield: 'La clave se crea en la consola de Higgsfield (open.higgsfield.ai) y se muestra una sola vez. Si tu cuenta entrega además un «secreto», pégalo en el segundo campo.', veed: 'VEED ofrece su modelo de video (Fabric) a través de fal.ai: crea una cuenta en fal.ai y pega aquí tu clave de fal.' };
+  const CATS = [['imagen', 'Imagen', 'APIs de imagen'], ['audio', 'Audio', 'APIs de audio'], ['efectos', 'Efectos', 'APIs de efectos'], ['video', 'Video', 'APIs de video'], ['texto', 'Texto', 'APIs de texto y agentes']];
+  const SUPPORTS = { imagen: ['openai', 'gemini', 'minimax'], audio: ['elevenlabs', 'openai', 'gemini', 'minimax'], efectos: ['elevenlabs'], video: ['veo', 'higgsfield', 'veed'], texto: ['anthropic', 'openai', 'gemini', 'minimax'] };
+  const PRIMARY = { imagen: ['openai', 'gemini', 'minimax'], audio: ['elevenlabs'], efectos: [], video: ['veo', 'higgsfield', 'veed'], texto: ['anthropic'] };
   const units = (k, u = {}) => k === 'anthropic' ? `${num((u.in_tokens || 0) + (u.out_tokens || 0))} tokens`
     : k === 'openai' || k === 'gemini' || k === 'minimax' ? `${num(u.images)} imágenes · ${num((u.in_tokens || 0) + (u.out_tokens || 0))} tokens · ${num(u.chars)} caracteres de voz`
     : `${num(u.chars)} caracteres`;
 
   V.integraciones = (el) => {
     const S = F.settings, C = F.cloud, cloudOn = !!(C?.configured() && C.user);
-    const data = { rep: null, lims: null, secrets: [], errors: null, ov: {}, acc: [], inv: [], st: {}, own: {} };
+    const data = { rep: null, lims: null, secrets: [], errors: null, ov: {}, acc: [], inv: [], st: {}, own: {}, cat: (() => { try { return localStorage.getItem('framaly.intcat') || 'todas'; } catch (e) { return 'todas'; } })() };
     let dead = false;
     const mode = (k) => (cloudOn ? C.aiMode(k) : 'own');
     const model = (k, label, list) => `<label class="lbl">${label}</label><input type="text" data-model="${k}" value="${esc(S.models[k])}" list="dl-${k}"><datalist id="dl-${k}">${list.map((x) => `<option value="${x}">`).join('')}</datalist>`;
@@ -53,7 +63,7 @@
     };
     /* --- clave propia (modo clásico) --- */
     const ownTag = (k) => !F.api.has(k) ? ['Sin configurar', ''] : data.own[k] === 'ok' ? ['Conectado', 'ok'] : data.own[k] === 'fail' ? ['No funciona', 'err'] : ['Falta probar', 'or'];
-    const ownCard = (a) => `<div class="card int-card">${head(a, ...ownTag(a.k))}
+    const ownCard = (a) => `<div class="card int-card" data-card="${a.k}">${head(a, ...ownTag(a.k))}
       <label class="lbl">API key</label><div class="keyrow"><input type="password" data-key="${a.k}" value="${esc(S.keys[a.k])}" placeholder="Pega tu clave aquí" autocomplete="off" spellcheck="false"><button class="icon-btn" data-eye="${a.k}" title="Mostrar">${I('eye')}</button><button class="btn" data-test="${a.k}">Probar</button></div>
       ${cloudOn && C.aiBaseMode(a.k) === 'both' && !C.isAdmin() ? `<div class="fw-banner ${stOf(a.k) === 'ok' ? 'ok' : 'warn'}"><div><b>${stOf(a.k) === 'ok' ? 'Tienes disponible la API de FRAMALY (del administrador)' : 'La API de FRAMALY (del administrador) no está disponible ahora'}</b><div class="mini">Ahora estás usando tu propia API.</div></div><button class="btn sm" data-src="${a.k}:shared">Usar la de FRAMALY</button></div>` : ''}
       ${a.k === 'minimax' ? '<p class="mini" style="margin:8px 0 0">MiniMax suele no permitir llamadas directas desde el navegador: funciona mejor con la clave de FRAMALY.</p>' : ''}${models(a.k)}${feats(a)}</div>`;
@@ -91,7 +101,7 @@
       const p = data.rep?.providers?.[a.k] || { cost: 0, units: {} }, l = (data.lims || []).find((x) => x.provider === a.k) || { monthly_usd: 0, alert_pct: 80 };
       const sec = (data.secrets || []).find((x) => x.provider === a.k);
       const pct = l.monthly_usd > 0 ? Math.round((p.cost / l.monthly_usd) * 100) : 0;
-      return `<div class="card int-card">${head(a, ...STATE[stOf(a.k)])}
+      return `<div class="card int-card" data-card="${a.k}">${head(a, ...STATE[stOf(a.k)])}
         ${sharedLine(a)}
         <div class="big">${usd(p.cost)}<span class="mini"> de ${usd(l.monthly_usd)} este mes</span></div>${bar(pct, pct >= l.alert_pct)}
         <div class="row2"><span>${pct}% usado</span><span>${units(a.k, p.units)}</span></div>
@@ -120,16 +130,36 @@
         <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn sm primary" data-src="${a.k}:own">Usar mi clave</button></div></div>`;
     const personCard = (a) => {
       const cap = +C.access?.daily_usd || 0, used = +data.rep?.mine_today || 0, pct = cap > 0 ? Math.round((used / cap) * 100) : 0, both = cloudOn && C.aiBaseMode(a.k) === 'both';
-      return `<div class="card int-card">${head(a, ...(stOf(a.k) === 'ok' ? ['Conectado', 'ok'] : ['No disponible aún', 'or']))}
+      return `<div class="card int-card" data-card="${a.k}">${head(a, ...(stOf(a.k) === 'ok' ? ['Conectado', 'ok'] : ['No disponible aún', 'or']))}
         ${fwBanner(a, true)}
         ${data.rep ? `${bar(pct, pct >= 80)}<div class="row2"><span>Hoy llevas ${usd(used)} de ${usd(cap)}</span><span>${pct}% de tu cupo</span></div>` : '<div class="mini">Cargando tu cupo…</div>'}
         ${both ? ownSection(a, false) : '<p class="mini" style="margin:8px 0 0">Esta API la maneja el administrador: no necesitas conectar nada.</p>'}
         ${feats(a)}</div>`;
     };
-    const offCard = (a) => `<div class="card int-card">${head(a, 'No habilitada', '')}<p class="mini" style="margin:0">Esta IA no está habilitada para tu cuenta. Pídeselo a quien administra FRAMALY.</p>${feats(a)}</div>`;
+    /* --- video: Veo 3 (con la clave de Gemini) --- */
+    const veoCard = (a) => {
+      const has = F.api.has('gemini'), t = data.own.veo, shared = cloudOn && mode('gemini') === 'shared';
+      const tag = !has ? ['Falta Gemini', ''] : t === 'ok' ? ['Conectado', 'ok'] : t === 'fail' ? ['No disponible', 'err'] : ['Falta probar', 'or'];
+      return `<div class="card int-card" data-card="veo">${head(a, ...tag)}
+        <p class="mini" style="margin:0 0 8px">Veo 3 usa <b>la misma clave de Gemini</b>${shared ? ' (la de FRAMALY, compartida contigo)' : ''}. ${has ? 'Tu Gemini ya está conectado: solo falta comprobar que Veo esté disponible en tu cuenta.' : 'Conecta primero Gemini (en «APIs de imagen» o «Texto»).'}</p>
+        ${model('veo', 'Modelo de video', ['veo-3.0-generate-001', 'veo-3.0-fast-generate-001', 'veo-3.1-generate-001'])}
+        <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn sm" data-veotest ${has ? '' : 'disabled'}>Probar Veo</button><span class="mini" id="veoMsg">Veo puede requerir la facturación activa en Google AI Studio.</span></div>
+        <p class="mini" style="margin:8px 0 0">Generar videos desde FRAMALY llegará en la sección de Video; por ahora aquí dejas lista la conexión.</p>${feats(a)}</div>`;
+    };
+    /* --- video: Higgsfield y VEED, con su propia clave (queda en este navegador) --- */
+    const keyVideoCard = (a) => {
+      const has = !!(S.keys[a.k] || '').trim();
+      return `<div class="card int-card" data-card="${a.k}">${head(a, has ? 'Clave guardada' : 'Sin configurar', has ? 'ok' : '')}
+        <p class="mini" style="margin:0 0 8px">${NOTE[a.k]}</p>
+        <label class="lbl">${a.k === 'veed' ? 'Clave de fal.ai' : 'API key'}</label><div class="keyrow"><input type="password" data-key="${a.k}" value="${esc(S.keys[a.k])}" placeholder="Pega tu clave aquí" autocomplete="off" spellcheck="false"><button class="icon-btn" data-eye="${a.k}" title="Mostrar">${I('eye')}</button></div>
+        ${a.k === 'higgsfield' ? `<label class="lbl">Secreto (si tu cuenta lo entrega)</label><div class="keyrow"><input type="password" data-key="higgsfieldSecret" value="${esc(S.keys.higgsfieldSecret || '')}" placeholder="Opcional" autocomplete="off" spellcheck="false"><button class="icon-btn" data-eye="higgsfieldSecret" title="Mostrar">${I('eye')}</button></div>` : ''}
+        <p class="mini" style="margin:8px 0 0">La clave se guarda solo en este navegador. Esta conexión todavía no se puede compartir con otras personas ni probar desde aquí; generar videos desde FRAMALY llegará en la sección de Video.</p>${feats(a)}</div>`;
+    };
+    const videoCard = (a) => (a.k === 'veo' ? veoCard(a) : keyVideoCard(a));
+    const offCard = (a) => `<div class="card int-card" data-card="${a.k}">${head(a, 'No habilitada', '')}<p class="mini" style="margin:0">Esta IA no está habilitada para tu cuenta. Pídeselo a quien administra FRAMALY.</p>${feats(a)}</div>`;
     const aiCard = (a) => { const m = mode(a.k); return m === 'off' ? offCard(a) : m === 'shared' ? (C.isAdmin() ? adminCard(a) : personCard(a)) : ownCard(a); };
 
-    const ytCard = `<div class="card int-card"><div class="hd"><div class="lg" style="background:linear-gradient(135deg,#ff3d3d,#c40000)">${I('youtube')}</div><div style="flex:1"><b>YouTube · Google</b><small>Subida directa a tu canal</small></div><span class="tag ${F.api.has('googleClientId') ? 'ok' : ''}" data-st="googleClientId">${F.api.has('googleClientId') ? 'Conectado' : 'Sin configurar'}</span></div>
+    const ytCard = `<div class="card int-card" data-card="youtube"><div class="hd"><div class="lg" style="background:linear-gradient(135deg,#ff3d3d,#c40000)">${I('youtube')}</div><div style="flex:1"><b>YouTube · Google</b><small>Subida directa a tu canal</small></div><span class="tag ${F.api.has('googleClientId') ? 'ok' : ''}" data-st="googleClientId">${F.api.has('googleClientId') ? 'Conectado' : 'Sin configurar'}</span></div>
       <label class="lbl">OAuth Client ID</label><div class="keyrow"><input type="text" data-key="googleClientId" value="${esc(S.keys.googleClientId)}" placeholder="xxxxxxxx.apps.googleusercontent.com" autocomplete="off" spellcheck="false"><button class="btn" data-test="googleClientId">Conectar</button></div>
       <details style="margin-top:12px" class="small muted"><summary style="cursor:pointer;color:var(--or2)">¿Cómo obtengo el Client ID?</summary><ol style="padding-left:18px;line-height:1.8">
         <li>Entra a <b>console.cloud.google.com</b> y crea un proyecto.</li><li>En “APIs y servicios” habilita <b>YouTube Data API v3</b>.</li><li>Configura la pantalla de consentimiento OAuth (tipo Externo) y añádete como usuario de prueba.</li><li>Credenciales → Crear → <b>ID de cliente OAuth</b> → tipo “Aplicación web”.</li><li>En “Orígenes de JavaScript autorizados” añade <b>${esc(location.origin)}</b>.</li><li>Copia el Client ID aquí y pulsa <b>Conectar</b>.</li></ol></details>
@@ -156,6 +186,21 @@
         ? `<div class="fw-banner ok" style="margin-bottom:14px"><div><b>Estás conectado a la API de FRAMALY (del administrador)</b><div class="mini">APIs disponibles: ${on.map(esc).join(', ')}. Abajo, en cada una, también puedes conectar tu propia API si el administrador lo permite.</div></div></div>`
         : '<div class="fw-banner warn" style="margin-bottom:14px"><div><b>Todavía no hay una API de FRAMALY conectada para ti</b><div class="mini">Pídeselo al administrador o conecta tu propia API en la tarjeta que lo permita.</div></div></div>';
     };
+    /* --- categorías: Imagen · Audio · Efectos · Video · Texto --- */
+    const nameOf = (k) => (AIS.find((a) => a.k === k) || VIDEO.find((a) => a.k === k))?.name.split(' · ')[0] || k;
+    const cardOf = (k) => { const a = AIS.find((x) => x.k === k); return a ? aiCard(a) : videoCard(VIDEO.find((x) => x.k === k)); };
+    const effectsNote = '<div class="notice" style="margin:0 0 12px">' + I('zap') + '<div><b>Efectos de sonido con ElevenLabs.</b> Usan la misma clave de voces. Al crear la clave en ElevenLabs, activa también el permiso de <b>Sound Effects</b>. Generarlos desde FRAMALY llegará pronto.</div></div>';
+    const catView = () => {
+      const sel = data.cat, list = sel === 'todas' ? CATS : CATS.filter((c) => c[0] === sel);
+      const bar = `<div class="seg catbar" id="catBar">${[['todas', 'Todas'], ...CATS.map((c) => [c[0], c[1]])].map(([k, n]) => `<button data-catsel="${k}" class="${k === sel ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+      const body = list.map(([id, , title]) => {
+        const keys = sel === 'todas' ? PRIMARY[id] : SUPPORTS[id], also = sel === 'todas' ? SUPPORTS[id].filter((k) => !PRIMARY[id].includes(k)) : [];
+        return `<h2 class="sec-t" style="margin-top:22px">${title} <span class="line"></span></h2>
+          ${also.length ? `<p class="mini" style="margin:0 0 10px">También disponible con: ${also.map((k) => `<button class="chip" data-catsel="${id}">${esc(nameOf(k))}</button>`).join(' ')}</p>` : ''}
+          ${id === 'efectos' ? effectsNote : ''}${keys.length ? `<div class="int-grid">${keys.map(cardOf).join('')}</div>` : ''}`;
+      }).join('');
+      return bar + body + (sel === 'todas' ? `<h2 class="sec-t" style="margin-top:22px">Publicación <span class="line"></span></h2><div class="int-grid">${ytCard}</div>` : '');
+    };
     const draw = () => {
       if (dead) return;
       el.innerHTML = `<div class="page">
@@ -163,7 +208,7 @@
           ? (anyOwn ? '<b>Tus claves propias se guardan solo en este navegador</b> y se envían directo a cada proveedor. Las claves de FRAMALY viven en el servidor y no se pueden ver.' : '<b>Las claves de FRAMALY viven en el servidor</b> y nadie las ve. Cada uso se mide y respeta los límites.')
           : '<b>Tus claves se guardan solo en este navegador</b> (almacenamiento local de tu PC) y se envían directamente a cada proveedor, sin servidores intermedios. No uses FRAMALY en equipos compartidos con tus claves guardadas.'}</div></div>
         ${fwNotice()}
-        <div class="int-grid">${AIS.map(aiCard).join('')}${ytCard}</div>${people()}${errors()}
+        ${catView()}${people()}${errors()}
         <div class="split even" style="margin-top:16px">
           <div class="card"><h3>${I('bot')} Preferencias de agentes</h3><label class="lbl">Proveedor de texto preferido</label><div class="seg" id="tp"><button data-v="anthropic">Claude</button><button data-v="openai">OpenAI</button><button data-v="gemini">Gemini</button><button data-v="minimax">MiniMax</button></div><p class="hint">Si el preferido no está disponible, se usa el otro automáticamente.</p></div>
         </div></div>`;
@@ -185,6 +230,17 @@
       if (m) { S.models[m] = e.target.value.trim(); F.saveSettings(); }
     });
     el.addEventListener('click', async (e) => {
+      const cs = e.target.closest('[data-catsel]');
+      if (cs) { data.cat = cs.dataset.catsel; try { localStorage.setItem('framaly.intcat', data.cat); } catch (err) { /* sin memoria */ } draw(); window.scrollTo?.(0, 0); return; }
+      const vt = e.target.closest('[data-veotest]');
+      if (vt) {
+        F.busy(vt, true, 'Consultando…');
+        try {
+          const m = await F.api.veoModels(); data.own.veo = m.length ? 'ok' : 'fail';
+          if (m.length) F.toast('Veo disponible: ' + m.slice(0, 4).join(', '), 'ok', 6000); else F.toast('No vi modelos Veo en tu cuenta de Gemini. Puede requerir facturación activa en Google AI Studio.', 'error', 7000);
+        } catch (err) { data.own.veo = 'fail'; F.toast(err.message, 'error', 6000); }
+        F.busy(vt, false); draw(); return;
+      }
       const sr = e.target.closest('[data-src]');
       if (sr) {
         const [k, w] = sr.dataset.src.split(':');

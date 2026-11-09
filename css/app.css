@@ -633,3 +633,5 @@ body.has-ask #toasts { bottom: 82px; }
   .topbar #tbUpd .bt { display: inline; }
   .topbar #tbUpd { padding: 0 10px; gap: 6px; }
 }
+.catbar { margin: 0 0 6px; flex-wrap: wrap; }
+.catbar button { white-space: nowrap; }

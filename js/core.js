@@ -38,11 +38,11 @@
 
   /* ---------- ajustes ---------- */
   const DEF = {
-    keys: { openai: '', anthropic: '', elevenlabs: '', gemini: '', minimax: '', googleClientId: '' },
+    keys: { openai: '', anthropic: '', elevenlabs: '', gemini: '', minimax: '', higgsfield: '', veed: '', googleClientId: '' },
     textProvider: 'anthropic',
     useOwn: {},   // APIs donde esta persona prefiere su propia clave aunque exista la de FRAMALY
     uses: {},   // para qué sirve cada API en este navegador: { openai: { image: false } }
-    models: { anthropic: 'claude-sonnet-5-5', openai: 'gpt-4.1-mini', image: 'gpt-image-1', tts: 'gpt-4o-mini-tts', eleven: 'eleven_multilingual_v2', gemini: 'gemini-3.8-flash', geminiImage: 'gemini-2.5-flash-image', geminiTts: 'gemini-2.5-flash-preview-tts', minimax: 'MiniMax-M2', minimaxTts: 'speech-2.8-hd', minimaxImage: 'image-01' },
+    models: { anthropic: 'claude-sonnet-5-5', openai: 'gpt-4.1-mini', image: 'gpt-image-1', tts: 'gpt-4o-mini-tts', eleven: 'eleven_multilingual_v2', gemini: 'gemini-3.8-flash', geminiImage: 'gemini-2.5-flash-image', geminiTts: 'gemini-2.5-flash-preview-tts', minimax: 'MiniMax-M2', minimaxTts: 'speech-2.8-hd', minimaxImage: 'image-01', veo: 'veo-3.0-generate-001' },
     currentProject: null,
     defaultFps: 30,
     customFilters: [],

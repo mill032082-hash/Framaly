@@ -276,6 +276,14 @@
       return { text: all.filter((n) => /^gemini/.test(n) && !/image|tts/i.test(n) && !bad.test(n)), image: all.filter((n) => /image/i.test(n)), tts: all.filter((n) => /tts/i.test(n)) };
     },
 
+    /** Modelos de video (Veo) disponibles con la clave de Gemini */
+    async veoModels() {
+      need('gemini', 'Gemini');
+      const url = `${GEM}/v1beta/models` + (mode('gemini') === 'shared' ? '' : '?pageSize=200');
+      const j = await asJson(await net('gemini', url, { headers: { 'x-goog-api-key': key('gemini') } }));
+      return (j.models || []).map((m) => String(m.name).replace(/^models\//, '')).filter((n) => /veo/i.test(n));
+    },
+
     /** Saldo real informado por el proveedor. Solo ElevenLabs lo entrega con una clave normal; se guarda una instantánea en el servidor. */
     async balance(n) {
       if (n !== 'elevenlabs') return null;
