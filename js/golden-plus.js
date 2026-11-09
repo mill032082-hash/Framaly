@@ -267,6 +267,22 @@
   /* =========================================================
      Piezas del panel y sus botones
      ========================================================= */
+  /* ---------- Ayudas visuales: etiquetas en el timeline y progreso del método ---------- */
+  const CAMS = { frontal: ['Frontal', 'cf'], lateral: ['Lateral 113%', 'cl'], closeup: ['Closeup 125%', 'cc'] };
+  G.clipTag = (p, c) => {
+    let h = '';
+    if (G.gd(p).cameraPlan) { const k = CAMS[cat(c)]; if (k) h += `<span class="gchip ${k[1]}" title="Encuadre por ideas: ${k[0]}">${k[0]}</span>`; }
+    if (c.fit === 'black') h += `<span class="gchip cb" title="B-roll: objeto sobre negro">B-roll</span>`;
+    return h ? `<div class="gchips">${h}</div>` : '';
+  };
+  G.status = (p) => {
+    const g = G.gd(p), tot = R.layout(p).total || 0, tg = g.target || 0;
+    const st = [['Cortar', !!(g.lastCut || g.cameraPlan)], ['Subtitular', p.clips.some((c) => c.text)], ['Ilustrar', p.clips.some((c) => c.fit === 'black')], ['Sonorizar', !!p.duck || p.audio.some((a) => a.kind === 'sfx')]];
+    const diff = tg ? Math.abs(tot - tg) / tg : 0, cls = !tg ? '' : diff <= 0.15 ? 'ok' : 'warn';
+    return `<div class="gprog"><div class="gp-steps">${st.map(([n, ok], i) => `<div class="gp ${ok ? 'on' : ''}"><span>${ok ? '✓' : i + 1}</span>${n}</div>`).join('')}</div>
+      ${tg ? `<div class="gp-dur ${cls}"><b>${tot.toFixed(0)} s</b> de ~${tg} s objetivo<i style="width:${Math.min(100, tot / tg * 100)}%"></i></div>` : ''}</div>`;
+  };
+
   G.plusCam = () => `<button class="btn sm primary" data-g="cams">${I('film')} Reparto de cámaras por ideas</button><div class="small muted">Frontal: hook, promesa y CTA · lateral: la narración · closeup: la frase corta. El encuadre cambia cuando cambia la idea.</div>`;
   G.plusBroll = (p) => {
     const list = G.gd(p).broll || [];

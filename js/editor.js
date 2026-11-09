@@ -227,14 +227,14 @@
       const c = it.clip, m = F.media.byId(c.mediaId);
       const tr = R.TRANSITIONS.find((t) => t.id === c.transition);
       return `<div class="clip ${E.selType === 'clip' && E.sel === c.id ? 'sel' : ''}" draggable="true" data-c="${c.id}" style="left:${it.start * pps}px;width:${Math.max(6, c.duration * pps - 2)}px;${m ? `background-image:url('${F.media.url(m)}')` : ''}">
-        <div class="clip-lbl">${i + 1} · ${c.duration.toFixed(1)}s</div>${c.text ? `<div class="clip-txt">${F.esc(c.text)}</div>` : ''}
+        <div class="clip-lbl">${i + 1} · ${c.duration.toFixed(1)}s</div>${F.golden?.clipTag ? F.golden.clipTag(p, c) : ''}${c.text ? `<div class="clip-txt">${F.esc(c.text)}</div>` : ''}
         <div class="clip-handle" data-h="${c.id}" title="Arrastra para cambiar la duración"></div>
         ${i < items.length - 1 && c.transition !== 'none' ? `<div class="clip-tr" title="${F.esc(tr?.name || '')}"></div>` : ''}</div>`;
     }).join('') + (items.length ? '' : `<div class="muted small" style="position:absolute;left:16px;top:32px">Arrastra imágenes aquí desde la biblioteca</div>`);
     const aDur = (a) => { const m = F.media.byId(a.mediaId); return a.loop ? Math.max(0.5, tot - a.start) : m?.duration || 2; };
     const row = (music) => p.audio.filter((a) => (a.kind === 'musica') === music).map((a) => {
       const m = F.media.byId(a.mediaId);
-      return `<div class="aclip ${a.kind === 'musica' ? 'musica' : ''} ${E.selType === 'audio' && E.sel === a.id ? 'sel' : ''}" data-a="${a.id}" style="left:${a.start * pps}px;width:${Math.max(24, aDur(a) * pps - 2)}px" title="${F.esc(m?.name || '')}"><div class="wave"></div>${I(music ? 'music' : 'mic')}<span>${F.esc(m ? m.name : '(audio eliminado)')}</span></div>`;
+      return `<div class="aclip ${a.kind === 'musica' ? 'musica' : a.kind === 'sfx' ? 'sfx' : ''} ${E.selType === 'audio' && E.sel === a.id ? 'sel' : ''}" data-a="${a.id}" style="left:${a.start * pps}px;width:${Math.max(24, aDur(a) * pps - 2)}px" title="${F.esc(m?.name || '')}"><div class="wave"></div>${I(music ? 'music' : 'mic')}<span>${F.esc(m ? m.name : '(audio eliminado)')}</span></div>`;
     }).join('');
     q('#trackA').innerHTML = row(false);
     q('#trackM').innerHTML = row(true);
