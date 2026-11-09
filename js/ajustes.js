@@ -73,6 +73,8 @@
 
     /* ----- personas con acceso (solo administrador) ----- */
     let people = [];
+    const open = new Set();
+    const SECS = [['editor', 'Editor de video'], ['flujos', 'Flujos y agentes'], ['guiones', 'Guiones'], ['imagenes', 'Imágenes'], ['voces', 'Voces'], ['efectos', 'Efectos y transiciones'], ['biblioteca', 'Biblioteca'], ['publicar', 'Publicar'], ['integraciones', 'Integraciones API (claves de IA)'], ['ajustes', 'Ajustes']];
     const ST = { pending: ['Pendiente', 'or'], approved: ['Aprobada', 'ok'], blocked: ['Rechazada', 'err'] };
     const renderPeople = () => {
       const box = q('#aPeople');
@@ -83,16 +85,29 @@
         const acts = me || p.role === 'admin' ? '' : p.status === 'approved'
           ? `<button class="btn sm danger" data-p="${p.user_id}" data-s="blocked">Quitar acceso</button>`
           : `<button class="btn sm primary" data-p="${p.user_id}" data-s="approved">Aprobar</button>${p.status === 'pending' ? `<button class="btn sm" data-p="${p.user_id}" data-s="blocked">Rechazar</button>` : ''}`;
-        return `<div class="person"><span class="em"><b>${F.esc(p.email || 'Sin correo')}</b>${me ? ' <span class="small muted">(tú)</span>' : ''}<br><span class="small muted">${F.ago(new Date(p.created_at).getTime())}</span></span>${p.role === 'admin' ? '<span class="tag or">Administrador</span>' : ''}<span class="tag ${cls}">${lbl}</span>${acts}</div>`;
+        const perms = p.perms || {};
+        const panel = open.has(p.user_id) && p.role !== 'admin' ? `<div class="perms"><b class="small">Puede usar:</b><div class="perm-grid">${SECS.map(([k, n]) => `<label class="check"><input type="checkbox" data-pp="${p.user_id}" data-pk="${k}" ${perms[k] === false ? '' : 'checked'}> ${n}</label>`).join('')}</div></div>` : '';
+        const permBtn = p.role === 'admin' || me ? '' : `<button class="btn sm" data-perm="${p.user_id}">${open.has(p.user_id) ? 'Cerrar' : 'Permisos'}</button>`;
+        return `<div class="person"><span class="em"><b>${F.esc(p.email || 'Sin correo')}</b>${me ? ' <span class="small muted">(tú)</span>' : ''}<br><span class="small muted">${F.ago(new Date(p.created_at).getTime())}</span></span>${p.role === 'admin' ? '<span class="tag or">Administrador</span>' : ''}<span class="tag ${cls}">${lbl}</span>${permBtn}${acts}${panel}</div>`;
       }).join('');
       box.innerHTML = `<h3>${I('shield')} Personas con acceso</h3><p class="desc">Quien se registra queda pendiente hasta que tú lo apruebes aquí.</p>${rows ? `<div class="people">${rows}</div>` : '<p class="muted">Todavía no se ha registrado nadie más.</p>'}`;
     };
     const loadPeople = () => C?.isAdmin() ? C.people().then((l) => { people = l; renderPeople(); }).catch((e) => F.toast(e.message, 'error')) : renderPeople();
     loadPeople();
     q('#aPeople').addEventListener('click', async (e) => {
+      const pb = e.target.closest('[data-perm]');
+      if (pb) { const id = pb.dataset.perm; open.has(id) ? open.delete(id) : open.add(id); return renderPeople(); }
       const b = e.target.closest('[data-p]'); if (!b) return;
       F.busy(b, true, '…');
       try { await C.decide(b.dataset.p, b.dataset.s); F.toast(b.dataset.s === 'approved' ? 'Persona aprobada' : 'Acceso quitado', 'ok'); await loadPeople(); } catch (err) { F.toast(err.message, 'error'); F.busy(b, false); }
+    });
+
+    q('#aPeople').addEventListener('change', async (e) => {
+      const t = e.target, id = t.dataset.pp, k = t.dataset.pk; if (!id) return;
+      const p = people.find((x) => x.user_id === id); if (!p) return;
+      const perms = { ...(p.perms || {}) };
+      if (t.checked) delete perms[k]; else perms[k] = false;
+      try { await C.setPerms(id, perms); p.perms = perms; F.toast('Permisos guardados', 'ok', 1400); } catch (err) { t.checked = !t.checked; F.toast(err.message, 'error'); }
     });
 
     /* ----- opciones sueltas: se guardan al cambiar ----- */

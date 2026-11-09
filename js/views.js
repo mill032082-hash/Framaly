@@ -52,6 +52,8 @@
       ['biblioteca', 'folder', 'Biblioteca', 'Tus imágenes, voces y música en un lugar'],
       ['publicar', 'youtube', 'Publicar', 'Exporta en MP4 y sube a YouTube con SEO'],
     ];
+    const mods2 = mods.filter(([id]) => F.cloud?.can(id) !== false);
+    const canInt = F.cloud?.can('integraciones') !== false;
     el.innerHTML = `<div class="page">
       <section class="hero"><div>
         <span class="pill">${I('sparkles')} Estudio de video con IA</span>
@@ -72,9 +74,9 @@
       </div>
       <div class="flowviz">${[['zap', 'Idea', 'Tu tema en una frase'], ['script', 'Guion', 'Escenas con gancho y llamada a la acción'], ['image', 'Imágenes', 'Una por escena, con estilo coherente'], ['mic', 'Voz', 'Narración natural sincronizada'], ['film', 'Montaje', 'Transiciones, movimiento y subtítulos'], ['youtube', 'YouTube', 'MP4 + SEO + miniatura']].map(([ic, b, s], i) => `<div class="fv-step" style="animation-delay:${i * 0.08}s"><div class="ic">${I(ic)}</div><div><b>${b}</b><small>${s}</small></div><span class="st">${I('check')}</span></div>`).join('')}</div></section>
       <div class="stats">${[['film', ps.length, 'Proyectos'], ['image', F.media.images().length, 'Imágenes'], ['mic', F.media.audios().length, 'Audios'], ['sparkles', F.media.list.filter((m) => m.source === 'ai').length, 'Creados con IA']].map(([ic, n, l]) => `<div class="stat"><div class="ic">${I(ic)}</div><div><b>${n}</b><span>${l}</span></div></div>`).join('')}</div>
-      ${!F.api.has('openai') && !F.api.has('anthropic') ? `<div class="notice" style="margin-top:18px">${I('key')}<div><b>Conecta tus APIs para activar la IA.</b> Añade tu key de OpenAI (imágenes y voz) y de Anthropic o OpenAI (guiones). El editor funciona sin ellas con tus propias imágenes. <a href="#/integraciones">Configurar ahora →</a></div></div>` : ''}
+      ${canInt && !F.api.has('openai') && !F.api.has('anthropic') ? `<div class="notice" style="margin-top:18px">${I('key')}<div><b>Conecta tus APIs para activar la IA.</b> Añade tu key de OpenAI (imágenes y voz) y de Anthropic o OpenAI (guiones). El editor funciona sin ellas con tus propias imágenes. <a href="#/integraciones">Configurar ahora →</a></div></div>` : ''}
       <h2 class="sec-t">Módulos <span class="line"></span></h2>
-      <div class="mods">${mods.map(([id, ic, b, p]) => `<a class="mod" href="#/${id}"><div class="ic">${I(ic)}</div><b>${b}</b><p>${p}</p></a>`).join('')}</div>
+      <div class="mods">${mods2.map(([id, ic, b, p]) => `<a class="mod" href="#/${id}"><div class="ic">${I(ic)}</div><b>${b}</b><p>${p}</p></a>`).join('')}</div>
       <h2 class="sec-t">Proyectos recientes <span class="line"></span><button class="btn sm" data-new>${I('plus')} Nuevo</button></h2>
       <div class="projs">${ps.length ? ps.map((p) => { const th = F.projects.thumb(p); return `<div class="pcard" data-open="${p.id}"><div class="th" style="${th ? `background-image:url('${th}')` : ''}">${th ? '' : I('film')}<span class="tag or fmt">${p.aspect}</span><span class="dur">${F.fmtS(F.projects.duration(p))}</span></div><div class="bd"><div style="min-width:0;flex:1"><b>${F.esc(p.name)}</b><small>${p.clips.length} clips · ${F.ago(p.updated)}</small></div><button class="icon-btn" data-delp="${p.id}" title="Eliminar proyecto">${I('trash')}</button></div></div>`; }).join('') : `<div class="empty" style="grid-column:1/-1">${I('film')}<p>Todavía no tienes proyectos.</p><div class="row" style="justify-content:center"><button class="btn" data-demo>${I('eye')} Cargar proyecto de ejemplo</button><button class="btn primary" data-new>${I('plus')} Crear el primero</button></div></div>`}</div>
     </div>`;

@@ -76,10 +76,12 @@
   /* ---------- aprobación: quién puede usar la plataforma ---------- */
   st.approved = () => st.access?.status === 'approved';
   st.isAdmin = () => st.approved() && st.access?.role === 'admin';
+  /** ¿Esta persona puede usar la sección? Sin nube todo está permitido; el administrador siempre puede. */
+  st.can = (section) => !st.configured() || !st.user || st.isAdmin() || st.access?.perms?.[section] !== false;
   async function loadAccess(s, uid) {
-    const { data, error } = await s.from('framaly_access').select('status,role').eq('user_id', uid).maybeSingle();
+    const { data, error } = await s.from('framaly_access').select('status,role,perms').eq('user_id', uid).maybeSingle();
     if (error) throw error;
-    st.access = data || { status: 'pending', role: 'user' };
+    st.access = data || { status: 'pending', role: 'user', perms: { integraciones: false } };
   }
   /** Entra una sesión: primero se consulta su permiso, después se muestra la app */
   async function enter(u) {
@@ -97,11 +99,16 @@
   /** Solo administradores: lista de personas y sus permisos */
   st.people = async () => {
     const s = await sb();
-    const { data, error } = await s.from('framaly_access').select('user_id,email,status,role,created_at').order('created_at', { ascending: false });
+    const { data, error } = await s.from('framaly_access').select('user_id,email,status,role,perms,created_at').order('created_at', { ascending: false });
     if (error) throw new Error(explain(error));
     const n = data.filter((p) => p.status === 'pending').length;
     if (n !== st.pendingCount) { st.pendingCount = n; F.emit('cloud'); }
     return data;
+  };
+  st.setPerms = async (userId, perms) => {
+    const s = await sb();
+    const { error } = await s.from('framaly_access').update({ perms }).eq('user_id', userId);
+    if (error) throw new Error(explain(error));
   };
   st.decide = async (userId, status) => {
     const s = await sb();

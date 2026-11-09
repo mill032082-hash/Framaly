@@ -79,3 +79,7 @@ create policy "framaly_storage_update" on storage.objects for update to authenti
 drop policy if exists "framaly_storage_delete" on storage.objects;
 create policy "framaly_storage_delete" on storage.objects for delete to authenticated
   using (bucket_id = 'framaly-media' and (storage.foldername(name))[1] = auth.uid()::text and public.framaly_is_approved());
+
+-- Permisos por persona: solo se guarda lo que está en false (bloqueado); lo demás está permitido.
+-- Las personas nuevas arrancan sin acceso a Integraciones API. El administrador lo cambia en Ajustes.
+alter table public.framaly_access add column if not exists perms jsonb not null default '{"integraciones": false}'::jsonb;

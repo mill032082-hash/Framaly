@@ -24,10 +24,19 @@
   function sidebar() {
     const sb = F.$('#sidebar');
     sb.innerHTML = `<a class="brand" href="#/inicio"><div class="logo"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg></div><div><b>FRAMALY</b><small>Studio de video IA</small></div></a>
-      <nav class="nav">${ROUTES.map((r) => (r.sec ? `<div class="nav-sec">${r.sec}</div>` : `<a href="#/${r.id}" data-r="${r.id}">${I(r.icon)}<span>${r.name}</span>${r.badge ? `<span class="badge">${r.badge}</span>` : ''}</a>`)).join('')}</nav>
+      <nav class="nav" id="nav"></nav>
       <div class="acct" id="acct"></div>
       <div class="side-foot"><b style="color:var(--text);font-size:12px">Conexiones</b><div class="apis" id="apiDots"></div></div>`;
-    dots(); acct();
+    nav(); dots(); acct();
+  }
+  /** Menú: solo las secciones que esta persona puede usar (y sin títulos vacíos) */
+  function nav() {
+    const el = F.$('#nav'); if (!el) return;
+    const ok = ROUTES.filter((r) => r.sec || !F.cloud || F.cloud.can(r.id));
+    const list = ok.filter((r, i) => !r.sec || (ok[i + 1] && !ok[i + 1].sec));
+    el.innerHTML = list.map((r) => (r.sec ? `<div class="nav-sec">${r.sec}</div>` : `<a href="#/${r.id}" data-r="${r.id}">${I(r.icon)}<span>${r.name}</span>${r.badge ? `<span class="badge">${r.badge}</span>` : ''}</a>`)).join('');
+    const cur = (location.hash.replace(/^#\/?/, '') || 'inicio').split('?')[0];
+    F.$$('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.r === cur));
   }
   /** Bloque de cuenta en el menú lateral (solo si la plataforma tiene base de datos) */
   function acct() {
@@ -120,7 +129,8 @@
     rendering = true; pending = false;
     try {
       const id = (location.hash.replace(/^#\/?/, '') || 'inicio').split('?')[0];
-      const r = ROUTES.find((x) => x.id === id) || ROUTES[1];
+      let r = ROUTES.find((x) => x.id === id) || ROUTES[1];
+      if (F.cloud && !F.cloud.can(r.id)) { F.toast('No tienes acceso a esta sección. Pídeselo a quien administra FRAMALY.', 'error'); r = ROUTES[1]; if (location.hash !== '#/inicio') history.replaceState(null, '', '#/inicio'); }
       if (destroy) { try { destroy(); } catch (e) { console.error(e); } destroy = null; }
       F.$$('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.r === r.id));
       menu(false);
@@ -198,14 +208,15 @@
     });
     let started = false;
     const sync = () => {
-      acct();
+      acct(); nav();
       if (needGate()) { openGate(); if (gate.view !== (F.cloud.user ? 'pending' : 'login')) drawGate(); F.$('#view').innerHTML = ''; return; }
       if (gateEl) closeGate();
       if (F.cloud?.isAdmin()) F.cloud.people().catch(() => {});
       if (!started) { started = true; render().then(() => { if (!localStorage.getItem('framaly.onboarded')) F.onboarding(); }); }
       else if (F.cloud.user && gateOpened) { gateOpened = false; render(); }
     };
-    setInterval(() => { if (F.cloud?.isAdmin()) F.cloud.people().catch(() => {}); }, 60000);
+    // el administrador ve las solicitudes nuevas; los demás reciben sus permisos actualizados
+    setInterval(() => { const C = F.cloud; if (!C?.user) return; if (C.isAdmin()) C.people().catch(() => {}); else if (C.approved()) C.recheck().catch(() => {}); }, 60000);
     let gateOpened = false;
     F.on('cloud', () => { if (needGate()) gateOpened = true; sync(); });
     if (F.cloud?.configured()) await F.cloud.ready.catch(() => {});
