@@ -34,7 +34,7 @@
   R.filters = () => [...R.BASE_FILTERS, ...(F.settings.customFilters || [])];
   R.filter = (id) => R.filters().find((f) => f.id === id) || R.BASE_FILTERS[0];
   R.TEXT_STYLES = [{ id: 'subtitulo', name: 'Subtítulo' }, { id: 'titulo', name: 'Título central' }, { id: 'inferior', name: 'Rótulo inferior' }];
-  R.TEXT_ANIMS = [{ id: 'fade', name: 'Aparecer' }, { id: 'up', name: 'Subir' }, { id: 'type', name: 'Máquina de escribir' }, { id: 'pop', name: 'Rebote' }, { id: 'none', name: 'Sin animación' }];
+  R.TEXT_ANIMS = [{ id: 'fade', name: 'Aparecer' }, { id: 'up', name: 'Subir' }, { id: 'words', name: 'Palabra por palabra (máx. 3)' }, { id: 'type', name: 'Máquina de escribir' }, { id: 'pop', name: 'Rebote' }, { id: 'none', name: 'Sin animación' }];
   R.opts = (list, sel) => list.map((o) => `<option value="${o.id}" ${o.id === sel ? 'selected' : ''}>${F.esc(o.name)}</option>`).join('');
 
   const ease = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
@@ -71,6 +71,14 @@
   function rr(cx, x, y, w, h, r) { cx.beginPath(); if (cx.roundRect) cx.roundRect(x, y, w, h, r); else cx.rect(x, y, w, h); }
 
   R.drawText = (cx, clip, lt, W, H) => {
+    if (clip.textAnim === 'words') {
+      /* subtítulos por palabra: grupos de máx. 3 palabras en mayúsculas, repartidos en la duración del clip */
+      const ws = String(clip.text).split(/\s+/).filter(Boolean), groups = [];
+      for (let i = 0; i < ws.length; i += 3) groups.push(ws.slice(i, i + 3).join(' ').toUpperCase());
+      if (!groups.length) return;
+      const per = (clip.duration || 1) / groups.length, gi = Math.min(groups.length - 1, Math.floor(lt / per));
+      return R.drawText(cx, { ...clip, text: groups[gi], textAnim: 'pop' }, lt - gi * per, W, H);
+    }
     const base = Math.min(W, H);
     const st = clip.textStyle || 'subtitulo', an = clip.textAnim || 'fade';
     const p = an === 'none' ? 1 : F.clamp(lt / 0.6, 0, 1);
@@ -301,9 +309,11 @@
     }
     return out;
   };
-  Eng.scheduleAudio = (tracks, fromT, total, dest, when) => {
+  Eng.scheduleAudio = (tracks, fromT, total, dest, when, duck) => {
     const ac = F.actx(), nodes = [];
     const endAt = when + (total - fromT);
+    /* intervalos donde habla la voz (para bajar la música 12 dB) */
+    const voices = duck ? tracks.filter((x) => x.a.kind !== 'musica' && !x.a.loop).map((x) => [x.a.start || 0, (x.a.start || 0) + x.buf.duration]) : [];
     for (const { a, buf } of tracks) {
       const rel = fromT - (a.start || 0);
       if (!a.loop && rel >= buf.duration) continue;
@@ -312,6 +322,15 @@
       const g = ac.createGain(); const vol = a.volume ?? 1; g.gain.value = vol;
       src.connect(g).connect(dest);
       if (rel < 0) src.start(when - rel, 0); else src.start(when, a.loop ? rel % buf.duration : rel);
+      if (voices.length && a.kind === 'musica') {
+        const low = vol * 0.25, ramp = 0.25, at = (t) => when + (t - fromT);
+        g.gain.setValueAtTime(voices.some(([s, e]) => fromT >= s && fromT < e) ? low : vol, when);
+        for (const [s, e] of voices) {
+          if (e <= fromT) continue;
+          if (s > fromT) { g.gain.setValueAtTime(vol, Math.max(when, at(s) - ramp)); g.gain.linearRampToValueAtTime(low, at(s)); }
+          g.gain.setValueAtTime(low, Math.max(when, at(e))); g.gain.linearRampToValueAtTime(vol, at(e) + 0.4);
+        }
+      }
       if (a.fadeOut) { const fo = Math.min(2, total * 0.2); g.gain.setValueAtTime(vol, Math.max(ac.currentTime, endAt - fo)); g.gain.linearRampToValueAtTime(0.0001, endAt); }
       try { src.stop(endAt + 0.05); } catch (e) {}
       nodes.push(src);
@@ -349,7 +368,7 @@
     const stopped = new Promise((r) => (rec.onstop = r));
     rec.start(1000);
     const when = ac.currentTime + 0.2;
-    const nodes = Eng.scheduleAudio(tracks, 0, total, dest, when);
+    const nodes = Eng.scheduleAudio(tracks, 0, total, dest, when, p.duck);
     await new Promise((resolve) => {
       const tick = () => {
         if (signal?.aborted) return resolve();

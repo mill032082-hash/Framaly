@@ -26,6 +26,12 @@ Cada dispositivo guarda su propia biblioteca y sus propias claves de API.
 Si subes una canción a la *Biblioteca*, se usa automáticamente como música de fondo.
 Cada sección tiene instrucciones paso a paso arriba y en el botón **Instrucciones**.
 
+## Editor de video: atajos y herramientas
+- **Dividir** (botón o tecla `S`): corta el clip en la posición del cursor.
+- **Ctrl+D** duplica el clip; **Inicio / Fin** saltan al principio o al final; **Espacio** reproduce.
+- **Texto → Animación «Palabra por palabra»**: subtítulos en mayúsculas, máximo 3 palabras a la vez, repartidos en la duración del clip.
+- **Proyecto → «Bajar la música cuando habla la voz»**: baja la música 12 dB mientras suena la narración (también en el MP4 exportado).
+
 ## Cuentas y base de datos (Supabase)
 La plataforma trae **inicio de sesión y base de datos integrados**. Las personas que la usen solo ven una pantalla de «Inicia sesión» (correo y contraseña); no configuran nada. Sus proyectos y su biblioteca se guardan en su cuenta y aparecen en cualquier dispositivo (PC, celular).
 
