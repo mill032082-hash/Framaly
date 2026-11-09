@@ -122,12 +122,14 @@
     /** Generación de imágenes (OpenAI). Devuelve Blob[] */
     imageProvider(pref) {
       let saved; try { saved = JSON.parse(localStorage.getItem('framaly.img') || '{}').provider; } catch (e) { /* sin preferencia */ }
-      return [pref && pref !== 'auto' ? pref : saved, 'openai', 'gemini', 'minimax'].find((x) => x && x !== 'auto' && this.has(x) && canUse(x, 'image')) || 'openai';
+      if (pref && pref !== 'auto') return pref;   // lo que eliges es lo que se usa: nunca se cambia solo a otra IA
+      return [saved, 'openai', 'gemini', 'minimax'].find((x) => x && x !== 'auto' && this.has(x) && canUse(x, 'image')) || 'openai';
     },
     async image(o) {
       const p = this.imageProvider(o.provider);
       if (p === 'gemini') return this.imageGemini(o);
       if (p === 'minimax') return this.imageMinimax(o);
+      if (o.provider === 'openai') return this.imageOpenAI(o);
       try { return await this.imageOpenAI(o); } catch (e) {
         // OpenAI puede no dejar generar imágenes (verificación de organización, saldo…): se prueba con otra IA si hay
         const alt = ['gemini', 'minimax'].find((x) => this.has(x) && canUse(x, 'image'));
