@@ -1,9 +1,9 @@
-// FRAMALY Studio · puerta segura hacia las APIs de IA (Claude, OpenAI, ElevenLabs).
-// Las claves viven solo aquí (secretos ANTHROPIC_API_KEY, OPENAI_API_KEY, ELEVENLABS_API_KEY).
+// FRAMALY Studio · puerta segura hacia las APIs de IA (Claude, OpenAI, ElevenLabs, Gemini, MiniMax).
+// Las claves viven solo aquí (plataforma cifrada o secretos ANTHROPIC_API_KEY, OPENAI_API_KEY, ELEVENLABS_API_KEY, GEMINI_API_KEY, MINIMAX_API_KEY).
 // Cada llamada: verifica sesión y aprobación, comprueba que la persona use la clave compartida,
 // respeta los límites (mensual por API y diario por persona), registra el gasto y avisa al administrador.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { CORS, LABEL, PRICE, Provider, checkBudget, db, fail, getKey, logError, notify, record, tokenCost, whoIs } from "./budget.ts";
+import { CORS, LABEL, PRICE, Provider, checkBudget, db, fail, getKey, limitOf, logError, notify, record, tokenCost, whoIs } from "./budget.ts";
 
 const HOST: Record<Provider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", elevenlabs: "https://api.elevenlabs.io", gemini: "https://generativelanguage.googleapis.com", minimax: "https://api.minimax.io" };
 const SECRET: Record<Provider, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", elevenlabs: "ELEVENLABS_API_KEY", gemini: "GEMINI_API_KEY", minimax: "MINIMAX_API_KEY" };
@@ -17,6 +17,7 @@ const ROUTES: { p: Provider; m: string; re: RegExp; kind: string }[] = [
   { p: "openai", m: "GET", re: /^\/v1\/models$/, kind: "prueba" },
   { p: "elevenlabs", m: "POST", re: /^\/v1\/text-to-speech\/[A-Za-z0-9_-]{5,40}$/, kind: "voz" },
   { p: "elevenlabs", m: "GET", re: /^\/v1\/voices$/, kind: "prueba" },
+  { p: "elevenlabs", m: "GET", re: /^\/v1\/user\/subscription$/, kind: "saldo" },   // saldo real (solo administrador)
   // Gemini: el tipo de uso (texto, imagen o voz) se deduce del nombre del modelo
   { p: "gemini", m: "POST", re: /^\/v1beta\/models\/[A-Za-z0-9._-]{3,60}:generateContent$/, kind: "gemini" },
   { p: "gemini", m: "GET", re: /^\/v1beta\/models$/, kind: "prueba" },
@@ -51,6 +52,7 @@ Deno.serve(async (req: Request) => {
     if (!route) return fail(400, "bad_request", "Esa operación no está permitida.");
     let kind = route.kind;
     if (kind === "gemini") kind = /image/i.test(path) ? "imagen" : /tts/i.test(path) ? "voz" : "texto";
+    if (kind === "saldo" && acc.role !== "admin") return fail(403, "forbidden", "Solo el administrador puede ver el saldo.");
     if (query && !/^output_format=[a-z0-9_]{3,30}$/.test(query)) return fail(400, "bad_request", "Parámetros no permitidos.");
 
     // 2) ¿Esta persona usa la clave compartida de esta API?
@@ -66,7 +68,7 @@ Deno.serve(async (req: Request) => {
       return fail(503, "not_configured", `La clave compartida de ${LABEL[provider]} todavía no está configurada.`);
     }
     // 4) Límites (las pruebas de conexión no gastan)
-    if (kind !== "prueba") {
+    if (kind !== "prueba" && kind !== "saldo") {
       const stop = await checkBudget(client, provider, uid, acc);
       if (stop) return stop;
     }
@@ -93,6 +95,10 @@ Deno.serve(async (req: Request) => {
     // 6) Llamada al proveedor con la clave del servidor
     const up = await fetch(HOST[provider] + path + (query ? "?" + query : ""), { method, headers: headersFor(provider, key), body: body ? JSON.stringify(body) : undefined });
     const type = up.headers.get("content-type") ?? "application/json";
+    if (kind === "saldo" && (up.status === 401 || up.status === 403)) {
+      await logError(client, { provider, uid, email: acc.email, kind: "proveedor", status: up.status, message: "La clave no tiene permiso para leer el saldo (falta «User: Read»)." });
+      return fail(403, "no_perm", `La clave de ${LABEL[provider]} no tiene permiso para leer el saldo. Al crearla, activa «User: Read».`);
+    }
     if (up.status === 401 || up.status === 403) {
       await logError(client, { provider, uid, email: acc.email, kind: "clave", status: up.status, message: `${LABEL[provider]} rechazó la clave (${up.status}).` });
       await notify(client, { dedupe: `${provider}:badkey:${new Date().toISOString().slice(0, 10)}`, level: "crit", provider, title: `La clave de ${LABEL[provider]} fue rechazada`, body: `${LABEL[provider]} respondió ${up.status}: la clave guardada en Supabase no es válida, venció o no tiene saldo.` });
@@ -120,6 +126,15 @@ Deno.serve(async (req: Request) => {
     }
     const text = await up.text();
     let j: any = {}; try { j = JSON.parse(text); } catch { /* sin datos de uso */ }
+    // Saldo real de ElevenLabs: se guarda una instantánea y se avisa si la cuota se acaba
+    if (provider === "elevenlabs" && kind === "saldo" && up.ok) {
+      const used = Number(j.character_count ?? 0), quota = Number(j.character_limit ?? 0), reset = Number(j.next_character_count_reset_unix ?? 0);
+      await client.from("framaly_balance").insert({ provider, used, quota, unit: "caracteres", plan: String(j.tier ?? ""), resets_at: reset ? new Date(reset * 1000).toISOString() : null });
+      const pct = quota > 0 ? (used / quota) * 100 : 0, lim = await limitOf(client, provider), ym = new Date().toISOString().slice(0, 7);
+      if (pct >= 100) await notify(client, { dedupe: `${provider}:quota100:${ym}`, level: "crit", provider, title: "ElevenLabs agotó su cuota de caracteres", body: `Usó ${used} de ${quota} caracteres de su plan. Las voces de ElevenLabs no funcionarán hasta que se renueve o subas de plan.` });
+      else if (pct >= lim.alertPct) await notify(client, { dedupe: `${provider}:quota${lim.alertPct}:${ym}`, level: "warn", provider, title: `ElevenLabs va en ${Math.floor(pct)}% de su cuota`, body: `Usó ${used} de ${quota} caracteres de su plan.` });
+      return new Response(text, { status: 200, headers: { ...CORS, "Content-Type": type } });
+    }
     // MiniMax responde 200 aunque falle: el error viene en base_resp
     const bs = Number(j?.base_resp?.status_code ?? 0);
     if (provider === "minimax" && bs !== 0) {

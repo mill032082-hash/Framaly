@@ -9,6 +9,9 @@
   const usd = (n) => 'US$ ' + (+n || 0).toFixed(2).replace('.', ',');
   const num = (n) => { n = +n || 0; return n >= 1e6 ? (n / 1e6).toFixed(1).replace('.', ',') + ' M' : n >= 1e3 ? (n / 1e3).toFixed(1).replace('.', ',') + ' mil' : String(Math.round(n)); };
   const KIND = { clave: ['Clave rechazada', 'err', 'Cambia la clave en la tarjeta de esa API.'], sin_clave: ['Falta la clave', 'err', 'Pega la clave en la tarjeta de esa API.'], proveedor: ['Error del proveedor', 'or', 'Suele ser saldo, cuota o un dato rechazado por el proveedor. Revisa su panel.'], limite: ['Límite mensual', 'or', 'Sube el límite mensual de esa API si quieres seguir.'], tope: ['Tope diario', 'or', 'La persona llegó a su tope. Súbelo en Ajustes → Personas.'], modo: ['Sin permiso', '', 'Esa persona intentó usar una clave que no tiene habilitada. Revisa su modo en Ajustes → Personas.'], servidor: ['Error interno', 'err', 'Un fallo de la función segura. Si se repite, revisa los registros en Supabase.'] };
+  const PANEL = { anthropic: ['https://console.anthropic.com/settings/billing', 'Claude'], openai: ['https://platform.openai.com/settings/organization/billing/overview', 'OpenAI'], gemini: ['https://aistudio.google.com/usage', 'Gemini'], minimax: ['https://platform.minimax.io/user-center/payment/balance', 'MiniMax'] };
+  const dmy = (d) => new Date(d).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+  const EVT = { conectada: 'Clave conectada', reemplazada: 'Clave reemplazada', quitada: 'Clave quitada' };
   const SECRET = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', elevenlabs: 'ELEVENLABS_API_KEY', gemini: 'GEMINI_API_KEY', minimax: 'MINIMAX_API_KEY' };
   const AIS = [
     { k: 'anthropic', logo: 'A', bg: 'linear-gradient(135deg,#d97757,#b4532a)', name: 'Claude · Anthropic', sub: 'Agentes de texto: guiones, SEO, prompts y asesor', feats: ['Guionista', 'SEO YouTube', 'Mejorar prompts'] },
@@ -23,7 +26,7 @@
 
   V.integraciones = (el) => {
     const S = F.settings, C = F.cloud, cloudOn = !!(C?.configured() && C.user);
-    const data = { rep: null, lims: null, secrets: [], errors: null };
+    const data = { rep: null, lims: null, secrets: [], errors: null, ov: {} };
     let dead = false;
     const mode = (k) => (cloudOn ? C.aiMode(k) : 'own');
     const model = (k, label, list) => `<label class="lbl">${label}</label><input type="text" data-model="${k}" value="${esc(S.models[k])}" list="dl-${k}"><datalist id="dl-${k}">${list.map((x) => `<option value="${x}">`).join('')}</datalist>`;
@@ -40,6 +43,22 @@
     const ownCard = (a) => `<div class="card int-card">${head(a, F.api.has(a.k) ? 'Conectado' : 'Sin configurar', F.api.has(a.k) ? 'ok' : '')}
       <label class="lbl">API key</label><div class="keyrow"><input type="password" data-key="${a.k}" value="${esc(S.keys[a.k])}" placeholder="Pega tu clave aquí" autocomplete="off" spellcheck="false"><button class="icon-btn" data-eye="${a.k}" title="Mostrar">${I('eye')}</button><button class="btn" data-test="${a.k}">Probar</button></div>
       ${a.k === 'minimax' ? '<p class="mini" style="margin:8px 0 0">MiniMax suele no permitir llamadas directas desde el navegador: funciona mejor con la clave de FRAMALY.</p>' : ''}${models(a.k)}${feats(a)}</div>`;
+    /* --- saldo del proveedor + historial de la API (administrador) --- */
+    const history = (a) => {
+      const o = data.ov?.[a.k]; if (!o) return '';
+      const days = o.days || [], max = Math.max(0.0001, ...days.map((d) => +d.cost));
+      const bars = days.length ? `<div class="spark" title="Gasto por día, últimos 30 días">${days.map((d) => `<i style="height:${Math.max(6, Math.round((+d.cost / max) * 100))}%" title="${dmy(d.day)}: ${usd(d.cost)}"></i>`).join('')}</div>` : '<div class="mini">Todavía no hay gasto registrado con la clave de FRAMALY.</div>';
+      const b = o.balance;
+      const real = b ? (() => { const p = b.quota > 0 ? Math.round((b.used / b.quota) * 100) : 0; return `<div class="row2"><span><b style="color:var(--text)">Saldo del proveedor${b.plan ? ' · plan ' + esc(b.plan) : ''}</b></span><span>${num(b.used)} de ${num(b.quota)} ${esc(b.unit)} · ${p}%</span></div>${bar(p, p >= 80)}<div class="mini">${b.resets_at ? 'Se renueva el ' + dmy(b.resets_at) + ' · ' : ''}consultado ${F.ago(new Date(b.created_at).getTime())}</div>`; })()
+        : a.k === 'elevenlabs' ? '<div class="mini">Aún sin consultar el saldo. Pulsa «Actualizar saldo».</div>'
+        : `<div class="mini">${esc(PANEL[a.k][1])} no entrega el saldo con una clave normal. <a href="${PANEL[a.k][0]}" target="_blank" rel="noopener">Ver saldo en su panel →</a></div>`;
+      const evs = (o.events || []).length ? `<details style="margin-top:8px" class="small muted"><summary style="cursor:pointer;color:var(--or2)">Historial de conexión</summary>${o.events.map((e) => `<div class="row2 prow"><span>${esc(EVT[e.kind] || e.kind)}${e.detail?.last4 ? ` (••••${esc(e.detail.last4)})` : ''}</span><span>${dmy(e.at)}</span></div>`).join('')}</details>` : '';
+      return `<div class="sep"></div>
+        <div class="row2"><span><b style="color:var(--text)">Gastado con FRAMALY</b></span><span>${o.first_use ? 'desde el ' + dmy(o.first_use) : 'sin uso aún'}</span></div>
+        <div class="big" style="font-size:18px">${usd(o.total)}<span class="mini"> en total</span></div>${bars}
+        <div class="sep"></div>${real}
+        ${a.k === 'elevenlabs' ? `<button class="btn sm" data-bal="elevenlabs" style="margin-top:8px">Actualizar saldo</button>` : ''}${evs}`;
+    };
     /* --- clave de FRAMALY, vista del administrador --- */
     const adminCard = (a) => {
       const p = data.rep?.providers?.[a.k] || { cost: 0, units: {} }, l = (data.lims || []).find((x) => x.provider === a.k) || { monthly_usd: 0, alert_pct: 80 };
@@ -51,6 +70,8 @@
         <div class="sep"></div>
         <label class="lbl">Límite mensual (US$)</label><div class="keyrow"><input type="number" min="0" step="1" data-lim="${a.k}" value="${l.monthly_usd}"><button class="btn" data-limsave="${a.k}">Guardar</button></div>
         <label class="lbl">Avisarme al llegar a</label><div class="seg">${[80, 90, 100].map((n) => `<button data-alert="${a.k}" data-v="${n}" class="${+l.alert_pct === n ? 'on' : ''}">${n}%</button>`).join('')}</div>
+        <div class="sep"></div>
+        ${history(a)}
         <div class="sep"></div>
         <label class="lbl">Clave de ${a.name.split(' · ')[0]}</label>
         <p class="mini" style="margin:0 0 6px">${sec ? `Guardada en la plataforma (cifrada) · termina en ••••${esc(sec.last4)} · ${F.ago(new Date(sec.updated_at).getTime())}` : `No hay una clave guardada aquí. Si la dejaste en Supabase (secreto <code>${SECRET[a.k]}</code>), también funciona.`}</p>
@@ -104,7 +125,7 @@
     draw();
     if (cloudOn) {
       (async () => {
-        try { data.rep = await C.report(); if (C.isAdmin()) { [data.lims, data.secrets, data.errors] = await Promise.all([C.limits(), C.secrets(), C.errors()]); } } catch (e) { F.toast(e.message, 'error'); }
+        try { data.rep = await C.report(); if (C.isAdmin()) { [data.lims, data.secrets, data.errors, data.ov] = await Promise.all([C.limits(), C.secrets(), C.errors(), C.overview()]); } } catch (e) { F.toast(e.message, 'error'); }
         draw();
       })();
     }
@@ -137,7 +158,12 @@
         const k = ss.dataset.secsave, inp = q(`[data-secret="${k}"]`), v = inp.value.trim();
         if (!v) return F.toast('Pega primero la clave');
         F.busy(ss, true, 'Guardando…');
-        try { await C.setSecret(k, v); inp.value = ''; data.secrets = await C.secrets(); F.toast('Clave guardada. Pulsa «Probar conexión» para confirmarla.', 'ok', 5000); draw(); } catch (err) { F.toast(err.message, 'error'); F.busy(ss, false); }
+        try {
+          await C.setSecret(k, v); inp.value = ''; data.secrets = await C.secrets(); data.ov = await C.overview(); draw();
+          // al conectar: se prueba la clave y, si el proveedor lo permite, se consulta el saldo
+          try { F.toast(await F.api.test(k), 'ok'); if (k === 'elevenlabs') await F.api.balance(k).catch((err) => F.toast(err.message, 'error')); } catch (err) { F.toast(err.message, 'error', 6000); }
+          [data.ov, data.errors] = await Promise.all([C.overview(), C.errors()]); draw();
+        } catch (err) { F.toast(err.message, 'error'); F.busy(ss, false); }
         return;
       }
       const sd = e.target.closest('[data-secdel]');
@@ -148,6 +174,12 @@
         return;
       }
       if (e.target.closest('[data-errclear]')) { try { await C.clearErrors(); data.errors = []; draw(); } catch (err) { F.toast(err.message, 'error'); } return; }
+      const bl = e.target.closest('[data-bal]');
+      if (bl) {
+        F.busy(bl, true, 'Consultando…');
+        try { await F.api.balance(bl.dataset.bal); data.ov = await C.overview(); F.toast('Saldo actualizado', 'ok'); draw(); } catch (err) { F.toast(err.message, 'error'); data.errors = await C.errors().catch(() => data.errors); draw(); }
+        return;
+      }
       const al = e.target.closest('[data-alert]');
       if (al) { try { await C.setLimit(al.dataset.alert, { alert_pct: +al.dataset.v }); const l = data.lims.find((x) => x.provider === al.dataset.alert); if (l) l.alert_pct = +al.dataset.v; F.toast('Aviso guardado', 'ok'); draw(); } catch (err) { F.toast(err.message, 'error'); } }
     });

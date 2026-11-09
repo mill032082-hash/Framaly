@@ -245,6 +245,12 @@ Si una IA aparece como **No habilitada**, pídele a quien administra FRAMALY que
 5. Abajo ves el **consumo por persona**.
 Los montos son **estimados** a partir de los precios de cada proveedor.` },
 
+    { id: 'integraciones.saldo', sec: 'integraciones', t: 'Ver el saldo y el historial de cada API (administrador)', k: 'saldo historial consumo gastado cuanto queda credito cuota cuanto he gastado desde que se conecto grafica dias elevenlabs caracteres actualizar saldo',
+      a: `En [[#/integraciones|Integraciones API]], cada tarjeta muestra:
+1. **Gastado con FRAMALY**: el total desde que se conectó y una **gráfica por día** de los últimos 30 días.
+2. **Saldo del proveedor**: solo **ElevenLabs** lo entrega con una clave normal (caracteres usados y cuándo se renueva). Pulsa **Actualizar saldo** para consultarlo; también se consulta al conectar la clave. En las demás APIs la tarjeta trae un enlace a su panel, porque piden una clave de administrador o no ofrecen saldo.
+3. **Historial de conexión**: cuándo se conectó, reemplazó o quitó cada clave.
+Si ElevenLabs avisa que falta permiso, crea la clave con **User: Read** activado. La campanita avisa cuando su cuota se acerca al límite.` },
     { id: 'integraciones.claveadmin', sec: 'integraciones', t: 'Guardar o cambiar una clave de IA desde la plataforma (administrador)', k: 'guardar cambiar clave api pegar plataforma boveda cifrada quitar reemplazar probar conexion errores registro fallo error rechazada saldo',
       a: `Solo lo ve quien administra FRAMALY, en [[#/integraciones|Integraciones API]]:
 1. En la tarjeta de la API, escribe la clave en **Clave de…** y pulsa **Guardar clave**. Se guarda **cifrada** y no se puede volver a ver, solo reemplazar. Verás solo cómo termina.

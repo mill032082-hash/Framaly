@@ -615,3 +615,6 @@ body.has-ask #toasts { bottom: 82px; }
 .err-row:last-child { border-bottom: 0; }
 .tag.err { background: rgba(255, 93, 93, .12); color: var(--err); }
 .sec-t .btn { margin-left: 8px; }
+.spark { display: flex; align-items: flex-end; gap: 2px; height: 42px; margin: 8px 0 2px; }
+.spark i { flex: 1; min-width: 3px; border-radius: 2px 2px 0 0; background: var(--grad); opacity: .85; }
+.spark i:hover { opacity: 1; }

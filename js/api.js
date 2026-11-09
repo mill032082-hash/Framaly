@@ -241,6 +241,13 @@
       return this.ttsOpenAI(o);
     },
 
+    /** Saldo real informado por el proveedor. Solo ElevenLabs lo entrega con una clave normal; se guarda una instantánea en el servidor. */
+    async balance(n) {
+      if (n !== 'elevenlabs') return null;
+      need('elevenlabs', 'ElevenLabs');
+      return asJson(await net('elevenlabs', 'https://api.elevenlabs.io/v1/user/subscription', { headers: { 'xi-api-key': key('elevenlabs') } }));
+    },
+
     /** Pruebas de conexión */
     async test(n) {
       if (n === 'openai') { await asJson(await net('openai', 'https://api.openai.com/v1/models', { headers: { Authorization: 'Bearer ' + key('openai') } })); return 'Conexión correcta con OpenAI'; }

@@ -57,6 +57,8 @@ Las claves de Claude, OpenAI y ElevenLabs pueden vivir **en el servidor** (Supab
 
 **Dos formas de guardar las claves (las dos valen):** en la plataforma (**Integraciones API → Guardar clave**, se cifra en la bóveda de Supabase; requiere `supabase/secrets.sql`) o como secretos de la función en Supabase. Si hay una guardada en la plataforma, esa tiene prioridad. Los fallos de las APIs aparecen en **Integraciones API → Errores recientes**.
 
+**Saldo e historial:** ejecuta también `supabase/history.sql`. Cada API muestra lo gastado con FRAMALY (total y por día) y un historial de conexión. El **saldo real** solo lo entrega ElevenLabs con una clave normal (créala con el permiso *User: Read*); en las demás hay un enlace a su panel.
+
 **Cómo se usa (administrador):**
 - **Ajustes → Personas con acceso → Permisos:** para cada persona y cada API eliges **Clave de FRAMALY**, **Que ponga la suya** o **Sin IA**, y un **tope diario** en dólares.
 - **Preparar acceso:** deja un correo listo antes de que se registre (con Google entra aprobado; con contraseña queda pendiente con sus ajustes).
