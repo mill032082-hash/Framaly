@@ -16,6 +16,12 @@
       'Suelta voces en la pista <b>VOZ</b> y música en <b>MÚSICA</b>. <b>Ajustar a narración</b> hace que las imágenes duren lo mismo que la voz.',
       'Pulsa <b>Espacio</b> para ver la vista previa y <b>Exportar</b> para descargar el MP4.',
     ], tip: 'Atajos: Ctrl+Z deshacer · Supr eliminar · ← → mover 1 segundo.' },
+    golden: { t: 'Cómo usar el Método Golden', s: [
+      'Elige una <b>plantilla</b> (anuncio COD, reel, YouTube…) o pulsa «Proyecto nuevo» en una de las tarjetas.',
+      'En el <b>Editor de video</b> añade tus imágenes o tu video y tu voz grabada.',
+      'Vuelve aquí y pulsa <b>Editar automático</b>: corta silencios, reparte encuadres, pone subtítulos, b-roll y sonido.',
+      'Revisa el resultado con la <b>Revisión Golden</b> del editor antes de exportar.',
+    ], tip: 'Si prefieres hacerlo a mano, abre el editor en la pestaña Golden.' },
     flujos: { t: 'Cómo funcionan los flujos de agentes', s: [
       '<b>Lo más rápido:</b> escribe el tema en la barra «Automático» de arriba y pulsa <b>Crear video automático</b>. FRAMALY elige solo las APIs conectadas: guion, imágenes, voz, montaje y SEO.',
       '<b>Tarjeta por tarjeta:</b> empieza con «Flujo en blanco» y pulsa <b>Agregar tarjeta</b> para sumar Idea, Guionista, Director Visual, Locutor, Música, Editor, SEO y Salida. Quita una con la ✕ de su esquina.',

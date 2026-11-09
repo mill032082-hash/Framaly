@@ -6,6 +6,7 @@
     { sec: 'Estudio' },
     { id: 'inicio', name: 'Inicio', icon: 'home', sub: 'Tu estudio de video con IA' },
     { id: 'editor', name: 'Editor de video', icon: 'film', full: true, sub: 'Timeline, transiciones y exportación' },
+    { id: 'golden', name: 'Método Golden', icon: 'wand', badge: 'Nuevo', sub: 'Plantillas listas y edición automática' },
     { id: 'flujos', name: 'Flujos y agentes', icon: 'workflow', full: true, badge: 'IA', sub: 'Automatiza la creación de videos de principio a fin' },
     { sec: 'Creación con IA' },
     { id: 'guiones', name: 'Guiones', icon: 'script', sub: 'Guiones por escenas listos para producir' },
