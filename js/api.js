@@ -129,11 +129,21 @@
       const p = this.imageProvider(o.provider);
       if (p === 'gemini') return this.imageGemini(o);
       if (p === 'minimax') return this.imageMinimax(o);
-      if (o.provider === 'openai') return this.imageOpenAI(o);
       try { return await this.imageOpenAI(o); } catch (e) {
-        // OpenAI puede no dejar generar imágenes (verificación de organización, saldo…): se prueba con otra IA si hay
-        const alt = ['gemini', 'minimax'].find((x) => this.has(x) && canUse(x, 'image'));
-        if (o.provider === 'openai' || !alt) throw new Error(/verif|organization/i.test(e.message) ? 'OpenAI no permite generar imágenes con esta cuenta (pide verificar la organización). Usa Gemini o MiniMax para las imágenes y deja OpenAI para los prompts.' : e.message);
+        const mdl = o.model || F.settings.models.image;
+        // OpenAI responde «does not exist» / 403 cuando la organización no está verificada para los modelos gpt-image.
+        const needsVerif = /verif|organization|does not exist|do not have access|no access|must be verified|\b403\b/i.test(e.message);
+        // DALL·E 3 funciona sin verificación: se reintenta con él en la MISMA cuenta de OpenAI antes de rendirse.
+        if (needsVerif && /gpt-image/i.test(mdl)) {
+          try {
+            const blobs = await this.imageOpenAI({ ...o, model: 'dall-e-3' });
+            F.toast(`Tu cuenta de OpenAI aún no está verificada para ${mdl}; la imagen se generó con DALL·E 3.`, 'info', 6000);
+            return blobs;
+          } catch (e2) { e = e2; }
+        }
+        // Si elegiste OpenAI a propósito no se cambia de IA; en modo automático se prueba con Gemini/MiniMax si están disponibles.
+        const alt = o.provider !== 'openai' && ['gemini', 'minimax'].find((x) => this.has(x) && canUse(x, 'image'));
+        if (!alt) throw new Error(needsVerif ? `OpenAI necesita verificar tu organización para usar ${mdl}. Elige «DALL·E 3» en el generador (funciona sin verificar) o verifica tu organización en platform.openai.com → Settings → Organization.` : e.message);
         F.toast(`OpenAI no pudo generar la imagen; se usó ${alt === 'gemini' ? 'Gemini' : 'MiniMax'}.`, 'info', 5000);
         return alt === 'gemini' ? this.imageGemini(o) : this.imageMinimax(o);
       }

@@ -171,13 +171,14 @@
 
   /* =================== IMÁGENES =================== */
   V.imagenes = (el) => {
-    const st = load('img', { prompt: '', style: 'cine', size: '1536x1024', quality: 'medium', n: 1, provider: 'openai' });
+    const st = load('img', { prompt: '', style: 'cine', size: '1536x1024', quality: 'medium', n: 1, provider: 'openai', model: F.settings.models.image });
     const save = () => store('img', st);
     el.innerHTML = `<div class="page"><div class="split">
       <div class="card sticky"><h2>${I('image')} Generador de imágenes</h2><p class="desc">Crea escenas, fondos y recursos para tus videos con <b>${F.esc(F.settings.models.image)}</b>.</p>
         <label class="lbl">Describe la imagen</label><textarea id="iPrompt" rows="5" placeholder="Ej: un faro solitario en un acantilado durante una tormenta al atardecer">${F.esc(st.prompt)}</textarea>
         <div class="row" style="margin-top:8px"><button class="btn sm outline" id="iEnh">${I('wand')} Mejorar prompt con IA</button></div>
         <label class="lbl">Generador</label><div class="seg" id="iProv">${[['openai', 'OpenAI'], ['gemini', 'Gemini'], ['minimax', 'MiniMax']].map(([k, n]) => `<button data-p="${k}" class="${k === st.provider ? 'on' : ''}">${n}</button>`).join('')}</div>
+        <div id="iModelRow" style="${st.provider === 'openai' ? 'margin-top:8px' : 'display:none'}"><label class="lbl">Modelo de ChatGPT (OpenAI)</label><select id="iModel">${opt([['gpt-image-2', 'GPT Image 2 — el mejor (requiere verificar organización)'], ['gpt-image-1.5', 'GPT Image 1.5 (requiere verificación)'], ['gpt-image-1', 'GPT Image 1 (requiere verificación)'], ['gpt-image-1-mini', 'GPT Image 1 mini — barato (requiere verificación)'], ['dall-e-3', 'DALL·E 3 — funciona sin verificar ✓'], ['dall-e-2', 'DALL·E 2 — funciona sin verificar ✓']], st.model)}</select><p class="mini" style="margin:4px 0 0">Si sale «el modelo no existe», tu cuenta aún no está verificada. Elige <b>DALL·E 3</b> o verifica tu organización en platform.openai.com → Settings → Organization.</p></div>
         <label class="lbl">Estilo</label><div class="chips" id="iSty">${Object.entries(F.STYLES).map(([k, v]) => `<button class="chip ${k === st.style ? 'on' : ''}" data-s="${k}">${v.name}</button>`).join('')}</div>
         <div class="grid3"><div><label class="lbl">Formato</label><select id="iSize">${opt([['1536x1024', 'Horizontal'], ['1024x1536', 'Vertical'], ['1024x1024', 'Cuadrado']], st.size)}</select></div>
         <div><label class="lbl">Calidad</label><select id="iQ">${opt([['low', 'Baja'], ['medium', 'Media'], ['high', 'Alta']], st.quality)}</select></div>
@@ -195,7 +196,8 @@
     V.mediaActions(el);
     el.querySelector('#iPrompt').addEventListener('input', (e) => { st.prompt = e.target.value; save(); });
     el.querySelector('#iSty').addEventListener('click', (e) => { const c = e.target.closest('[data-s]'); if (!c) return; st.style = c.dataset.s; save(); el.querySelectorAll('#iSty .chip').forEach((x) => x.classList.toggle('on', x === c)); });
-    el.querySelector('#iProv').addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (!b) return; st.provider = b.dataset.p; save(); el.querySelectorAll('#iProv button').forEach((x) => x.classList.toggle('on', x === b)); cost(); });
+    el.querySelector('#iProv').addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (!b) return; st.provider = b.dataset.p; save(); el.querySelectorAll('#iProv button').forEach((x) => x.classList.toggle('on', x === b)); el.querySelector('#iModelRow').style.display = st.provider === 'openai' ? '' : 'none'; cost(); });
+    el.querySelector('#iModel').addEventListener('change', (e) => { st.model = e.target.value; save(); });
     for (const [id, k] of [['iSize', 'size'], ['iQ', 'quality'], ['iN', 'n']]) el.querySelector('#' + id).addEventListener('change', (e) => { st[k] = k === 'n' ? +e.target.value : e.target.value; save(); cost(); });
     el.querySelector('#iEnh').onclick = async (e) => {
       if (!st.prompt.trim()) return F.toast('Escribe primero una idea');
@@ -213,7 +215,7 @@
       const sk = Array.from({ length: st.n }, () => { const d = document.createElement('div'); d.className = 'tile wide skel'; d.innerHTML = '<span><span class="spin"></span> Creando…</span>'; res.prepend(d); return d; });
       try {
         const prompt = [st.prompt, F.STYLES[st.style]?.p].filter(Boolean).join('. ');
-        const blobs = await F.api.image({ prompt, size: st.size, quality: st.quality, n: st.n, provider: st.provider });
+        const blobs = await F.api.image({ prompt, size: st.size, quality: st.quality, n: st.n, provider: st.provider, model: st.provider === 'openai' ? st.model : undefined });
         for (let i = 0; i < sk.length; i++) {
           if (!blobs[i]) { sk[i].remove(); continue; }
           const m = await F.media.add({ type: 'image', name: st.prompt.slice(0, 48), blob: blobs[i], source: 'ai', meta: { prompt } });
