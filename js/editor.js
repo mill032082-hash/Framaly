@@ -37,7 +37,7 @@
   };
 
   /* pestañas del panel izquierdo: archivos y herramientas para editar */
-  const TABS = [['image', 'Imágenes'], ['audio', 'Audio'], ['motion', 'Animaciones'], ['fx', 'Efectos'], ['trans', 'Transiciones'], ['text', 'Texto'], ['more', 'Más']];
+  const TABS = [['image', 'Imágenes'], ['audio', 'Audio'], ['motion', 'Animaciones'], ['fx', 'Efectos'], ['trans', 'Transiciones'], ['text', 'Texto'], ['golden', 'Golden'], ['more', 'Más']];
   const GLYPH = { none: '■', kenburns: '⤢', zoomIn: '⊕', zoomOut: '⊖', panL: '←', panR: '→', panU: '↑', panD: '↓', fade: '◐', black: '●', flash: '✦', slideL: '⇠', slideR: '⇢', slideU: '⇡', zoom: '⌖', wipe: '▌', circle: '◯', blur: '≋', spin: '↻', blinds: '☰', glitch: '▚' };
 
   function tpl() {
@@ -56,6 +56,7 @@
       <button class="icon-btn" id="bUndo" title="Deshacer (Ctrl+Z)">${I('undo')}</button>
       <button class="icon-btn" id="bRedo" title="Rehacer (Ctrl+Y)">${I('redo')}</button>
       <button class="btn sm" id="bProj" title="Proyectos">${I('folder')}<span class="bt">Proyectos</span></button>
+      <button class="btn sm auto-top" id="bAuto" title="Editar todo en automático">${I('wand')}<span class="bt">Automático</span></button>
       <button class="btn primary sm" id="bExport">${I('download')} Exportar</button>
     </div>
     <div class="stage" id="stage"><canvas id="pv"></canvas>
@@ -74,6 +75,9 @@
     <div class="tl-bar">
       <button class="btn sm" id="bAddImg">${I('plus')} Imágenes</button>
       <button class="btn sm" id="bAddAud">${I('music')} Audio</button>
+      <button class="btn sm" id="bText" title="Escribir un texto en el clip">${I('type')}<span class="bt">Texto</span></button>
+      <button class="btn sm" id="bDup" title="Duplicar el clip (Ctrl+D)">${I('copy')}<span class="bt">Duplicar</span></button>
+      <button class="btn sm" id="bSplit" title="Dividir el clip en el cursor (S)">${I('scissors')}<span class="bt">Dividir</span></button>
       <button class="btn sm ghost" id="bFit" title="Ajustar a narración: los clips duran lo mismo que la voz">${I('clock')}<span class="bt">Ajustar a narración</span></button>
       <button class="btn sm ghost" id="bUni" title="Duración uniforme">${I('scissors')}<span class="bt">Duración uniforme</span></button>
       <span class="grow"></span>
@@ -102,7 +106,7 @@
   }
 
   /* ---------- historial ---------- */
-  const snap = () => JSON.stringify({ name: p.name, aspect: p.aspect, fps: p.fps, clips: p.clips, audio: p.audio, watermark: p.watermark, letterbox: p.letterbox, progressBar: p.progressBar });
+  const snap = () => JSON.stringify({ name: p.name, aspect: p.aspect, fps: p.fps, clips: p.clips, audio: p.audio, watermark: p.watermark, letterbox: p.letterbox, progressBar: p.progressBar, duck: !!p.duck });
   function commit(soft) {
     if (soft && Date.now() - lastCommit < 900) return;
     lastCommit = Date.now();
@@ -113,7 +117,10 @@
   function undo() { if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); }
   function redo() { if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); }
   function updUndo() { if (!root) return; q('#bUndo').disabled = !E.undo.length; q('#bRedo').disabled = !E.redo.length; }
-  function after(o = {}) { saveSoon(); renderTimeline(); draw(); updateTime(); if (o.insp) renderInspector(); }
+  function after(o = {}) { E.t = F.clamp(E.t, 0, total()); saveSoon(); renderTimeline(); draw(); updateTime(); if (o.insp) renderInspector(); }
+
+  /* API interna para el módulo Golden */
+  E.api = { undo: () => undo(), seek: (t) => seek(t), commit, after, total, save: () => p && F.projects.save(p), renderBin: () => renderBin(), setAspect: () => sizeCanvas() };
 
   /* ---------- biblioteca lateral ---------- */
   function renderBin() {
@@ -132,6 +139,7 @@
 
   /* ---------- herramientas: animaciones, efectos, transiciones, texto y más ---------- */
   function renderTools(bin) {
+    if (E.binTab === 'golden' && F.golden) return F.golden.panel(bin, E);
     const c = E.selType === 'clip' ? clipById(E.sel) : null, i = c ? p.clips.indexOf(c) : -1, tab = E.binTab;
     const cur = (k) => (c ? c[k] : null);
     const item = (k, o, glyph, extra = '') => `<button class="pre-item ${cur(k) === o.id ? 'on' : ''}" data-pre="${k}:${o.id}" title="${F.esc(o.name)}">${extra || `<span class="g">${glyph}</span>`}<span class="n">${F.esc(o.name)}</span></button>`;
@@ -190,8 +198,8 @@
     after({ insp: true });
   }
 
-  async function upload(toTimeline = true) {
-    const files = await F.pickFiles('image/*,audio/*');
+  async function upload(toTimeline = true, dropped) {
+    const files = dropped || await F.pickFiles('image/*,audio/*');
     if (!files.length) return;
     const added = await F.media.addFiles(files);
     if (!toTimeline || !added.length) return;
@@ -247,15 +255,21 @@
   }
 
   /* ---------- reproducción ---------- */
+  let starting = false;
   async function play() {
     if (E.playing) return stop();
+    if (starting) return;
+    starting = true;
+    try { await play0(); } finally { starting = false; }
+  }
+  async function play0() {
     const tot = total(); if (!tot) return F.toast('Añade imágenes al timeline primero');
     if (E.t >= tot - 0.05) E.t = 0;
     const ac = F.actx(); await ac.resume();
     await Promise.all(p.clips.map((c) => F.media.image(c.mediaId).catch(() => null)));
     const tracks = await F.Engine.prepareAudio(p);
     const when = ac.currentTime + 0.06, t0 = E.t;
-    nodes = F.Engine.scheduleAudio(tracks, t0, tot, ac.destination, when);
+    nodes = F.Engine.scheduleAudio(tracks, t0, tot, ac.destination, when, p.duck);
     E.playing = true; setPlayIcon();
     const loop = () => {
       if (!E.playing) return;
@@ -323,8 +337,9 @@
         ${sec('General', `<label class="lbl">Nombre</label><input type="text" data-k="name"><label class="lbl">FPS de exportación</label><select data-k="fps"><option value="24">24 fps (cine)</option><option value="30">30 fps (estándar)</option><option value="60">60 fps (fluido)</option></select><div class="hint">Resolución de salida: ${W}×${H}</div>`)}
         ${sec('Superposiciones', `<label class="lbl">Marca de agua / nombre del canal</label><input type="text" data-k="watermark" placeholder="@TuCanal">
           <label class="check"><input type="checkbox" data-k="letterbox"> Barras de cine</label>
-          <label class="check"><input type="checkbox" data-k="progressBar"> Barra de progreso naranja</label>`)}
-        ${sec('Atajos', `<div class="small muted" style="line-height:2"><kbd>Espacio</kbd> reproducir/pausar<br><kbd>Supr</kbd> eliminar seleccionado<br><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> deshacer / rehacer<br><kbd>←</kbd> <kbd>→</kbd> mover 1 s (<kbd>Shift</kbd> 5 s)</div>`)}`;
+          <label class="check"><input type="checkbox" data-k="progressBar"> Barra de progreso naranja</label>
+          <label class="check"><input type="checkbox" data-k="duck"> Bajar la música cuando habla la voz</label>`)}
+        ${sec('Atajos', `<div class="small muted" style="line-height:2"><kbd>Espacio</kbd> reproducir/pausar<br><kbd>S</kbd> dividir clip en el cursor<br><kbd>T</kbd> escribir texto en el clip<br><kbd>Ctrl+D</kbd> duplicar clip<br><kbd>Inicio</kbd> / <kbd>Fin</kbd> ir al principio / final<br><kbd>Supr</kbd> eliminar seleccionado<br><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> deshacer / rehacer<br><kbd>←</kbd> <kbd>→</kbd> mover 1 s (<kbd>Shift</kbd> 5 s)</div>`)}`;
     }
     el.querySelectorAll('[data-k]').forEach((inp) => {
       const v = obj[inp.dataset.k];
@@ -346,6 +361,32 @@
         body: `<div class="img-grid">${imgs.map((x) => `<div class="tile wide" data-pick="${x.id}" style="cursor:pointer"><img src="${F.media.url(x)}" alt=""></div>`).join('')}</div>` });
       m.el.addEventListener('click', (e) => { const t = e.target.closest('[data-pick]'); if (t) { res(t.dataset.pick); m.close(); } });
     });
+  }
+
+  function splitAtPlayhead() {
+    const { items } = R.layout(p);
+    const it = items.find((x) => E.t > x.start + 0.25 && E.t < x.end - 0.25);
+    if (!it) return F.toast('Coloca el cursor dentro de un clip (a más de 0,25 s de sus bordes) para dividirlo');
+    commit();
+    const c = it.clip, d1 = F.round1(E.t - it.start), d2 = Math.max(0.5, F.round1(c.duration - d1));
+    const n = { ...c, id: F.uid(), duration: d2, text: '' };
+    n.transition = c.transition; c.duration = d1; c.transition = 'none';
+    p.clips.splice(p.clips.indexOf(c) + 1, 0, n);
+    select('clip', n.id, false); after({ insp: true });
+    F.toast('Clip dividido', 'ok', 1200);
+  }
+
+  /** clip seleccionado o, si no hay, el que está bajo el cursor */
+  function targetClip() {
+    if (E.selType === 'clip' && clipById(E.sel)) return clipById(E.sel);
+    const it = R.layout(p).items.find((x) => E.t >= x.start && E.t < x.end); return it?.clip || p.clips[0];
+  }
+  async function quickText() {
+    const c = targetClip(); if (!c) return F.toast('Añade una imagen primero');
+    const v = await F.prompt('Texto en pantalla', c.text || '', 'Escribe el texto. Déjalo vacío para quitarlo.'); if (v === null) return;
+    commit(); c.text = F.golden ? F.golden.cleanText(v) : v;
+    if (c.text) { c.textStyle = c.textStyle || 'subtitulo'; if (!c.textAnim || c.textAnim === 'none') c.textAnim = 'words'; }
+    select('clip', c.id, false); after({ insp: true });
   }
 
   function deleteSelected() {
@@ -395,6 +436,15 @@
     q('#tStart').onclick = () => { seek(0); q('#tlScroll').scrollLeft = 0; };
     q('#tlZoom').addEventListener('input', (e) => { E.pps = +e.target.value; renderTimeline(); });
     q('#bDel').onclick = deleteSelected;
+    q('#bSplit').onclick = splitAtPlayhead;
+    q('#bText').onclick = quickText;
+    q('#bDup').onclick = () => { const c = targetClip(); if (!c) return; commit(); const d = { ...c, id: F.uid() }; p.clips.splice(p.clips.indexOf(c) + 1, 0, d); select('clip', d.id, false); after({ insp: true }); };
+    q('#bAuto').onclick = () => { stop(); if (F.golden) F.golden.auto(E); };
+    /* arrastrar imágenes o audios desde el escritorio a cualquier parte del editor */
+    const ed = q('.editor'), hasFiles = (ev) => [...(ev.dataTransfer?.types || [])].includes('Files');
+    ed.addEventListener('dragover', (ev) => { if (hasFiles(ev)) { ev.preventDefault(); ed.classList.add('dropping'); } });
+    ed.addEventListener('dragleave', (ev) => { if (!ed.contains(ev.relatedTarget)) ed.classList.remove('dropping'); });
+    ed.addEventListener('drop', (ev) => { ed.classList.remove('dropping'); if (!hasFiles(ev)) return; ev.preventDefault(); ev.stopPropagation(); upload(true, [...ev.dataTransfer.files]); });
     q('#bFit').onclick = () => {
       const voices = p.audio.filter((a) => a.kind !== 'musica' && !a.loop);
       if (!voices.length) return F.toast('Añade primero una pista de voz / narración');
@@ -526,6 +576,11 @@
     else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
     else if (ctrl && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
     else if (ctrl && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redo(); }
+    else if (e.key.toLowerCase() === 't' && !ctrl) { e.preventDefault(); quickText(); }
+    else if (e.key.toLowerCase() === 's' && !ctrl) { e.preventDefault(); splitAtPlayhead(); }
+    else if (ctrl && e.key.toLowerCase() === 'd') { e.preventDefault(); const b = root.querySelector('[data-act="dup"]'); if (b) b.click(); }
+    else if (e.key === 'Home') { e.preventDefault(); seek(0); }
+    else if (e.key === 'End') { e.preventDefault(); seek(total()); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); seek(E.t + (e.shiftKey ? 5 : 1)); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(E.t - (e.shiftKey ? 5 : 1)); }
   }
