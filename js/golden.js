@@ -441,6 +441,7 @@
     const vozSel = E.selType === 'audio' ? p.audio.find((a) => a.id === E.sel) : p.audio.find((a) => a.kind === 'voz');
     const step = (n, t, inner) => `<div class="gstep"><div class="gh"><span class="gn">${n}</span><b>${t}</b></div>${inner}</div>`;
     bin.innerHTML = `<div class="gold">
+      ${G.status ? G.status(p) : ''}
       <button class="btn primary auto-btn" data-g="auto">${I('wand')} Editar automático<small>Todo el método en un clic</small></button>
       <div class="small muted" style="text-align:center">o hazlo a mano, paso a paso:</div>
       <div class="row" style="gap:6px;margin-bottom:8px"><button class="btn sm primary" data-g="review" style="flex:1">${I('check')} Revisión Golden</button><button class="btn sm" data-g="guide" title="Reglas y método">${I('eye')} Guía</button></div>

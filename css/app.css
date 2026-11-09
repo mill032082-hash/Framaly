@@ -726,3 +726,18 @@ body.resizing .flows { transition: none; }
 
 .bthumb { width: 30px; height: 30px; border-radius: 6px; background: var(--panel3) center / cover; border: 1px solid var(--line); flex: none; }
 #tMute.on { color: var(--or2); background: var(--or-soft); }
+
+/* Golden: ayudas visuales del método en el editor */
+.gchips { position: absolute; left: 0; bottom: 0; display: flex; gap: 3px; padding: 0 0 3px 3px; pointer-events: none; }
+.clip-txt + .gchips, .clip .gchips { top: 22px; bottom: auto; flex-direction: column; align-items: flex-start; }
+.gchip { font-size: 9.5px; font-weight: 800; letter-spacing: .02em; padding: 1px 6px; border-radius: 999px; color: #fff; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+.gchip.cf { background: #2f7de1; } .gchip.cl { background: #1f9d6b; } .gchip.cc { background: #c23fb0; } .gchip.cb { background: #111; border: 1px solid #fff6; }
+.aclip.sfx { background: linear-gradient(180deg, rgba(80, 170, 255, .35), rgba(80, 170, 255, .16)); border-color: rgba(80, 170, 255, .6); color: #cfe8ff; }
+.gprog { border: 1px solid var(--line); border-radius: 10px; background: var(--bg2); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.gp-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.gp { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10.5px; color: var(--muted, #9a8a7c); text-align: center; }
+.gp span { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; border: 1.5px solid currentColor; }
+.gp.on { color: #3ddc97; } .gp.on span { background: rgba(61, 220, 151, .15); }
+.gp-dur { position: relative; font-size: 11px; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,.04); overflow: hidden; }
+.gp-dur i { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--or); }
+.gp-dur.ok i { background: #3ddc97; } .gp-dur.warn i { background: var(--amber, #ffb23f); }
