@@ -155,3 +155,6 @@ Todas las combinaciones de la skill: 6 recetas completas (anuncio COD, reel, You
 
 ## Plantillas para todo tipo de video + «Agregar plantilla»
 La sección Plantillas ahora tiene un catálogo de 28 plantillas (Ventas, Contenido, Historias, Negocio, Redes). Cada una: «Crear proyecto» (clips con las escenas, texto, filtro, transición y movimiento ya puestos, con imagen de relleno por escena), «Guion con IA» (rellena el Agente Guionista) y «Copiar». El botón **Agregar plantilla** analiza capturas o un video de referencia con IA (Claude, OpenAI o Gemini): lee el texto de las imágenes (lector óptico), deduce estilo y escenas y guarda la plantilla en «Mis plantillas». Sin IA conectada guarda solo el estilo de color. Código: `js/catalogo.js`; lectura de imágenes en `F.api.llm({ images })`.
+
+## Proyectos a medias (continuar sin volver a gastar créditos)
+Los agentes (modo automático y Flujos) guardan un punto de avance: guion, cada imagen y cada narración en cuanto se generan. Si se corta (error, sin créditos, cierras la página) aparece una tarjeta **Proyectos a medias** en Inicio y en la columna de Flujos con lo que ya está hecho; «Continuar» reutiliza lo generado y solo hace lo que falta. Código: `P.pending` y `P.run` en `js/flows.js`. El avance se guarda en el dispositivo (localStorage); las imágenes y voces viven en la Biblioteca.

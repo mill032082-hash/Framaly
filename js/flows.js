@@ -95,7 +95,53 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       onClose: () => fin('stop') });
   });
 
-  P.run = async (cfg, { step = () => {}, log = () => {}, ask = P.askUser } = {}) => {
+  /* ---------- Proyectos a medias: punto de avance de cada ejecución (para continuar sin volver a gastar créditos) ---------- */
+  const PRK = 'framaly.pendingRuns', live = new Set();
+  const pRead = () => { try { return JSON.parse(localStorage.getItem(PRK) || '[]') || []; } catch (e) { return []; } };
+  const pWrite = (l) => { try { localStorage.setItem(PRK, JSON.stringify(l.slice(0, 12))); } catch (e) { /* sin memoria */ } };
+  P.pending = {
+    /** Avances sin terminar. 'running' que ya no está viva en esta pestaña = interrumpida (se cerró la página) */
+    list: () => pRead().filter((x) => x.status !== 'done').map((x) => ({ ...x, status: x.status === 'running' && !live.has(x.id) ? 'interrupted' : x.status })),
+    save: (cp) => { const l = pRead().filter((x) => x.id !== cp.id); l.unshift(cp); pWrite(l); },
+    remove: (id) => pWrite(pRead().filter((x) => x.id !== id)),
+    /** Qué ya está hecho (solo cuenta lo que sigue existiendo en la biblioteca) */
+    progress: (cp) => {
+      const n = cp.script?.scenes?.length || 0, ok = (a) => (a || []).filter((id) => id && F.media.byId(id)).length;
+      return { script: !!cp.script, n, images: ok(cp.imgIds), voices: ok(cp.voiceIds), voiceOn: !!cp.cfg?.voice };
+    },
+  };
+
+  /** Tarjetas de «Proyectos a medias» (Inicio y Flujos) */
+  P.pendingHTML = () => {
+    const l = P.pending.list().filter((x) => x.cfg);
+    if (!l.length) return '';
+    const mark = (ok, t) => `<span class="pend-st ${ok ? 'ok' : ''}">${ok ? '✓' : '○'} ${t}</span>`;
+    return `<div class="pend-box"><div class="nav-sec" style="margin:0 0 6px">${I('clock')} Proyectos a medias</div>${l.map((cp) => {
+      const g = P.pending.progress(cp), why = cp.status === 'error' ? `Se detuvo: ${F.esc((cp.error || '').slice(0, 110))}` : 'Se interrumpió (se cerró la página)';
+      return `<div class="pend" data-pid="${cp.id}"><b>${F.esc(cp.name || 'Video')}</b><div class="small muted">${why}</div>
+        <div class="pend-row">${mark(g.script, 'Guion')}${mark(g.n && g.images >= g.n, `Imágenes ${g.images}/${g.n || '?'}`)}${g.voiceOn ? mark(g.n && g.voices >= g.n, `Voz ${g.voices}/${g.n || '?'}`) : ''}</div>
+        <div class="row" style="gap:6px"><button class="btn sm primary" data-pa="go">${I('play')} Continuar</button><button class="btn sm ghost" data-pa="del" title="Descartar este avance">${I('trash')}</button></div></div>`;
+    }).join('')}<p class="small muted" style="margin:6px 0 0">Lo que ya se generó no se vuelve a pagar: solo se hace lo que falta.</p></div>`;
+  };
+  P.bindPending = (root, after) => {
+    if (root.__pendBound) return; root.__pendBound = true;
+    root.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-pa]'); if (!b) return; const box = b.closest('[data-pid]'), cp = P.pending.list().find((x) => x.id === box.dataset.pid); if (!cp) return after?.();
+      if (b.dataset.pa === 'del') { if (!(await F.confirm('Descartar este avance', 'Se olvida el avance. Las imágenes y voces ya generadas se quedan en tu Biblioteca.', 'Descartar'))) return; P.pending.remove(cp.id); return after?.(); }
+      b.disabled = true; await P.runModal(cp.cfg, { resume: cp, autoExport: cp.autoExport }); after?.();
+    });
+  };
+
+  P.run = async (cfg, { step = () => {}, log = () => {}, ask = P.askUser, resume = null, autoExport = false } = {}) => {
+    const cp = resume || { id: F.uid(), created: Date.now() };
+    cp.status = 'running'; cp.autoExport = !!autoExport; live.add(cp.id);
+    const ck = (patch = {}) => { Object.assign(cp, patch, { updated: Date.now() }); P.pending.save(cp); };
+    try { return await run0(cfg, { step, log, ask, cp, ck }); }
+    catch (e) { ck({ status: 'error', error: e.message }); throw e; }
+    finally { live.delete(cp.id); }
+  };
+
+  const run0 = async (cfg, { step, log, ask, cp, ck }) => {
     // Si un agente falla: se pregunta qué hacer. Los opcionales (voz, SEO) pueden omitirse; los necesarios solo reintentar o detener.
     const failed = async (id, e, optional) => {
       step(id, 'err', 'Error'); log(`✗ ${P.NAMES[id]}: ${e.message}`, 'e');
@@ -123,16 +169,18 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
         throw e;
       }
     }
+    ck({ cfg: { ...cfg, presetScript: undefined }, name: (cfg.output?.name || idea.topic || 'Video').slice(0, 60), topic: idea.topic });
     step('idea', 'done', idea.topic.slice(0, 50));
 
     // 1. Guion
     let script;
-    if (cfg.presetScript) { script = cfg.presetScript; step('script', 'done', `${script.scenes.length} escenas (guion propio)`); }
+    if (cp.script) { script = cp.script; step('script', 'done', `${script.scenes.length} escenas (ya escrito)`); log('↺ Guion recuperado: no se vuelve a pagar.', 'w'); }
+    else if (cfg.presetScript) { script = cfg.presetScript; ck({ script }); step('script', 'done', `${script.scenes.length} escenas (guion propio)`); }
     else {
       for (;;) {
         try {
           step('script', 'run', 'Escribiendo guion…'); log('Agente Guionista: escribiendo el guion…');
-          script = await P.writeScript(idea, cfg.script);
+          script = await P.writeScript(idea, cfg.script); ck({ script });
           step('script', 'done', `${script.scenes.length} escenas`); log(`✓ Guion listo: "${script.title}" (${script.scenes.length} escenas)`, 'o');
           break;
         } catch (e) { if ((await failed('script', e, false)) !== 'retry') throw e; }
@@ -143,14 +191,15 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     // 2. Imágenes
     const size = P.sizeFor(idea.aspect);
     const genImages = async () => {
-      step('images', 'run', `0/${n}`); log(`Agente Director Visual: generando ${n} imágenes…`);
-      let ok = 0;
+      const have = (cp.imgIds ||= []); let ok = have.filter((id) => id && F.media.byId(id)).length;
+      step('images', 'run', `${ok}/${n}`); log(ok ? `Agente Director Visual: ya hay ${ok} de ${n} imágenes, genero solo las que faltan…` : `Agente Director Visual: generando ${n} imágenes…`);
       const ids = await F.pool(script.scenes, 3, async (sc, i) => {
+        if (have[i] && F.media.byId(have[i])) return have[i];   // ya generada: no se paga otra vez
         const prompt = [sc.image_prompt, cfg.images.common, F.STYLES[cfg.images.style]?.p].filter(Boolean).join('. ');
         try {
           const [blob] = await F.api.image({ prompt, size, quality: cfg.images.quality, n: 1, provider: cfg.images.provider });
           const m = await F.media.add({ type: 'image', name: `${script.title.slice(0, 40)} · escena ${i + 1}`, blob, source: 'ai', meta: { prompt } });
-          ok++; step('images', 'run', `${ok}/${n}`); log(`  · imagen ${i + 1}/${n} lista`);
+          have[i] = m.id; ck({ imgIds: have }); ok++; step('images', 'run', `${ok}/${n}`); log(`  · imagen ${i + 1}/${n} lista`);
           return m.id;
         } catch (e) {
           log(`  ✗ imagen ${i + 1}: ${e.message}`, 'e');
@@ -168,14 +217,15 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     // 3. Voz
     let voiceIds = [];
     const genVoice = async () => {
-      step('voice', 'run', `0/${n}`); log('Agente Locutor: narrando escenas…');
-      let vk = 0, last = null;
+      const have = (cp.voiceIds ||= []); let vk = have.filter((id) => id && F.media.byId(id)).length, last = null;
+      step('voice', 'run', `${vk}/${n}`); log(vk ? `Agente Locutor: ya hay ${vk} narraciones, genero solo las que faltan…` : 'Agente Locutor: narrando escenas…');
       const ids = await F.pool(script.scenes, 3, async (sc, i) => {
         if (!sc.narration.trim()) return null;
+        if (have[i] && F.media.byId(have[i])) return have[i];   // ya narrada: no se paga otra vez
         try {
           const blob = await F.api.tts({ ...cfg.voice, text: sc.narration });
           const m = await F.media.add({ type: 'audio', name: `${script.title.slice(0, 32)} · voz ${i + 1}`, blob, source: 'ai', meta: { text: sc.narration } });
-          vk++; step('voice', 'run', `${vk}/${n}`);
+          have[i] = m.id; ck({ voiceIds: have }); vk++; step('voice', 'run', `${vk}/${n}`);
           return m.id;
         } catch (e) {
           log(`  ✗ voz ${i + 1}: ${e.message}`, 'e'); last = e;
@@ -252,6 +302,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     await F.projects.save(p);
     F.projects.setCurrent(p.id);
     step('output', 'done', 'Proyecto creado');
+    ck({ status: 'done' }); P.pending.remove(cp.id);
     return p;
   };
 
@@ -263,7 +314,8 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     const btn = m.q('.modal-f .btn'); btn.disabled = true;
     const log = (t, c = '') => { const l = m.q('#rmLog'); l.insertAdjacentHTML('beforeend', `<div class="${c}">${F.esc(t)}</div>`); l.scrollTop = 1e9; };
     const step = (id, s, msg) => { const el = m.q(`[data-s="${id}"]`); if (!el) return; el.className = 'stp ' + s; el.querySelector('.s').innerHTML = (s === 'run' ? '<span class="spin"></span> ' : s === 'done' ? '✓ ' : s === 'err' ? '✗ ' : '') + F.esc(msg || ''); };
-    P.run(cfg, { step, log }).then(async (p) => {
+    const done = () => F.emit('pending');
+    P.run(cfg, { step, log, resume: opts.resume, autoExport: opts.autoExport }).then(async (p) => {
       btn.disabled = false;
       if (opts.autoExport) {
         log('▶ Exportando el MP4 automáticamente…', 'w');
@@ -275,8 +327,8 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       }
       m.q('.modal-f').insertAdjacentHTML('beforeend', `<button class="btn primary" data-open>${I('film')} Abrir en el editor</button>`);
       m.q('[data-open]').onclick = () => { m.close(); F.router.go('#/editor'); };
-      F.toast(`Video "${p.name}" creado`, 'ok'); resolve(p);
-    }).catch((e) => { btn.disabled = false; log('✗ ' + e.message, 'e'); F.toast(e.message, 'error'); m.q('.stp.run')?.classList.replace('run', 'err'); resolve(null); });
+      F.toast(`Video "${p.name}" creado`, 'ok'); done(); resolve(p);
+    }).catch((e) => { btn.disabled = false; log('✗ ' + e.message, 'e'); log('Quedó guardado a medias: puedes continuar desde Inicio o Flujos sin volver a pagar lo ya generado.', 'w'); F.toast(e.message, 'error'); m.q('.stp.run')?.classList.replace('run', 'err'); done(); resolve(null); });
   });
 
   /* ======================== EDITOR DE FLUJOS ======================== */
@@ -495,7 +547,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     const sel = root.querySelector('#flTpl');
     if (sel) sel.innerHTML = `<option value="">Plantillas…</option>${Object.entries(TPL).map(([k, t]) => `<option value="tpl:${k}">${F.esc(t.name)}</option>`).join('')}${F.settings.flows.length ? `<optgroup label="Mis flujos">${F.settings.flows.map((f) => `<option value="fl:${f.id}">${F.esc(f.name)}</option>`).join('')}</optgroup>` : ''}`;
     const el = root.querySelector('#flList');
-    el.innerHTML = `<div class="nav-sec">Plantillas</div>${Object.entries(TPL).map(([k, t]) => `<button class="it" data-tpl="${k}"><b>${t.name}</b><small>${t.desc}</small></button>`).join('')}
+    el.innerHTML = `<div id="flPend">${P.pendingHTML()}</div><div class="nav-sec">Plantillas</div>${Object.entries(TPL).map(([k, t]) => `<button class="it" data-tpl="${k}"><b>${t.name}</b><small>${t.desc}</small></button>`).join('')}
       <div class="nav-sec">Mis flujos</div>${F.settings.flows.length ? F.settings.flows.map((f) => `<button class="it ${f.id === flow.id ? 'on' : ''}" data-fl="${f.id}"><b>${F.esc(f.name)}</b><small>${F.esc(f.cfg.idea.topic.slice(0, 40) || 'Sin tema')}</small></button>`).join('') : '<div class="small dim" style="padding:4px 12px">Aún no guardaste flujos</div>'}`;
   }
   function setRunBtn() { const b = root?.querySelector('#flRun'); if (!b) return; b.disabled = running; b.innerHTML = running ? '<span class="spin"></span> Ejecutando…' : `${I('play')} Ejecutar flujo`; }
@@ -612,15 +664,16 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       } else if (flow.cfg.output.open && location.hash.startsWith('#/flujos')) location.hash = '#/editor';
     } catch (e) {
       if (cur && states[cur]?.s === 'run') states[cur] = { s: 'err', msg: 'Error' };
-      addLog('✗ ' + e.message, 'e'); F.toast(e.message, 'error'); renderNodes();
+      addLog('✗ ' + e.message, 'e'); addLog('Quedó guardado a medias: aparece en «Proyectos a medias» para continuar sin volver a pagar lo ya generado.', 'w'); F.toast(e.message, 'error'); renderNodes(); renderList(); F.emit('pending');
     }
     running = false; setRunBtn();
   }
 
   F.flows = {
+    pendingHTML: () => P.pendingHTML(), bindPending: (r, f) => P.bindPending(r, f),
     load(cfgOverride) { flow = makeFlow('auto'); Object.assign(flow.cfg.idea, cfgOverride || {}); saveDraft(); },
     view(el) {
-      root = el;
+      root = el; P.bindPending(el, () => renderList());
       el.innerHTML = `<div class="flows">
         <aside class="fl-list" id="flList"></aside>
         <div class="fl-canvas" id="flc" style="grid-column:2;grid-row:1">

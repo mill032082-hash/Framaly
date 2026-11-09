@@ -55,6 +55,7 @@
     const mods2 = mods.filter(([id]) => F.cloud?.can(id) !== false);
     const canInt = F.cloud?.can('integraciones') !== false;
     el.innerHTML = `<div class="page">
+      <div id="pendBox"></div>
       <section class="hero"><div>
         <span class="pill">${I('sparkles')} Estudio de video con IA</span>
         <h1>Convierte ideas en videos <span class="grad-t">listos para YouTube</span></h1>
@@ -92,6 +93,7 @@
     for (const [id, k] of [['#aFmt', 'aspect'], ['#aDur', 'duration'], ['#aSty', 'style']]) q(id).addEventListener('change', (e) => { au[k] = k === 'duration' ? +e.target.value : e.target.value; store('auto', au); autoInfo(); });
     q('#aExp').addEventListener('change', (e) => { au.exportAfter = e.target.checked; store('auto', au); });
     q('#aGo').onclick = () => F.auto.run(au);
+    { const pb = q('#pendBox'), draw = () => { pb.innerHTML = F.flows?.pendingHTML?.() || ''; }; draw(); F.flows?.bindPending?.(pb, draw); const off = F.on('pending', () => (pb.isConnected ? draw() : off())); }   // proyectos a medias
     q('#aTopic').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) F.auto.run(au); });
     el.addEventListener('click', async (e) => {
       if (e.target.closest('[data-new]')) { e.preventDefault(); return V.newProject(); }
