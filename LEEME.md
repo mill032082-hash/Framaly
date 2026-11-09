@@ -152,3 +152,6 @@ Reúne el material reutilizable de la skill: formato del video (Meta/TikTok, ree
 
 ## Sección «Plantillas» (menú, debajo de Editor de video)
 Todas las combinaciones de la skill: 6 recetas completas (anuncio COD, reel, YouTube, multicámara con una cámara, replicar estilo, solo limpiar) que crean un proyecto ya configurado; un armador propio (destino, cortes, cámaras, b-roll, sonido); las matrices cámara×bloque, b-roll, instrucciones, destino y síntoma×arreglo; y las 12 combinaciones que no se hacen. La receta elegida entra al archivo de contexto del proyecto. Código: `js/recetas.js`.
+
+## Plantillas para todo tipo de video + «Agregar plantilla»
+La sección Plantillas ahora tiene un catálogo de 28 plantillas (Ventas, Contenido, Historias, Negocio, Redes). Cada una: «Crear proyecto» (clips con las escenas, texto, filtro, transición y movimiento ya puestos, con imagen de relleno por escena), «Guion con IA» (rellena el Agente Guionista) y «Copiar». El botón **Agregar plantilla** analiza capturas o un video de referencia con IA (Claude, OpenAI o Gemini): lee el texto de las imágenes (lector óptico), deduce estilo y escenas y guarda la plantilla en «Mis plantillas». Sin IA conectada guarda solo el estilo de color. Código: `js/catalogo.js`; lectura de imágenes en `F.api.llm({ images })`.

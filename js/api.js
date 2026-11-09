@@ -76,14 +76,23 @@
       throw new Error('Necesitas una API de texto (Claude, OpenAI, Gemini o MiniMax) para los agentes. Ve a Integraciones API.');
     },
 
+    /** Proveedor que sabe leer imágenes (Claude, OpenAI o Gemini) */
+    visionProvider(pref) {
+      const ok = (x) => ['anthropic', 'openai', 'gemini'].includes(x) && this.has(x) && canUse(x, 'text');
+      if (pref && pref !== 'auto') { if (!ok(pref)) throw new Error('Esa IA no puede leer imágenes o no está conectada. Usa Claude, OpenAI o Gemini.'); return pref; }
+      const found = [F.settings.textProvider, 'anthropic', 'openai', 'gemini'].find(ok);
+      if (found) return found;
+      throw new Error('Para analizar capturas necesitas conectar Claude, OpenAI o Gemini en Integraciones API.');
+    },
+
     /** Llamada a modelo de lenguaje. Devuelve texto. */
-    async llm({ system = '', prompt, json = false, maxTokens = 4000, provider }) {
-      const prov = this.textProvider(provider);
+    async llm({ system = '', prompt, json = false, maxTokens = 4000, provider, images }) {
+      const prov = images?.length ? this.visionProvider(provider) : this.textProvider(provider);   // images: [{ mime, data(base64) }] para leer capturas
       if (prov === 'anthropic') {
         const r = await net('anthropic', 'https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-api-key': key('anthropic'), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-          body: JSON.stringify({ model: F.settings.models.anthropic, max_tokens: maxTokens, system: system + (json ? '\nResponde ÚNICAMENTE con JSON válido, sin texto adicional ni bloques de código.' : ''), messages: [{ role: 'user', content: prompt }] }),
+          body: JSON.stringify({ model: F.settings.models.anthropic, max_tokens: maxTokens, system: system + (json ? '\nResponde ÚNICAMENTE con JSON válido, sin texto adicional ni bloques de código.' : ''), messages: [{ role: 'user', content: images?.length ? [...images.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.mime, data: im.data } })), { type: 'text', text: prompt }] : prompt }] }),
         });
         const j = await asJson(r);
         return (j.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
@@ -95,7 +104,7 @@
         if (/flash/.test(mdl) && !/pro/.test(mdl)) gc.thinkingConfig = { thinkingBudget: 0 };
         const r = await net('gemini', `${GEM}/v1beta/models/${encodeURIComponent(mdl)}:generateContent`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key('gemini') },
-          body: JSON.stringify({ ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), contents: [{ role: 'user', parts: [{ text: prompt + (json ? '\n\nResponde solo con JSON.' : '') }] }], generationConfig: gc }),
+          body: JSON.stringify({ ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), contents: [{ role: 'user', parts: [...(images || []).map((im) => ({ inlineData: { mimeType: im.mime, data: im.data } })), { text: prompt + (json ? '\n\nResponde solo con JSON.' : '') }] }], generationConfig: gc }),
         });
         const j = await asJson(r);
         return (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
@@ -108,7 +117,7 @@
         const j = mmOk(await asJson(r));
         return String(j.choices?.[0]?.message?.content || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
       }
-      const body = { model: F.settings.models.openai, messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt + (json ? '\n\nResponde solo con JSON.' : '') }] };
+      const body = { model: F.settings.models.openai, messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: images?.length ? [{ type: 'text', text: prompt + (json ? '\n\nResponde solo con JSON.' : '') }, ...images.map((im) => ({ type: 'image_url', image_url: { url: `data:${im.mime};base64,${im.data}` } }))] : prompt + (json ? '\n\nResponde solo con JSON.' : '') }] };
       if (json) body.response_format = { type: 'json_object' };
       const r = await net('openai', 'https://api.openai.com/v1/chat/completions', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key('openai') }, body: JSON.stringify(body),

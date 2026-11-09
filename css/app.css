@@ -785,3 +785,7 @@ body.resizing .flows { transition: none; }
 .pl-build { display: flex; flex-direction: column; gap: 6px; padding: 14px; }
 .pl-build .check { font-size: 13px; }
 .table-wrap { overflow-x: auto; }
+
+.pl-sc { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.pl-sc b { width: 18px; text-align: center; }
+.pl-sc input { min-width: 0; }

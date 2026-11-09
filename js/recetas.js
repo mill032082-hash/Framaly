@@ -110,13 +110,13 @@ ${r.hook ? 'ESTRUCTURA: ' + r.hook + '\n' : ''}ANTES DE EXPORTAR: reporte de cor
     ['Cortar en duda o cortar sin silencio en la ventana', 'Si dudas, deja; sin silencio en 1,5 s no se corta.'],
   ];
 
-  V.plantillas = (el) => {
+  V.plantillasSkill = (el) => {
     const sel = {};   // elecciones del armador
     const cfg0 = { cut: 'trans', cam: 'none', broll: ['obj'], snd: ['duck'], dest: 'meta' };
     Object.assign(sel, cfg0, { broll: [...cfg0.broll], snd: [...cfg0.snd] });
     const D = { meta: ['9:16', 35, 'Anuncio Meta / TikTok'], reel: ['9:16', 30, 'Reel orgánico'], yt: ['16:9', 0, 'YouTube'] };
     const chips = (r) => `<span class="tag or">${r.aspect}</span><span class="tag">${esc(r.dur)}</span><span class="tag">${r.cut === 'vol' ? 'Corte por volumen' : 'Corte con transcripción'}</span><span class="tag">${r.cam === 'none' ? 'Plano único' : r.cam === 'fl' ? '2 cámaras' : '3 cámaras'}</span>${r.broll.length ? `<span class="tag">B-roll ×${r.broll.length}</span>` : ''}${r.snd.map((k) => `<span class="tag">${k === 'duck' ? 'Ducking' : k === 'sfx' ? 'Sfx' : 'Voz en off'}</span>`).join('')}`;
-    el.innerHTML = `<div class="page"><div class="page-h"><h1>Plantillas</h1><p class="muted">Todas las combinaciones de la skill «Millora · Editor de video»: recetas completas, cómo se combinan las piezas y lo que no se debe combinar.</p></div>
+    el.innerHTML = `<div>
       <h2 class="pl-h">1 · Recetas completas</h2><div class="pl-grid">${RECETAS.map((r) => `<div class="pl-rec"><b>${esc(r.n)}</b><span class="small muted">${esc(r.tag)}</span><div class="pl-tags">${chips(r)}</div><p class="small">${esc(r.why)}</p><p class="small"><b>Estructura:</b> ${esc(r.hook)}</p>
         <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn sm primary" data-use="${r.id}">${I('film')} Crear proyecto con esta receta</button><button class="btn sm" data-cp="${r.id}">${I('save')} Copiar</button></div></div>`).join('')}</div>
       <h2 class="pl-h">2 · Arma tu propia combinación</h2><div class="pl-build card">
@@ -150,5 +150,5 @@ ${r.hook ? 'ESTRUCTURA: ' + r.hook + '\n' : ''}ANTES DE EXPORTAR: reporte de cor
     });
     draw();
   };
-  V.plantillas.recipeText = recipeText;
+  V.plantillasSkill.recipeText = recipeText;
 })();
