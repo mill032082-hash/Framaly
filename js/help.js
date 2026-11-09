@@ -17,12 +17,12 @@
       'Pulsa <b>Espacio</b> para ver la vista previa y <b>Exportar</b> para descargar el MP4.',
     ], tip: 'Atajos: Ctrl+Z deshacer · Supr eliminar · ← → mover 1 segundo.' },
     flujos: { t: 'Cómo funcionan los flujos de agentes', s: [
-      'Elige una plantilla a la izquierda: YouTube, Short, Historia, Top, Documental o Presentación.',
-      'Haz clic en el nodo <b>Idea / Tema</b> y escribe de qué trata el video.',
-      'Opcional: haz clic en cualquier agente para cambiar su configuración (estilo de imagen, voz, transiciones…). Los interruptores activan o desactivan voz, música y SEO.',
-      'Pulsa <b>Ejecutar flujo</b>. Cada agente pasa su resultado al siguiente y verás el progreso en vivo.',
-      'Al terminar, el MP4 se exporta solo y se abre <b>Publicar</b>. Usa <b>Guardar</b> para reutilizar el flujo.',
-    ], tip: 'Los nodos se pueden arrastrar. El costo aproximado aparece en el registro.' },
+      '<b>Lo más rápido:</b> escribe el tema en la barra «Automático» de arriba y pulsa <b>Crear video automático</b>. FRAMALY elige solo las APIs conectadas: guion, imágenes, voz, montaje y SEO.',
+      '<b>Tarjeta por tarjeta:</b> empieza con «Flujo en blanco» y pulsa <b>Agregar tarjeta</b> para sumar Idea, Guionista, Director Visual, Locutor, Música, Editor, SEO y Salida. Quita una con la ✕ de su esquina.',
+      'Para un video necesitas como mínimo <b>Idea, Guionista, Director Visual y Editor</b>. Si falta alguna, se agrega sola al ejecutar.',
+      'Haz clic en una tarjeta para ajustarla a la derecha. Lo que dejes en «automático» se decide solo según las APIs que tengas conectadas.',
+      'Pulsa <b>Ejecutar flujo</b> y mira el avance en vivo. Al terminar, el MP4 se exporta solo y se abre <b>Publicar</b>. Usa <b>Guardar</b> para reutilizar el flujo.',
+    ], tip: 'Conecta al menos una API de texto y una de imágenes en Integraciones API. La voz es opcional.' },
     guiones: { t: 'Cómo crear un guion', s: [
       'Escribe el tema, la duración y el tono, y pulsa <b>Escribir guion</b>.',
       'Revisa y corrige cada escena: narración, prompt de imagen y texto en pantalla.',

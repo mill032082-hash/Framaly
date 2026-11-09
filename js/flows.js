@@ -71,11 +71,27 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
   };
 
   /** Ejecuta el flujo completo. cfg = {idea, script, images, voice|null, music|null, montage, seo|null, output, presetScript?} */
+  /** Voz automática: la primera API de voz conectada y una voz por defecto (o la primera de su lista) */
+  P.voiceOrder = ['openai', 'elevenlabs', 'gemini', 'minimax'];
+  P.hasVoice = () => P.voiceOrder.some((x) => F.api.has(x) && F.api.canUse(x, 'voice'));
+  P.hasImages = () => ['openai', 'gemini', 'minimax'].some((x) => F.api.has(x) && F.api.canUse(x, 'image'));
+  P.pickVoice = async (v = {}) => {
+    const prov = P.voiceOrder.find((x) => F.api.has(x) && F.api.canUse(x, 'voice'));
+    if (!prov) throw new Error('El Agente Locutor necesita una API de voz (OpenAI, ElevenLabs, Gemini o MiniMax). Conéctala en Integraciones API.');
+    let { voice, voiceId } = v;
+    if (prov === 'openai' && !F.api.OPENAI_VOICES.includes(voice)) voice = 'nova';
+    if (prov === 'gemini' && !F.api.GEMINI_VOICES.includes(voice)) voice = 'Kore';
+    if (prov === 'elevenlabs' && !voiceId) { voiceId = (await F.api.elevenVoices())[0]?.id; if (!voiceId) throw new Error('No encontré voces en tu cuenta de ElevenLabs.'); }
+    if (prov === 'minimax' && !voiceId) { voiceId = (await F.api.minimaxVoices())[0]?.id; if (!voiceId) throw new Error('No encontré voces en tu cuenta de MiniMax.'); }
+    return { provider: prov, voice, voiceId };
+  };
+
   P.run = async (cfg, { step = () => {}, log = () => {} } = {}) => {
     const { idea, montage: mt } = cfg;
     // Validaciones previas
     if (!cfg.presetScript || cfg.seo) F.api.textProvider(cfg.script?.provider);
-    if (!['openai', 'gemini', 'minimax'].some((p) => F.api.has(p))) throw new Error('El Agente Director Visual necesita una API de imágenes (OpenAI, Gemini o MiniMax). Ve a Integraciones API.');
+    if (!P.hasImages()) throw new Error('El Agente Director Visual necesita una API de imágenes (OpenAI, Gemini o MiniMax). Ve a Integraciones API.');
+    if (cfg.voice && (!cfg.voice.provider || cfg.voice.provider === 'auto')) { cfg = { ...cfg, voice: { ...cfg.voice, ...(await P.pickVoice(cfg.voice)) } }; log(`Agente Locutor: voz automática con ${({ openai: 'OpenAI', elevenlabs: 'ElevenLabs', gemini: 'Gemini', minimax: 'MiniMax' })[cfg.voice.provider]}`); }
     if (cfg.voice) {
       const vp = cfg.voice.provider || 'openai';
       if (!F.api.has(vp)) throw new Error('El Agente Locutor usa ' + ({ elevenlabs: 'ElevenLabs', gemini: 'Gemini', minimax: 'MiniMax', openai: 'OpenAI' })[vp] + ', pero no está disponible. Cámbialo en el nodo Voz o conéctalo en Integraciones API.');
@@ -238,7 +254,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       { k: 'common', l: 'Descripción visual común (coherencia)', t: 'textarea', ph: 'Ej: protagonista: exploradora joven con chaqueta naranja; paleta cálida' },
     ],
     voice: [
-      { k: 'provider', l: 'Proveedor de voz', t: 'select', o: [['openai', 'OpenAI TTS'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini (Google)'], ['minimax', 'MiniMax']] },
+      { k: 'provider', l: 'Proveedor de voz', t: 'select', o: [['auto', 'Automático (la API de voz conectada)'], ['openai', 'OpenAI TTS'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini (Google)'], ['minimax', 'MiniMax']] },
       { k: 'voice', l: 'Voz (OpenAI o Gemini)', t: 'select', o: () => [...F.api.OPENAI_VOICES, ...F.api.GEMINI_VOICES].map((v) => [v, v]) },
       { k: 'voiceId', l: 'Voice ID (ElevenLabs o MiniMax)', t: 'text', ph: 'Cópialo desde la sección Voces' },
       { k: 'instructions', l: 'Dirección de voz (OpenAI)', t: 'textarea' },
@@ -280,7 +296,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     idea: { topic: '', duration: 60, aspect: '16:9', tone: 'informativo y entretenido', audience: 'público general', language: 'español' },
     script: { scenes: 0, provider: 'auto', extra: '' },
     images: { style: 'cine', quality: 'medium', common: '' },
-    voice: { provider: 'openai', voice: 'nova', voiceId: '', instructions: 'Narrador profesional de documental: voz cálida, clara y con ritmo dinámico.', speed: 1 },
+    voice: { provider: 'auto', voice: 'nova', voiceId: '', instructions: 'Narrador profesional de documental: voz cálida, clara y con ritmo dinámico.', speed: 1 },
     music: { mediaId: '', volume: 0.18 },
     montage: { transition: 'auto', motion: 'auto', filter: 'cine', subtitles: 'narracion', textStyle: 'inferior', padding: 0.7 },
     seo: { keywords: '' },
@@ -288,6 +304,8 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
   };
   const POS = { idea: [40, 80], script: [330, 80], images: [620, 80], voice: [910, 80], music: [910, 330], montage: [620, 330], seo: [330, 330], output: [40, 330] };
   const TPL = {
+    blank: { name: 'Flujo en blanco', desc: 'Vacío: agrega las tarjetas una por una', blank: true },
+    auto: { name: 'Automático completo', desc: 'Solo escribes el tema; lo demás se elige solo', over: { idea: { duration: 60 } } },
     youtube: { name: 'Video YouTube narrado', desc: '90 s horizontal · voz + subtítulos', over: { idea: { duration: 90 } } },
     short: { name: 'Short / TikTok viral', desc: '30 s vertical · ritmo rápido', over: { idea: { duration: 30, aspect: '9:16', tone: 'enérgico, sorprendente y directo' }, voice: { instructions: 'Voz enérgica y rápida, estilo creador de contenido viral.', speed: 1.1 }, montage: { padding: 0.3 } } },
     historia: { name: 'Historia / cuento', desc: '2 min · ilustrado y emotivo', over: { idea: { duration: 120, tone: 'narrativo, emotivo y envolvente' }, images: { style: 'ilustracion' }, voice: { voice: 'fable', instructions: 'Narrador de cuentos: pausado, cálido y muy expresivo.' }, montage: { filter: 'calido', transition: 'fade', motion: 'kenburns', padding: 1 } } },
@@ -301,17 +319,23 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     for (const k of P.ORDER) cfg[k] = { ...DEF[k], ...((t.over || {})[k] || {}) };
     const on = { voice: true, music: false, seo: true };
     (t.off || []).forEach((k) => (on[k] = false));
-    return { id: F.uid(), tpl: tid, name: t.name, cfg, on, pos: JSON.parse(JSON.stringify(POS)) };
+    return { id: F.uid(), tpl: tid, name: t.name, cfg, on, nodes: t.blank ? [] : P.ORDER.slice(), pos: JSON.parse(JSON.stringify(POS)) };
   };
   P.makeFlow = makeFlow;
   P.cfgFrom = (fl) => ({
     idea: fl.cfg.idea, script: fl.cfg.script, images: fl.cfg.images, voice: fl.on.voice ? fl.cfg.voice : null,
     music: fl.on.music ? fl.cfg.music : null, montage: fl.cfg.montage, seo: fl.on.seo ? fl.cfg.seo : null, output: fl.cfg.output,
   });
+  P.cfgFrom = ((base) => (fl) => { const has = (id) => (fl.nodes || P.ORDER).includes(id), c = base(fl); if (!has('voice')) c.voice = null; if (!has('music')) c.music = null; if (!has('seo')) c.seo = null; return c; })(P.cfgFrom);
 
   let flow = null, selNode = 'idea', states = {}, logLines = [], running = false, root = null;
   try { flow = JSON.parse(localStorage.getItem('framaly.flowDraft') || 'null'); } catch (e) {}
-  if (!flow || !flow.cfg) flow = makeFlow('youtube');
+  // una sola vez: el borrador anterior (con el ejemplo cargado) se reemplaza por un flujo vacío
+  try { if (!localStorage.getItem('framaly.flowBlankV1')) { localStorage.setItem('framaly.flowBlankV1', '1'); flow = null; } } catch (e) { /* sin memoria */ }
+  if (!flow || !flow.cfg) flow = makeFlow('blank');   // empieza vacío: tú agregas las tarjetas
+  if (!flow.nodes) flow.nodes = P.ORDER.slice();
+  const has = (id) => flow.nodes.includes(id);
+  const present = () => P.ORDER.filter(has);
   const saveDraft = F.debounce(() => { try { localStorage.setItem('framaly.flowDraft', JSON.stringify(flow)); } catch (e) {} }, 300);
 
   function summary(id) {
@@ -320,7 +344,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       case 'idea': return `${c.topic ? F.esc(c.topic.slice(0, 60)) : '<span style="color:var(--or2)">Escribe el tema…</span>'}<br><span class="dim">${c.duration}s · ${c.aspect}</span>`;
       case 'script': return `${c.scenes || 'Auto (' + P.sceneCount(flow.cfg.idea, c) + ')'} escenas · ${({ anthropic: 'Claude', openai: 'OpenAI', gemini: 'Gemini', minimax: 'MiniMax' })[c.provider === 'auto' ? F.settings.textProvider : c.provider] || 'IA'}`;
       case 'images': return `${F.STYLES[c.style]?.name || c.style} · calidad ${c.quality}`;
-      case 'voice': return c.provider === 'elevenlabs' || c.provider === 'minimax' ? `${c.provider === 'minimax' ? 'MiniMax' : 'ElevenLabs'} · ${c.voiceId ? c.voiceId.slice(0, 10) + '…' : 'sin voz'}` : `${c.provider === 'gemini' ? 'Gemini' : 'OpenAI'} · ${c.voice}${c.provider === 'gemini' ? '' : ' · x' + c.speed}`;
+      case 'voice': if (c.provider === 'auto') return 'Automático · la voz conectada'; return c.provider === 'elevenlabs' || c.provider === 'minimax' ? `${c.provider === 'minimax' ? 'MiniMax' : 'ElevenLabs'} · ${c.voiceId ? c.voiceId.slice(0, 10) + '…' : 'sin voz'}` : `${c.provider === 'gemini' ? 'Gemini' : 'OpenAI'} · ${c.voice}${c.provider === 'gemini' ? '' : ' · x' + c.speed}`;
       case 'music': { const m = F.media.byId(c.mediaId); return m ? F.esc(m.name.slice(0, 30)) : 'Elige una pista'; }
       case 'montage': return `${c.transition === 'auto' ? 'Transiciones variadas' : R.TRANSITIONS.find((t) => t.id === c.transition)?.name} · ${R.filter(c.filter).name}`;
       case 'seo': return c.keywords ? F.esc(c.keywords.slice(0, 40)) : 'Título, descripción, tags y capítulos';
@@ -328,6 +352,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     }
   }
   function costEstimate() {
+    if (!has('images')) return '';
     const n = P.sceneCount(flow.cfg.idea, flow.cfg.script);
     const per = { low: 0.016, medium: 0.063, high: 0.25 }[flow.cfg.images.quality] || 0.06;
     const chars = (+flow.cfg.idea.duration || 60) * 15;
@@ -338,12 +363,14 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
   function renderNodes() {
     if (!root) return;
     const area = root.querySelector('#fla'); if (!area) return;
-    area.querySelectorAll('.node').forEach((n) => n.remove());
-    for (const id of P.ORDER) {
+    area.querySelectorAll('.node, .fl-empty').forEach((n) => n.remove());
+    const pill = root.querySelector('.pill'); if (pill) pill.innerHTML = `${I('bot')} ${present().length} tarjeta${present().length === 1 ? '' : 's'}`;
+    if (!present().length) area.insertAdjacentHTML('beforeend', `<div class="fl-empty"><div><b>Tu flujo está vacío</b><p class="muted small">Crea tu video tarjeta por tarjeta, o deja que FRAMALY lo haga todo.</p><div class="row" style="justify-content:center;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="add">${I('plus')} Agregar tarjeta</button><button class="btn" data-act="full">${I('zap')} Armar flujo automático completo</button></div></div></div>`);
+    for (const id of present()) {
       const t = NT[id], [x, y] = flow.pos[id] || POS[id], st = states[id];
       const off = t.toggle && !flow.on[id];
       area.insertAdjacentHTML('beforeend', `<div class="node ${selNode === id ? 'sel' : ''} ${off ? 'off' : ''} ${st ? st.s : ''}" data-n="${id}" style="left:${x}px;top:${y}px">
-        <div class="nh"><div class="ic" style="background:${t.color}">${I(t.icon)}</div><b>${P.NAMES[id]}</b>${t.toggle ? `<button class="sw ${flow.on[id] ? 'on' : ''}" data-sw="${id}" title="Activar / desactivar"></button>` : ''}</div>
+        <div class="nh"><div class="ic" style="background:${t.color}">${I(t.icon)}</div><b>${P.NAMES[id]}</b>${t.toggle ? `<button class="sw ${flow.on[id] ? 'on' : ''}" data-sw="${id}" title="Activar / desactivar"></button>` : ''}<button class="rm" data-rm="${id}" title="Quitar esta tarjeta">${I('x')}</button></div>
         <div class="nb">${t.desc}<div class="sum">${summary(id)}</div><div class="ns">${st ? (st.s === 'run' ? '<span class="spin"></span>' : st.s === 'done' ? I('check') : st.s === 'err' ? I('x') : '') + ' ' + F.esc(st.msg || '') : off ? 'Desactivado' : 'Listo'}</div></div></div>`);
     }
     renderEdges();
@@ -351,10 +378,11 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
   }
   function renderEdges() {
     const svg = root.querySelector('#edges'); if (!svg) return;
-    const box = (id) => { const el = root.querySelector(`[data-n="${id}"]`); const [x, y] = flow.pos[id]; return { x, y, w: el?.offsetWidth || 236, h: el?.offsetHeight || 120 }; };
+    const box = (id) => { const el = root.querySelector(`[data-n="${id}"]`); const [x, y] = flow.pos[id] || POS[id]; return { x, y, w: el?.offsetWidth || 236, h: el?.offsetHeight || 120 }; };
     let h = '';
-    for (let i = 0; i < P.ORDER.length - 1; i++) {
-      const a = box(P.ORDER[i]), b = box(P.ORDER[i + 1]);
+    const ids = present();
+    for (let i = 0; i < ids.length - 1; i++) {
+      const a = box(ids[i]), b = box(ids[i + 1]);
       const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 }, bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
       const dx = bc.x - ac.x, dy = bc.y - ac.y;
       let p1, p2, c1, c2;
@@ -367,17 +395,32 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
         p1 = { x: ac.x, y: ac.y + (s * a.h) / 2 }; p2 = { x: bc.x, y: bc.y - (s * b.h) / 2 };
         const k = Math.max(40, Math.abs(p2.y - p1.y) / 2); c1 = { x: p1.x, y: p1.y + s * k }; c2 = { x: p2.x, y: p2.y - s * k };
       }
-      const sa = states[P.ORDER[i]]?.s, sb = states[P.ORDER[i + 1]]?.s;
+      const sa = states[ids[i]]?.s, sb = states[ids[i + 1]]?.s;
       const cls = sb === 'run' ? 'on' : sa && sb && sb !== 'run' ? 'done' : '';
       h += `<path class="${cls}" d="M${p1.x},${p1.y} C${c1.x},${c1.y} ${c2.x},${c2.y} ${p2.x},${p2.y}"/><circle cx="${p2.x}" cy="${p2.y}" r="5" fill="#0c0907" stroke="${cls ? '#ff6a1a' : '#4a382b'}" stroke-width="2.5"/>`;
     }
     svg.innerHTML = h;
   }
+  const TIPS = {
+    idea: 'Lo único obligatorio es el tema. Si no tocas lo demás, la duración, el formato y el tono se eligen solos.',
+    script: 'Escribe el guion con la IA de texto. En «Según Integraciones» usa la que tengas conectada (Claude, OpenAI, Gemini o MiniMax).',
+    images: 'Crea una imagen por escena. En «Según Ajustes» usa la IA de imágenes conectada y, si falla, prueba otra sola.',
+    voice: 'Narra cada escena. En «Automático» usa la primera API de voz conectada (OpenAI, ElevenLabs, Gemini o MiniMax) y elige una voz por ti.',
+    music: 'Pon música de fondo con una pista de tu Biblioteca. Si no eliges ninguna, se omite.',
+    montage: 'Monta todo: transiciones y movimientos variados, filtro de color y subtítulos. En automático no necesitas tocar nada.',
+    seo: 'Crea el título, la descripción, las etiquetas y los capítulos para YouTube.',
+    output: 'Crea el proyecto y, si quieres, exporta el MP4 solo al terminar.',
+  };
+  const guideHTML = () => `<h4 style="margin:0 0 8px">Cómo empezar</h4>
+    <ol class="help-steps"><li><b>Rápido:</b> pulsa «Armar flujo automático completo», escribe el tema y ejecuta. Todo lo demás se elige solo.</li><li><b>Tarjeta por tarjeta:</b> pulsa «Agregar tarjeta» y suma Idea, Guionista, Director Visual, Locutor, Música, Editor, SEO y Salida.</li><li>Para un video necesitas como mínimo <b>Idea, Guionista, Director Visual y Editor</b> (si falta alguna, FRAMALY la agrega sola al ejecutar).</li><li>Conecta al menos una API de texto y una de imágenes en <a href="#/integraciones">Integraciones API</a>. La voz es opcional.</li><li>Pulsa <b>Ejecutar flujo</b>: cada agente pasa su resultado al siguiente.</li></ol>`;
   function renderInsp() {
     const el = root?.querySelector('#fli'); if (!el) return;
+    if (!has(selNode)) selNode = present()[0] || null;
+    if (!selNode) { el.innerHTML = guideHTML(); return; }
     const t = NT[selNode];
     el.innerHTML = `<div class="row" style="gap:10px;margin-bottom:6px"><div class="ic" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#fff;background:${t.color}">${I(t.icon)}</div><div><b>${P.NAMES[selNode]}</b><div class="muted small">${t.desc}</div></div></div>
       ${t.toggle ? `<label class="check"><input type="checkbox" data-on ${flow.on[selNode] ? 'checked' : ''}> Nodo activado</label>` : ''}
+      <p class="hint" style="margin-top:0">${TIPS[selNode]}</p>
       <div id="fliForm">${F.form(FIELDS[selNode], flow.cfg[selNode])}</div>
       ${selNode === 'voice' ? `<p class="hint">Para elegir voces de ElevenLabs ve a <a href="#/voces">Voces</a> y copia el Voice ID.</p>` : ''}
       ${selNode === 'music' ? `<p class="hint">Sube música a la <a href="#/biblioteca">Biblioteca</a> para usarla aquí.</p>` : ''}
@@ -397,9 +440,42 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
   }
   function setRunBtn() { const b = root?.querySelector('#flRun'); if (!b) return; b.disabled = running; b.innerHTML = running ? '<span class="spin"></span> Ejecutando…' : `${I('play')} Ejecutar flujo`; }
 
+  /** Agrega una tarjeta al flujo (en su lugar de la cadena) */
+  function addCard(id, quiet) {
+    if (has(id)) return;
+    flow.nodes = P.ORDER.filter((k) => has(k) || k === id);
+    if (!flow.pos[id]) flow.pos[id] = [...POS[id]];
+    if (NT[id].toggle && id !== 'music') flow.on[id] = true;
+    if (!quiet) { selNode = id; saveDraft(); renderNodes(); renderInsp(); }
+    else saveDraft();
+  }
+  function removeCard(id) {
+    flow.nodes = flow.nodes.filter((k) => k !== id); delete states[id];
+    if (selNode === id) selNode = present()[0] || null;
+    saveDraft(); renderNodes(); renderInsp();
+  }
+  function openPalette() {
+    const m = F.modal({ title: 'Agregar tarjeta', wide: false,
+      body: `<p class="muted small" style="margin-top:0">Elige la tarjeta que quieres sumar. Se coloca en su lugar de la cadena.</p><div class="pal">${P.ORDER.map((id) => `<button class="pal-it" data-add="${id}" ${has(id) ? 'disabled' : ''}><span class="ic" style="background:${NT[id].color}">${I(NT[id].icon)}</span><span><b>${P.NAMES[id]}</b><small>${has(id) ? 'Ya está en el flujo' : NT[id].desc}</small></span></button>`).join('')}</div>`, actions: [{ label: 'Cerrar' }] });
+    m.el.addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (!b || b.disabled) return; addCard(b.dataset.add); m.close(); F.toast(P.NAMES[b.dataset.add] + ' agregada', 'ok', 1500); });
+  }
+  function fullFlow() {
+    flow.nodes = P.ORDER.slice(); flow.on.voice = true; flow.on.seo = true; flow.pos = JSON.parse(JSON.stringify(POS));
+    selNode = 'idea'; saveDraft(); renderNodes(); renderInsp();
+    F.toast('Flujo completo armado. Escribe el tema y pulsa Ejecutar flujo.', 'ok', 4000);
+    root?.querySelector('[data-f="topic"]')?.focus();
+  }
+  function openGuide() {
+    F.modal({ title: 'Cómo crear un video con agentes', wide: true, body: `<p class="muted" style="margin-top:0">Cada tarjeta es un agente. Se ejecutan en orden y cada uno pasa su resultado al siguiente. Todo lo que dejes en «automático» se decide solo según las APIs que tengas conectadas.</p>
+      <ol class="help-steps"><li><b>Empieza:</b> usa «Armar flujo automático completo» o agrega las tarjetas una por una con «Agregar tarjeta».</li><li><b>Idea / Tema:</b> escribe de qué trata el video. Es lo único obligatorio.</li><li><b>Guionista:</b> escribe el guion y lo divide en escenas con la IA de texto conectada.</li><li><b>Director Visual:</b> crea una imagen por escena con la IA de imágenes que elijas o, en automático, con la conectada.</li><li><b>Locutor</b> (opcional): narra cada escena. En automático usa la primera API de voz conectada y elige una voz por ti.</li><li><b>Música</b> (opcional): una pista de tu Biblioteca como fondo.</li><li><b>Editor:</b> monta escenas, transiciones, movimientos, filtro y subtítulos.</li><li><b>SEO</b> (opcional): título, descripción, etiquetas y capítulos.</li><li><b>Salida:</b> crea el proyecto y exporta el MP4. Pulsa <b>Ejecutar flujo</b> y mira el avance en vivo.</li></ol>
+      <p class="hint">Mínimo para un video: Idea, Guionista, Director Visual y Editor, con una API de texto y una de imágenes conectadas. Quita una tarjeta con la ✕ de su esquina. Arrastra las tarjetas para ordenarlas.</p>`, actions: [{ label: 'Entendido', primary: true }] });
+  }
+
   async function run() {
     if (running) return;
-    if (!flow.cfg.idea.topic.trim()) { selNode = 'idea'; renderNodes(); renderInsp(); root.querySelector('[data-f="topic"]')?.focus(); return F.toast('Escribe el tema del video en el nodo Idea'); }
+    const need = ['idea', 'script', 'images', 'montage'].filter((k) => !has(k));
+    if (need.length) { need.forEach((k) => addCard(k, true)); F.toast('Agregué las tarjetas que faltaban: ' + need.map((k) => P.NAMES[k]).join(', '), 'ok', 4500); }
+    if (!flow.cfg.idea.topic.trim()) { selNode = 'idea'; renderNodes(); renderInsp(); root.querySelector('[data-f="topic"]')?.focus(); return F.toast('Escribe el tema del video en la tarjeta Idea'); }
     running = true; states = {}; setRunBtn(); renderNodes();
     addLog(`▶ Ejecutando flujo "${flow.name}"`, 'w');
     let cur = null;
@@ -421,15 +497,17 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
   }
 
   F.flows = {
-    load(cfgOverride) { flow = makeFlow('youtube'); Object.assign(flow.cfg.idea, cfgOverride || {}); saveDraft(); },
+    load(cfgOverride) { flow = makeFlow('auto'); Object.assign(flow.cfg.idea, cfgOverride || {}); saveDraft(); },
     view(el) {
       root = el;
       el.innerHTML = `<div class="flows">
         <aside class="fl-list" id="flList"></aside>
         <div class="fl-canvas" id="flc" style="grid-column:2;grid-row:1">
-          <div class="fl-bar"><input type="text" id="flName" title="Nombre del flujo"><select id="flTpl" class="fl-tpl" title="Cambiar de plantilla"></select><span class="pill">${I('bot')} 6 agentes</span><span class="grow"></span>
+          <div class="fl-bar"><input type="text" id="flName" title="Nombre del flujo"><select id="flTpl" class="fl-tpl" title="Cambiar de plantilla"></select><span class="pill">${I('bot')} 0 tarjetas</span><span class="grow"></span>
+            <button class="btn sm" id="flAdd">${I('plus')} Agregar tarjeta</button><button class="btn sm" id="flHelp" title="Instrucciones">${I('script')}<span class="bt">Cómo usarlo</span></button>
             <button class="btn sm ghost" id="flReset" title="Reordenar nodos">${I('grid')}</button>
-            <button class="btn sm" id="flSave">${I('save')} Guardar</button><button class="btn primary" id="flRun"></button></div>
+            <button class="btn sm" id="flSave">${I('save')} Guardar</button><button class="btn primary" id="flRun"></button>
+            <div class="fl-auto"><span class="tag or">Automático</span><input type="text" id="flAutoTopic" placeholder="Escribe de qué trata tu video y FRAMALY hace todo: guion, imágenes, voz, montaje y SEO…" autocomplete="off"><button class="btn primary sm" id="flAutoGo">${I('zap')} Crear video automático</button></div></div>
           <div class="fl-area" id="fla"><svg class="edges" id="edges"></svg></div>
         </div>
         <aside class="fl-insp" id="fli"></aside>
@@ -437,12 +515,16 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       </div>`;
       el.querySelector('#flName').value = flow.name;
       const lg = el.querySelector('#flLog');
-      lg.innerHTML = logLines.length ? logLines.map((l) => `<div class="${l.c}">${F.esc(l.t)}</div>`).join('') : '<div>Listo. Selecciona un nodo para configurarlo y pulsa “Ejecutar flujo”. Cada agente pasa su resultado al siguiente.</div>';
+      lg.innerHTML = logLines.length ? logLines.map((l) => `<div class="${l.c}">${F.esc(l.t)}</div>`).join('') : '<div>Listo. Agrega tarjetas, o escribe un tema arriba para crear el video en automático. Cada agente pasa su resultado al siguiente.</div>';
       lg.scrollTop = 1e9;
       renderList(); renderNodes(); renderInsp(); setRunBtn();
 
       el.querySelector('#flName').addEventListener('input', (e) => { flow.name = e.target.value; saveDraft(); });
       el.querySelector('#flRun').onclick = run;
+      el.querySelector('#flAdd').onclick = openPalette;
+      el.querySelector('#flHelp').onclick = openGuide;
+      el.querySelector('#flAutoGo').onclick = async () => { const t = el.querySelector('#flAutoTopic').value; if (!t.trim()) { el.querySelector('#flAutoTopic').focus(); return F.toast('Escribe primero de qué trata tu video'); } await F.auto.run({ topic: t, aspect: flow.cfg.idea.aspect, duration: flow.cfg.idea.duration }); };
+      el.querySelector('#flAutoTopic').addEventListener('keydown', (e) => { if (e.key === 'Enter') el.querySelector('#flAutoGo').click(); });
       el.querySelector('#flClear').onclick = () => { logLines = []; lg.innerHTML = ''; };
       el.querySelector('#flReset').onclick = () => { flow.pos = JSON.parse(JSON.stringify(POS)); saveDraft(); renderNodes(); };
       el.querySelector('#flSave').onclick = () => {
@@ -453,8 +535,8 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       };
       const loadFrom = (tpl, fl) => {
         if (running) { F.toast('Espera a que termine la ejecución'); return; }
-        if (tpl) { const topic = flow.cfg.idea.topic; flow = makeFlow(tpl); flow.cfg.idea.topic = topic; }
-        else if (fl) { const s = F.settings.flows.find((x) => x.id === fl); if (!s) return; flow = JSON.parse(JSON.stringify(s)); }
+        if (tpl) { const topic = flow.cfg.idea.topic; flow = makeFlow(tpl); flow.cfg.idea.topic = topic; selNode = present()[0] || 'idea'; }
+        else if (fl) { const s = F.settings.flows.find((x) => x.id === fl); if (!s) return; flow = JSON.parse(JSON.stringify(s)); if (!flow.nodes) flow.nodes = P.ORDER.slice(); }
         else return;
         states = {}; saveDraft(); el.querySelector('#flName').value = flow.name; renderList(); renderNodes(); renderInsp();
       };
@@ -483,11 +565,13 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
 
       const area = el.querySelector('#fla');
       area.addEventListener('click', (e) => {
+        const act = e.target.closest('[data-act]'); if (act) { act.dataset.act === 'add' ? openPalette() : fullFlow(); return; }
+        const rm = e.target.closest('[data-rm]'); if (rm) { removeCard(rm.dataset.rm); return; }
         const sw = e.target.closest('[data-sw]');
         if (sw) { flow.on[sw.dataset.sw] = !flow.on[sw.dataset.sw]; saveDraft(); renderNodes(); if (selNode === sw.dataset.sw) renderInsp(); }
       });
       area.addEventListener('pointerdown', (e) => {
-        const n = e.target.closest('[data-n]'); if (!n || e.target.closest('[data-sw]')) return;
+        const n = e.target.closest('[data-n]'); if (!n || e.target.closest('[data-sw]') || e.target.closest('[data-rm]')) return;
         const id = n.dataset.n, x0 = e.clientX, y0 = e.clientY, [px, py] = flow.pos[id];
         let moved = false;
         const mv = (ev) => {
@@ -515,8 +599,8 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     /** Qué falta para poder trabajar en automático */
     missing() {
       const m = [];
-      if (!['openai', 'gemini', 'minimax'].some((p) => F.api.has(p))) m.push('OpenAI, Gemini o MiniMax (imágenes)');
-      if (!['openai', 'gemini'].some((p) => F.api.has(p))) m.push('OpenAI o Gemini (voz)');
+      if (!P.hasImages()) m.push('OpenAI, Gemini o MiniMax (imágenes)');
+      if (!P.hasVoice()) m.push('OpenAI, ElevenLabs, Gemini o MiniMax (voz)');
       if (!F.api.textReady()) m.push('Claude, OpenAI, Gemini o MiniMax (guiones)');
       return m;
     },
@@ -533,8 +617,8 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       const fl = makeFlow(aspect === '9:16' ? 'short' : 'youtube');
       Object.assign(fl.cfg.idea, { topic: topic.trim(), aspect, duration: +duration || 60 });
       fl.cfg.images.style = style;
-      fl.cfg.voice.provider = F.api.has('openai') ? 'openai' : 'gemini';
-      if (fl.cfg.voice.provider === 'gemini') fl.cfg.voice.voice = 'Kore';
+      fl.cfg.voice.provider = 'auto';   // la primera API de voz conectada, con una voz elegida sola
+      fl.cfg.script.provider = 'auto'; fl.cfg.images.provider = 'auto';
       fl.on.voice = true; fl.on.seo = true;
       // Música automática: la última pista subida por el usuario
       const music = F.media.audios().find((m) => m.source === 'upload');
