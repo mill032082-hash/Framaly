@@ -49,7 +49,8 @@
     let j = null; try { j = JSON.parse(txt); } catch (e) {}
     if (!r.ok) {
       const msg = j?.error?.message || j?.detail?.message || (typeof j?.detail === 'string' ? j.detail : '') || j?.message || txt.slice(0, 200) || r.statusText;
-      throw new Error(`Error ${r.status}: ${msg}`);
+      const hint = r.status === 404 && /no longer available|not found for API|is not found/i.test(msg) ? ' → Ese modelo ya no está disponible. Cámbialo en Integraciones API → Modelos (en Gemini puedes pulsar «Ver modelos disponibles»).' : '';
+      throw new Error(`Error ${r.status}: ${msg}${hint}`);
     }
     return j;
   }
@@ -264,6 +265,15 @@
       if (o.provider === 'gemini') return this.ttsGemini(o);
       if (o.provider === 'minimax') return this.ttsMinimax({ ...o, voiceId: o.voiceId || o.voice });
       return this.ttsOpenAI(o);
+    },
+
+    /** Modelos de Gemini disponibles para esta clave, ordenados por uso (los nombres cambian seguido) */
+    async geminiModels() {
+      need('gemini', 'Gemini');
+      const j = await asJson(await net('gemini', `${GEM}/v1beta/models`, { headers: { 'x-goog-api-key': key('gemini') } }));
+      const all = (j.models || []).filter((m) => (m.supportedGenerationMethods || []).includes('generateContent')).map((m) => String(m.name).replace(/^models\//, ''));
+      const bad = /embed|aqa|live|audio|robotics|computer-use|veo|imagen/i;
+      return { text: all.filter((n) => /^gemini/.test(n) && !/image|tts/i.test(n) && !bad.test(n)), image: all.filter((n) => /image/i.test(n)), tts: all.filter((n) => /tts/i.test(n)) };
     },
 
     /** Saldo real informado por el proveedor. Solo ElevenLabs lo entrega con una clave normal; se guarda una instantánea en el servidor. */

@@ -35,7 +35,7 @@
     const usesRow = (k) => USES[k] ? `<label class="lbl">Usar esta API para</label><div class="chips">${USES[k].map(([c, l]) => `<button class="chip ${F.api.canUse(k, c) ? 'on' : ''}" data-use="${k}:${c}">${l}</button>`).join('')}</div><p class="mini" style="margin:4px 0 0">Apaga «Imágenes» si tu cuenta no puede generarlas: seguirá sirviendo para los prompts.</p>` : '';
     const models = (k) => usesRow(k) + (k === 'anthropic' ? model('anthropic', 'Modelo', ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5', 'claude-fable-5-1'])
       : k === 'openai' ? `<div class="grid3">${model('openai', 'Prompts y textos', ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini', 'o4-mini', 'o3-mini'])}${model('image', 'Imágenes', ['gpt-image-1', 'gpt-image-1-mini', 'dall-e-3', 'dall-e-2'])}${model('tts', 'Voz', ['gpt-4o-mini-tts', 'tts-1-hd', 'tts-1'])}</div>`
-      : k === 'gemini' ? `<div class="grid3">${model('gemini', 'Prompts y textos', ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'])}${model('geminiImage', 'Imágenes', ['gemini-2.5-flash-image', 'gemini-2.0-flash-preview-image-generation'])}${model('geminiTts', 'Voz', ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'])}</div>`
+      : k === 'gemini' ? `<div class="row" style="gap:8px;margin:8px 0 0;flex-wrap:wrap"><button class="btn sm" data-gemlist>Ver modelos disponibles</button><span class="mini" id="gemMsg">Google cambia los nombres seguido: aquí ves los que tu clave puede usar.</span></div><div class="grid3">${model('gemini', 'Prompts y textos', ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'])}${model('geminiImage', 'Imágenes', ['gemini-2.5-flash-image', 'gemini-2.0-flash-preview-image-generation'])}${model('geminiTts', 'Voz', ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'])}</div>`
       : k === 'minimax' ? `<div class="grid3">${model('minimax', 'Prompts y textos', ['MiniMax-M2', 'MiniMax-M1', 'MiniMax-Text-01'])}${model('minimaxImage', 'Imágenes', ['image-01', 'image-01-live'])}${model('minimaxTts', 'Voz', ['speech-2.8-hd', 'speech-2.8-turbo', 'speech-2.6-hd', 'speech-2.6-turbo', 'speech-02-hd', 'speech-02-turbo'])}</div>`
       : model('eleven', 'Modelo', ['eleven_multilingual_v2', 'eleven_turbo_v2_5', 'eleven_flash_v2_5', 'eleven_v3', 'eleven_turbo_v2', 'eleven_multilingual_v1']));
     const head = (a, tag, cls) => `<div class="hd"><div class="lg" style="background:${a.bg}">${a.logo}</div><div style="flex:1"><b>${a.name}</b><small>${a.sub}</small></div><span class="tag ${cls}" data-st="${a.k}">${tag}</span></div>`;
@@ -165,6 +165,16 @@
       if (m) { S.models[m] = e.target.value.trim(); F.saveSettings(); }
     });
     el.addEventListener('click', async (e) => {
+      const gl = e.target.closest('[data-gemlist]');
+      if (gl) {
+        F.busy(gl, true, 'Consultando…');
+        try {
+          const m = await F.api.geminiModels(), fill = (id, list) => { const dl = q('#' + id); if (dl && list.length) dl.innerHTML = list.map((x) => `<option value="${esc(x)}">`).join(''); };
+          fill('dl-gemini', m.text); fill('dl-geminiImage', m.image); fill('dl-geminiTts', m.tts);
+          const msg = q('#gemMsg'); if (msg) msg.innerHTML = `Disponibles con tu clave — texto: <b>${m.text.slice(0, 6).map(esc).join(', ') || 'ninguno'}</b>${m.image.length ? ' · imágenes: <b>' + m.image.slice(0, 4).map(esc).join(', ') + '</b>' : ''}${m.tts.length ? ' · voz: <b>' + m.tts.slice(0, 4).map(esc).join(', ') + '</b>' : ''}. Pulsa el campo del modelo y elige.`;
+        } catch (err) { F.toast(err.message, 'error'); }
+        F.busy(gl, false); return;
+      }
       const us = e.target.closest('[data-use]');
       if (us) { const [p, c] = us.dataset.use.split(':'); (S.uses[p] ||= {})[c] = !F.api.canUse(p, c); F.saveSettings(); draw(); return; }
       const eye = e.target.closest('[data-eye]'); if (eye) { const i = q(`[data-key="${eye.dataset.eye}"]`); i.type = i.type === 'password' ? 'text' : 'password'; return; }
