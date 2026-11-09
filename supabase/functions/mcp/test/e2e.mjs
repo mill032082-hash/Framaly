@@ -6,8 +6,15 @@ const sha = async (s) => [...new Uint8Array(await webcrypto.subtle.digest('SHA-2
 // proveedores simulados
 const calls = []; const realFetch = globalThis.fetch;
 const mp3 = new Uint8Array(417 * 40); for (let i = 0; i < 40; i++) mp3.set([0xff, 0xfb, 0x90, 0x00], i * 417);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5, 6]);
 globalThis.fetch = async (url, init) => {
-  const u = String(url); calls.push(u.replace(/^https:\/\//, '').slice(0, 60));
+  const u = String(url);
+  if (u.startsWith('https://files.oaiusercontent.com/')) return new Response(PNG, { status: 200, headers: { 'content-type': 'image/png' } });
+  if (u.startsWith('https://cdn.example.com/redir')) return new Response(null, { status: 302, headers: { location: 'https://files.oaiusercontent.com/x.png' } });
+  if (u.startsWith('https://evil.example.com/')) return new Response('<html>no soy imagen</html>', { status: 200, headers: { 'content-type': 'image/png' } });
+  if (u.startsWith('https://gone.example.com/')) return new Response('x', { status: 403 });
+  if (u.startsWith('https://big.example.com/')) return new Response(PNG, { status: 200, headers: { 'content-length': String(9 * 1024 * 1024) } });
+  if (u.startsWith('https://loop.example.com/')) return new Response(null, { status: 302, headers: { location: 'https://loop.example.com/again' } }); calls.push(u.replace(/^https:\/\//, '').slice(0, 60));
   const J = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'content-type': 'application/json' } });
   if (u.includes('api.openai.com/v1/chat/completions')) return J({ choices: [{ message: { content: JSON.stringify({ title: 'Faros', scenes: [{ narration: 'Uno.', image_prompt: 'faro', on_screen_text: 'Faro' }, { narration: 'Dos.', image_prompt: 'mar', on_screen_text: 'Mar' }, { narration: 'Tres.', image_prompt: 'cielo', on_screen_text: 'Cielo' }] }) } }], usage: { prompt_tokens: 100, completion_tokens: 200 } });
   if (u.includes('api.openai.com/v1/images/generations')) return J({ data: [{ b64_json: 'iVBORw0KGgo=' }] });
@@ -31,7 +38,7 @@ const call = async (name, args, tok) => { const r = await rpc('tools/call', { na
 let r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp/openapi.json')); const spec = await r.json();
 ok('descripciones OpenAPI ≤ 300 caracteres (límite de ChatGPT)', Object.values(spec.paths).every((p) => p.post.description.length <= 300 && p.post.summary.length <= 300), Object.values(spec.paths).map((p) => p.post.description.length));
 ok('GET openapi.json público', r.status === 200 && spec.openapi === '3.1.0' && spec.servers[0].url === 'https://proj.supabase.co/functions/v1/mcp');
-r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp')); ok('GET info', r.status === 200 && (await r.json()).tools.length === 8);
+r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp')); ok('GET info', r.status === 200 && (await r.json()).tools.length === 9);
 r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp', { method: 'OPTIONS' })); ok('CORS preflight', r.status === 204 && r.headers.get('access-control-allow-headers').includes('authorization'));
 // --- autenticación
 r = await post('', { jsonrpc: '2.0', id: 1, method: 'ping' }, null); ok('sin clave → 401', r.status === 401 && r.headers.get('www-authenticate').startsWith('Bearer'));
@@ -43,7 +50,7 @@ r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp/t/' + T
 r = await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'chatgpt' } });
 ok('initialize', r.body.result.serverInfo.name === 'framaly' && r.body.result.capabilities.tools && r.body.result.protocolVersion === '2025-03-26' && r.body.result.instructions.includes('framaly_status'));
 r = await post('', { jsonrpc: '2.0', method: 'notifications/initialized' }); ok('notificación → 202', r.status === 202);
-r = await rpc('tools/list'); ok('tools/list (8, con esquema y anotaciones)', r.body.result.tools.length === 8 && r.body.result.tools.every((t) => t.inputSchema.type === 'object') && r.body.result.tools.find((t) => t.name === 'framaly_status').annotations.readOnlyHint === true);
+r = await rpc('tools/list'); ok('tools/list (9, con esquema y anotaciones)', r.body.result.tools.length === 9 && r.body.result.tools.every((t) => t.inputSchema.type === 'object') && r.body.result.tools.find((t) => t.name === 'framaly_status').annotations.readOnlyHint === true);
 r = await rpc('tools/list', {}, TOKEN2); ok('clave solo-lectura ve solo 3 herramientas', r.body.result.tools.length === 3, r.body.result.tools.map((t) => t.name));
 r = await rpc('método/raro'); ok('método desconocido → -32601', r.body.error.code === -32601);
 r = await handler(new Request('https://proj.supabase.co/functions/v1/mcp', { method: 'POST', headers: { authorization: 'Bearer ' + TOKEN }, body: '{no json' })); ok('JSON roto → -32700', (await r.json()).error.code === -32700);
@@ -69,13 +76,36 @@ ok('audio de la voz arranca 0.2 s después', pr.data.audio[1].start >= 0.2 && pr
 c = await call('framaly_list_projects'); ok('listar proyectos', c.v.proyectos.length === 1 && c.v.proyectos[0].nombre === 'Faros del mundo' && c.v.proyectos[0].clips === 2, c.v);
 c = await call('framaly_create_video_project', { title: 'x', scenes: Array.from({ length: 7 }, () => ({ narration: 'a', image_prompt: 'b' })) }); ok('más de 6 escenas generadas → pide usar ids', c.isError && /Máximo 6/.test(c.v), c.v);
 c = await call('framaly_create_video_project', { title: 'x', scenes: [{ narration: 'a', image_media_id: 'noexiste' }] }); ok('imagen inexistente → error claro', c.isError && /No encontré la imagen/.test(c.v), c.v);
-c = await call('framaly_create_video_project', { title: 'x', scenes: [{ narration: 'a' }] }); ok('escena sin imagen → error claro', c.isError && /image_prompt o image_media_id/.test(c.v), c.v);
+c = await call('framaly_create_video_project', { title: 'x', scenes: [{ narration: 'a' }] }); ok('escena sin imagen → error claro', c.isError && /image_prompt, image_url o image_media_id/.test(c.v), c.v);
 c = await call('framaly_write_script', {}); ok('argumento requerido', c.isError && /Falta «topic»/.test(c.v));
 c = await call('framaly_generate_image', { prompt: 'x' }, TOKEN2); ok('clave solo-lectura no puede generar', c.isError && /no tiene permiso/.test(c.v), c.v);
 c = await call('framaly_nada', {}); ok('herramienta inexistente', c.isError && /No existe/.test(c.v));
 c = await call('framaly_create_video_project', { title: 'sin voz', voice: false, scenes: [{ narration: 'a', image_media_id: imgId }, { narration: 'b', image_media_id: imgId }], seconds_per_scene: 7 });
 const pr2 = DB.tables.framaly_projects.find((p) => p.id === c.v.project_id); ok('seconds_per_scene respetado', pr2.data.clips.every((x) => x.duration === 7) && c.v.duracion_segundos === 14 && c.v.con_voz === false, c.v);
 c = await call('framaly_create_video_project', { title: 'x', voice: false, scenes: [{ image_media_id: imgId }], seconds_per_scene: 99 }); ok('seconds_per_scene fuera de rango', c.isError && /número entre/.test(c.v), c.v);
+DB.tables.framaly_api_calls.length = 0;
+// --- imágenes que ya existen (ChatGPT, enlaces)
+c = await call('framaly_import_image', { image_urls: ['https://files.oaiusercontent.com/a.png', 'https://cdn.example.com/redir'] }); ok('importar 2 imágenes (una con redirección)', !c.isError && c.v.importadas.length === 2 && c.v.fallos.length === 0 && c.v.importadas.every((m) => DB.tables.framaly_media.some((r) => r.id === m.media_id && r.type === 'image' && r.user_id === 'u_ana' && r.meta.imported)), c.v);
+c = await call('framaly_import_image', { openaiFileIdRefs: [{ name: 'faro.png', id: 'file-1', mime_type: 'image/png', download_link: 'https://files.oaiusercontent.com/faro.png' }] }); ok('importar desde openaiFileIdRefs de ChatGPT', !c.isError && c.v.importadas.length === 1, c.v);
+for (const [n, u, re] of [['localhost', 'https://localhost/a.png', /https públicos/], ['IP privada', 'https://10.0.0.8/a.png', /https públicos/], ['metadatos de la nube', 'https://169.254.169.254/latest', /https públicos/], ['http sin cifrar', 'http://files.oaiusercontent.com/a.png', /https públicos/], ['credenciales en el enlace', 'https://user:pw@files.oaiusercontent.com/a.png', /https públicos/], ['no es imagen', 'https://evil.example.com/a.png', /no es una imagen/], ['enlace vencido', 'https://gone.example.com/a.png', /403/], ['demasiado grande', 'https://big.example.com/a.png', /8 MB/], ['redirección infinita', 'https://loop.example.com/a', /redirige demasiadas/], ['enlace roto', 'esto no es un enlace', /no es válido/]]) {
+  c = await call('framaly_import_image', { image_urls: [u] }); ok('rechaza: ' + n, c.isError && re.test(c.v), c.v);
+}
+c = await call('framaly_import_image', {}); ok('sin imágenes → mensaje claro', c.isError && /image_urls/.test(c.v));
+DB.tables.framaly_api_calls.length = 0;
+const before = DB.tables.framaly_usage.length;
+c = await call('framaly_create_video_project', { title: 'Desde ChatGPT', voice: false, openaiFileIdRefs: [1, 2, 3].map((i) => ({ name: i + '.png', id: 'f' + i, mime_type: 'image/png', download_link: 'https://files.oaiusercontent.com/' + i + '.png' })) });
+const pr3 = DB.tables.framaly_projects.find((p) => p.id === c.v.project_id);
+ok('video solo con imágenes de ChatGPT (sin escenas)', !c.isError && c.v.escenas === 3 && pr3.data.clips.length === 3 && pr3.data.clips.every((x) => DB.tables.framaly_media.some((m) => m.id === x.mediaId && m.meta.imported)), c.v);
+ok('no gastó nada en IA (usa tus imágenes)', DB.tables.framaly_usage.length === before);
+c = await call('framaly_create_video_project', { title: 'Con voz y narración', voice: true, image_urls: ['https://files.oaiusercontent.com/1.png', 'https://files.oaiusercontent.com/2.png'], scenes: [{ narration: 'Primera escena.' }, { narration: 'Segunda escena.', on_screen_text: 'Dos' }] });
+const pr4 = DB.tables.framaly_projects.find((p) => p.id === c.v.project_id);
+ok('imágenes de ChatGPT + narración con voz de FRAMALY', !c.isError && pr4.data.clips.length === 2 && pr4.data.audio.length === 2 && pr4.data.clips[0].text === 'Primera escena.' && c.v.con_voz === true, c.v);
+ok('solo se generó voz (no imágenes)', DB.tables.framaly_usage.slice(before).every((u) => u.kind === 'voz'), DB.tables.framaly_usage.slice(before).map((u) => u.kind));
+c = await call('framaly_create_video_project', { title: 'Mezcla', voice: false, image_urls: ['https://files.oaiusercontent.com/1.png'], scenes: [{ narration: 'a' }, { narration: 'b', image_prompt: 'un faro' }, { narration: 'c', image_media_id: imgId }] });
+ok('mezcla: 1 imagen tuya + 1 generada + 1 de la biblioteca', !c.isError && c.v.escenas === 3, c.v);
+c = await call('framaly_create_video_project', { title: 'x', voice: false, image_urls: ['https://evil.example.com/a.png'] }); ok('imagen mala en el video → error claro y no crea proyecto', c.isError && /escena 1/.test(c.v) && !DB.tables.framaly_projects.some((p) => p.data.name === 'x'), c.v);
+c = await call('framaly_create_video_project', { title: 'x' }); ok('sin escenas ni imágenes → error claro', c.isError && /scenes o imágenes/.test(c.v), c.v);
+DB.tables.framaly_api_calls.length = 0;
 // --- aislamiento entre cuentas
 DB.tables.framaly_media.push({ user_id: 'u_otro', id: 'mOTRO', type: 'image', name: 'ajena', deleted: false });
 c = await call('framaly_create_video_project', { title: 'robo', scenes: [{ narration: 'a', image_media_id: 'mOTRO' }] }); ok('no usa archivos de otra cuenta', c.isError && /No encontré/.test(c.v));

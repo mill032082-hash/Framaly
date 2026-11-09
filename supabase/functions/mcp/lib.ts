@@ -1,6 +1,6 @@
 // FRAMALY Studio · piezas puras del servidor MCP / API (sin red ni base de datos: se pueden probar solas).
 
-export const VERSION = "1.0.0";
+export const VERSION = "1.1.0";
 
 export const sha256hex = async (s: string): Promise<string> => {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
@@ -30,6 +30,25 @@ export function mp3Duration(b: Uint8Array): number {
   return frames ? secs : b.length / 16000;
 }
 
+/** ¿El nombre de host apunta a una red privada o interna? (protección al descargar imágenes de un enlace) */
+export function isPrivateHost(h: string): boolean {
+  const host = h.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) { const [a, b] = [Number(m[1]), Number(m[2])]; return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127); }
+  if (host.includes(":")) return host === "::" || host === "::1" || /^f[cd]/.test(host) || host.startsWith("fe8") || host.startsWith("fe9") || host.startsWith("fea") || host.startsWith("feb") || host.startsWith("::ffff:");
+  return false;
+}
+
+/** Reconoce el tipo de imagen por sus primeros bytes (no por lo que diga el servidor) */
+export function sniffImage(b: Uint8Array): string | null {
+  if (b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length > 6 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return "image/gif";
+  if (b.length > 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp";
+  return null;
+}
+
 export const ASPECTS = ["16:9", "9:16", "1:1", "4:5"] as const;
 export const openaiSize = (a: string) => (a === "16:9" ? "1536x1024" : a === "1:1" ? "1024x1024" : "1024x1536");
 
@@ -43,6 +62,8 @@ export function parseJSON(text: string): any {
 
 /* ---------- herramientas: nombre, texto y esquema (las usan el MCP y la API REST) ---------- */
 export type ToolDef = { name: string; title: string; description: string; scope: "read" | "write"; inputSchema: Record<string, unknown> };
+const urls = { type: "array", maxItems: 12, items: { type: "string" }, description: "Enlaces https públicos de imágenes (PNG, JPG, WEBP o GIF) que ya tengas." };
+const fileRefs = { type: "array", maxItems: 12, description: "Imágenes de la conversación de ChatGPT (ChatGPT las rellena solo).", items: { type: "object", properties: { name: { type: "string" }, id: { type: "string" }, mime_type: { type: "string" }, download_link: { type: "string" } } } };
 const asp = { type: "string", enum: [...ASPECTS], description: "Formato del video: 16:9 (YouTube), 9:16 (Shorts/TikTok), 1:1 o 4:5." };
 
 export const TOOLS: ToolDef[] = [
@@ -64,6 +85,9 @@ export const TOOLS: ToolDef[] = [
       prompt: { type: "string", maxLength: 3000 }, aspect: asp,
       quality: { type: "string", enum: ["low", "medium", "high"], description: "Solo OpenAI. Por defecto medium." },
       provider: { type: "string", enum: ["openai", "gemini"] }, name: { type: "string", description: "Nombre en la biblioteca." } } } },
+  { name: "framaly_import_image", title: "Importar imágenes", scope: "write",
+    description: "Trae a la biblioteca de FRAMALY imágenes que ya existen (por ejemplo, las que creaste en ChatGPT) desde enlaces https o desde los archivos de la conversación. Devuelve el id de cada una para usarla en un video.",
+    inputSchema: { type: "object", additionalProperties: false, properties: { image_urls: urls, openaiFileIdRefs: fileRefs, name: { type: "string", description: "Nombre base en la biblioteca." } } } },
   { name: "framaly_generate_voice", title: "Generar voz", scope: "write",
     description: "Convierte un texto en una narración de voz (MP3), la guarda en la biblioteca y devuelve su id, su duración y un enlace temporal.",
     inputSchema: { type: "object", required: ["text"], additionalProperties: false, properties: {
@@ -77,11 +101,12 @@ export const TOOLS: ToolDef[] = [
       topic: { type: "string" }, narration: { type: "string", description: "Texto completo de la narración (opcional)." },
       keywords: { type: "string" }, language: { type: "string" }, provider: { type: "string", enum: ["anthropic", "openai", "gemini"] } } } },
   { name: "framaly_create_video_project", title: "Crear proyecto de video", scope: "write",
-    description: "Crea en la cuenta del usuario un proyecto de video listo para abrir en el editor de FRAMALY: genera una imagen por escena (y la voz si se pide), monta el timeline con transiciones y subtítulos. Máximo 6 escenas con generación en una llamada; para más, genera antes con framaly_generate_image / framaly_generate_voice y pasa image_media_id / voice_media_id.",
-    inputSchema: { type: "object", required: ["title", "scenes"], additionalProperties: false, properties: {
+    description: "Crea en la cuenta del usuario un proyecto de video listo para abrir en el editor de FRAMALY, con transiciones y subtítulos. Usa las imágenes que ya tengas (image_urls, openaiFileIdRefs o image_url por escena) o las genera con IA (image_prompt; máx. 6 por llamada). Añade la voz si se pide.",
+    inputSchema: { type: "object", required: ["title"], additionalProperties: false, properties: {
+      image_urls: urls, openaiFileIdRefs: fileRefs,
       title: { type: "string", maxLength: 100 }, aspect: asp,
-      scenes: { type: "array", minItems: 1, maxItems: 12, items: { type: "object", additionalProperties: false, properties: {
-        narration: { type: "string" }, image_prompt: { type: "string", description: "Qué mostrar (en español). Si hay image_media_id no hace falta." },
+      scenes: { type: "array", minItems: 1, maxItems: 12, description: "Una por escena. Si se omite y se dan imágenes, se crea una escena por imagen.", items: { type: "object", additionalProperties: false, properties: {
+        narration: { type: "string" }, image_url: { type: "string", description: "Enlace https de una imagen ya existente." }, image_prompt: { type: "string", description: "Qué mostrar (en español). Si hay image_media_id no hace falta." },
         image_media_id: { type: "string" }, voice_media_id: { type: "string" }, on_screen_text: { type: "string" } } } },
       seconds_per_scene: { type: "number", minimum: 2.5, maximum: 30, description: "Segundos por escena cuando no hay voz. Por defecto 5." },
       voice: { type: "boolean", description: "Generar la narración con voz. Por defecto: sí si hay una API de voz disponible." },
@@ -97,7 +122,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: { type: "object", additionalProperties: false, properties: { type: { type: "string", enum: ["image", "audio"] }, limit: { type: "integer", minimum: 1, maximum: 100 } } } },
 ];
 
-export const INSTRUCTIONS = "FRAMALY Studio crea videos con IA. Flujo recomendado: 1) framaly_status para ver qué IAs hay; 2) framaly_write_script con el tema; 3) framaly_create_video_project con las escenas del guion; 4) el usuario abre FRAMALY, pulsa Actualizar y exporta el MP4. Cada llamada usa las claves y los topes de la cuenta del usuario.";
+export const INSTRUCTIONS = "FRAMALY Studio crea videos con IA. Flujo recomendado: 1) framaly_status para ver qué IAs hay; 2) framaly_write_script con el tema; 3) framaly_create_video_project con las escenas del guion (si el usuario ya tiene imágenes, pásalas con image_urls u openaiFileIdRefs y no se generan nuevas); 4) el usuario abre FRAMALY, pulsa Actualizar y exporta el MP4. Cada llamada usa las claves y los topes de la cuenta del usuario.";
 
 /** Especificación OpenAPI 3.1 (para las Acciones de un GPT personalizado y cualquier cliente REST) */
 /** Las Acciones de ChatGPT aceptan descripciones de hasta 300 caracteres */

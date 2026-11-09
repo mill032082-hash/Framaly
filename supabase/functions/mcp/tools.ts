@@ -1,6 +1,6 @@
 // FRAMALY Studio · herramientas del servidor MCP / API. Usan las claves y los topes de la cuenta del usuario.
 import { LABEL, PRICE, type Provider, checkBudget, db, getKey, logError, openaiImageEach, record, tokenCost, type Access } from "./budget.ts";
-import { mp3Duration, newId, openaiSize, parseJSON } from "./lib.ts";
+import { isPrivateHost, mp3Duration, newId, openaiSize, parseJSON, sniffImage } from "./lib.ts";
 
 export class ToolError extends Error {}
 export type Ctx = { client: ReturnType<typeof db>; uid: string; acc: Access };
@@ -119,6 +119,34 @@ async function voice(ctx: Ctx, o: { text: string; provider?: string; voice?: str
   return { bytes, mime: "audio/mpeg", duration: (bytes.length * 8) / 128000, provider: p };
 }
 
+/* ---------- descargar una imagen de un enlace (con protección contra redes internas) ---------- */
+const MAX_IMG = 8 * 1024 * 1024;
+async function download(url: string): Promise<{ bytes: Uint8Array; mime: string }> {
+  let u: URL;
+  try { u = new URL(url); } catch { throw new ToolError(`El enlace «${String(url).slice(0, 60)}» no es válido.`); }
+  for (let hop = 0; hop < 4; hop++) {
+    if (u.protocol !== "https:" || u.username || u.password || isPrivateHost(u.hostname)) throw new ToolError("Solo se aceptan enlaces https públicos.");
+    try {
+      const ips = [...(await Deno.resolveDns(u.hostname, "A")), ...(await Deno.resolveDns(u.hostname, "AAAA").catch(() => [] as string[]))];
+      if (ips.some((ip) => isPrivateHost(ip))) throw new ToolError("Ese enlace apunta a una red privada.");
+    } catch (e) { if (e instanceof ToolError) throw e; /* sin DNS disponible: basta con la revisión del nombre */ }
+    let r: Response;
+    try { r = await fetch(u, { redirect: "manual", signal: AbortSignal.timeout(15000), headers: { "user-agent": "FRAMALY-import/1.0" } }); } catch { throw new ToolError(`No pude descargar la imagen de ${u.hostname} (sin respuesta).`); }
+    if ([301, 302, 303, 307, 308].includes(r.status)) { const loc = r.headers.get("location"); if (!loc) throw new ToolError("El enlace redirige a ninguna parte."); u = new URL(loc, u); continue; }
+    if (!r.ok) throw new ToolError(`No pude descargar la imagen (${r.status}). Si el enlace es temporal, puede haber vencido.`);
+    if (Number(r.headers.get("content-length") ?? 0) > MAX_IMG) throw new ToolError("La imagen pesa más de 8 MB.");
+    const chunks: Uint8Array[] = []; let n = 0;
+    const rd = r.body?.getReader(); if (!rd) throw new ToolError("La descarga vino vacía.");
+    for (;;) { const { done, value } = await rd.read(); if (done) break; n += value.length; if (n > MAX_IMG) { await rd.cancel(); throw new ToolError("La imagen pesa más de 8 MB."); } chunks.push(value); }
+    const bytes = new Uint8Array(n); let o = 0; for (const c of chunks) { bytes.set(c, o); o += c.length; }
+    const mime = sniffImage(bytes); if (!mime) throw new ToolError("Ese enlace no es una imagen PNG, JPG, WEBP o GIF.");
+    return { bytes, mime };
+  }
+  throw new ToolError("El enlace redirige demasiadas veces.");
+}
+const refUrls = (refs: unknown): string[] => (Array.isArray(refs) ? refs : []).map((f: any) => String(f?.download_link ?? "")).filter(Boolean);
+const importUrl = async (ctx: Ctx, url: string, name: string, meta: Record<string, unknown> = {}) => { const d = await download(url); const m = await saveMedia(ctx, { type: "image", bytes: d.bytes, mime: d.mime, name, meta: { ...meta, imported: true } }); return m; };
+
 /* ---------- biblioteca ---------- */
 async function saveMedia(ctx: Ctx, o: { type: "image" | "audio"; bytes: Uint8Array; mime: string; name: string; meta?: Record<string, unknown>; duration?: number }) {
   const id = newId("m"), path = `${ctx.uid}/${id}`, now = Date.now();
@@ -177,6 +205,16 @@ Devuelve JSON: {"title":"título atractivo (máx. 70 caracteres)","scenes":[{"na
     return { media_id: m.id, url_temporal: m.url, ia_usada: r.provider, nota: "La imagen ya está en la biblioteca de FRAMALY." };
   },
 
+  async framaly_import_image(ctx, a) {
+    const urls = [...(a.image_urls ?? []), ...refUrls(a.openaiFileIdRefs)];
+    if (!urls.length) throw new ToolError("Pasa image_urls (enlaces https) o las imágenes de la conversación (openaiFileIdRefs).");
+    if (urls.length > 12) throw new ToolError("Máximo 12 imágenes por llamada.");
+    const out: unknown[] = [], fallos: string[] = [];
+    await pool(urls, 3, async (u, i) => { try { const m = await importUrl(ctx, u, `${a.name || "Imagen importada"} ${i + 1}`); out[i] = { media_id: m.id, url_temporal: m.url }; } catch (e) { fallos.push(`imagen ${i + 1}: ${(e as Error).message}`); } });
+    if (!out.filter(Boolean).length) throw new ToolError(fallos.join(" · "));
+    return { importadas: out.filter(Boolean), fallos, siguiente_paso: "Usa los media_id en framaly_create_video_project (image_media_id)." };
+  },
+
   async framaly_generate_voice(ctx, a) {
     const r = await voice(ctx, a);
     const m = await saveMedia(ctx, { type: "audio", bytes: r.bytes, mime: r.mime, name: a.name || a.text.slice(0, 48), meta: { text: a.text }, duration: r.duration });
@@ -195,16 +233,22 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
   },
 
   async framaly_create_video_project(ctx, a) {
-    const scenes: any[] = a.scenes, aspect = a.aspect ?? "16:9", style = a.style ? ". " + a.style : "";
-    const genImg = scenes.filter((s) => !s.image_media_id).length, wantVoice = a.voice ?? true;
+    const given = [...(a.image_urls ?? []), ...refUrls(a.openaiFileIdRefs)] as string[];
+    let scenes: any[] = Array.isArray(a.scenes) ? a.scenes.map((s: any) => ({ ...s })) : [];
+    if (!scenes.length) { if (!given.length) throw new ToolError("Pasa scenes o imágenes (image_urls / openaiFileIdRefs)."); scenes = given.slice(0, 12).map(() => ({ narration: "" })); }
+    let gi = 0;
+    for (const s of scenes) if (!s.image_media_id && !s.image_url && !String(s.image_prompt ?? "").trim() && gi < given.length) s.image_url = given[gi++];
+    const aspect = a.aspect ?? "16:9", style = a.style ? ". " + a.style : "";
+    const genImg = scenes.filter((s) => !s.image_media_id && !s.image_url).length, wantVoice = a.voice ?? true;
     const genVoice = wantVoice ? scenes.filter((s) => !s.voice_media_id && String(s.narration ?? "").trim()).length : 0;
-    if (scenes.some((s) => !s.image_media_id && !String(s.image_prompt ?? "").trim())) throw new ToolError("Cada escena necesita image_prompt o image_media_id.");
+    if (scenes.some((s) => !s.image_media_id && !s.image_url && !String(s.image_prompt ?? "").trim())) throw new ToolError("Cada escena necesita image_prompt, image_url o image_media_id (o pasa image_urls / openaiFileIdRefs).");
     if (genImg > 6 || genVoice > 6) throw new ToolError("Máximo 6 imágenes y 6 voces generadas por llamada. Genéralas antes con framaly_generate_image / framaly_generate_voice y pasa image_media_id / voice_media_id.");
     if (genVoice) await pick(ctx, ["openai", "elevenlabs"], a.voice_provider).catch((e) => { if (a.voice === true || a.voice_provider) throw e; scenes.forEach((s) => { if (!s.voice_media_id) s.__skipVoice = true; }); });
     const failures: string[] = [], created: string[] = [];
     const res = await pool(scenes, 3, async (s, i) => {
       try {
         let img = s.image_media_id ? await mediaRow(ctx, s.image_media_id, "image") : null;
+        if (!img && s.image_url) { const m = await importUrl(ctx, String(s.image_url), `${a.title.slice(0, 40)} · escena ${i + 1}`); created.push(m.id); img = { id: m.id, type: "image", duration: null, name: "" }; }
         if (!img) { const r = await image(ctx, { prompt: s.image_prompt + style, aspect, provider: a.image_provider }); const m = await saveMedia(ctx, { type: "image", bytes: r.bytes, mime: r.mime, name: `${a.title.slice(0, 40)} · escena ${i + 1}`, meta: { prompt: s.image_prompt } }); created.push(m.id); img = { id: m.id, type: "image", duration: null, name: "" }; }
         let vo: { id: string; duration: number } | null = null;
         if (s.voice_media_id) { const r = await mediaRow(ctx, s.voice_media_id, "audio"); vo = { id: r.id, duration: Number(r.duration ?? 0) }; }

@@ -73,7 +73,7 @@ FRAMALY incluye un servidor **MCP** y una **API REST** (función `mcp` de Supaba
 2. En FRAMALY → **Ajustes → Conectar con ChatGPT y otras IAs** crea una clave (`fmk_…`). Se guarda solo su huella (SHA-256); se muestra una única vez y se puede revocar.
 3. Direcciones: MCP `https://<proyecto>.supabase.co/functions/v1/mcp` · OpenAPI `…/mcp/openapi.json` · REST `…/mcp/api/<herramienta>`.
 4. ChatGPT (GPT personalizado → Acciones): importa la URL de OpenAPI y autentica con Bearer. Claude, Cursor, Claude Code y otros clientes MCP: dirección del servidor + cabecera `Authorization: Bearer fmk_…` (o `…/mcp/t/<clave>` si no permiten cabeceras).
-5. Herramientas: `framaly_status`, `framaly_write_script`, `framaly_generate_image`, `framaly_generate_voice`, `framaly_seo_metadata`, `framaly_create_video_project`, `framaly_list_projects`, `framaly_list_media`.
+5. Herramientas: `framaly_status`, `framaly_write_script`, `framaly_generate_image`, `framaly_import_image` (imágenes que ya existen, p. ej. las de ChatGPT, por enlace https o `openaiFileIdRefs`), `framaly_generate_voice`, `framaly_seo_metadata`, `framaly_create_video_project`, `framaly_list_projects`, `framaly_list_media`.
 6. Seguridad: cada llamada usa las claves compartidas y respeta los modos de IA, el tope diario y los límites mensuales de la cuenta dueña de la clave; máximo 30 llamadas por minuto por clave; todo queda registrado en «Uso reciente».
 7. Pruebas del servidor: `supabase/functions/mcp/test` (necesitan Node y esbuild; no requieren Deno).
 
