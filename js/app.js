@@ -174,7 +174,7 @@
       const d = await viewFn(r.id)(el);
       destroy = typeof d === 'function' ? d : null;
       // Instrucciones: tarjeta en las secciones normales, ventana la primera vez en editor/flujos
-      if (!r.full) F.helpCard(r.id, el.querySelector('.page'));
+      if (!r.full && typeof F.helpCard === 'function') F.helpCard(r.id, el.querySelector('.page'));
       else if (!localStorage.getItem('framaly.seenHelp.' + r.id) && localStorage.getItem('framaly.onboarded')) {
         localStorage.setItem('framaly.seenHelp.' + r.id, '1'); F.showHelp(r.id);
       }
