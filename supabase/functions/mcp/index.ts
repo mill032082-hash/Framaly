@@ -74,6 +74,8 @@ async function rpc(a: Auth, msg: any): Promise<unknown | null> {
       return rpcOk(id, { tools: TOOLS.filter((t) => a.scopes.includes(t.scope)).map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, ...(t.meta ? { _meta: t.meta } : {}), annotations: { readOnlyHint: t.scope === "read", openWorldHint: false } })) });
     case "tools/call": {
       const r = await runTool(a, String(msg.params?.name ?? ""), msg.params?.arguments);
+      const img = r.ok && r.value && typeof r.value === "object" ? (r.value as any).__image : null;
+      if (img) { const { __image, ...rest } = r.value as any; return rpcOk(id, { content: [{ type: "text", text: asText(rest) }, { type: "image", data: img.data, mimeType: img.mimeType }], isError: false }); }
       return rpcOk(id, { content: [{ type: "text", text: asText(r.value) }], isError: !r.ok });
     }
     case "resources/list": return rpcOk(id, { resources: [] });
@@ -111,6 +113,7 @@ Deno.serve(async (req: Request) => {
     if (rest) {
       const args = await req.json().catch(() => ({}));
       const r = await runTool(a, rest[1], args);
+      if (r.ok && r.value && typeof r.value === "object" && "__image" in (r.value as object)) { const { __image, ...meta } = r.value as any; r.value = meta; }
       return J(r.ok ? r.value : { error: { type: "tool_error", message: r.value } }, r.ok ? 200 : (String(r.value).startsWith("Demasiadas") ? 429 : 400));
     }
 

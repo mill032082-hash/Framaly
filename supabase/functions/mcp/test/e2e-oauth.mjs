@@ -53,7 +53,7 @@ let code = (await fake.rpc('test_decide', { id: req2, user: 'u_ana' })).data.cod
 r = await tokenReq({ grant_type: 'authorization_code', code, redirect_uri: REDIR, client_id: c.client_id, code_verifier: v2 }); j = await r.json();
 ok('canje de código por tokens', r.status === 200 && /^fmk_[0-9a-f]{48}$/.test(j.access_token) && /^fmr_[0-9a-f]{48}$/.test(j.refresh_token) && j.token_type === 'Bearer' && j.expires_in === 3600 && r.headers.get('cache-control') === 'no-store', j);
 const T1 = j.access_token, R1 = j.refresh_token;
-r = await mcp(T1); j = await r.json(); ok('el token de acceso abre el MCP (12 herramientas)', r.status === 200 && j.result.tools.length === 12, j);
+r = await mcp(T1); j = await r.json(); ok('el token de acceso abre el MCP (13 herramientas)', r.status === 200 && j.result.tools.length === 13, j);
 r = await mcp(T1, 'initialize'); ok('initialize con token OAuth', (await r.json()).result.serverInfo.name === 'framaly');
 r = await tokenReq({ grant_type: 'authorization_code', code, redirect_uri: REDIR, client_id: c.client_id, code_verifier: v2 }); j = await r.json();
 ok('un código usado no sirve otra vez', r.status === 400 && j.error === 'invalid_grant', j);

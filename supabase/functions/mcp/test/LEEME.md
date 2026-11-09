@@ -24,3 +24,8 @@ Los archivos de ejemplo (`a.png`, `voz1.wav`…) se generan con Python (ver la s
 ```bash
 node /tmp/mcpe2e/e2e-chatgpt-image.mjs   # 20 comprobaciones: image{download_url,file_id}, images[], openaiFileIdRefs, errores reales, list_media, image_media_id
 ```
+
+## Ver imágenes de la biblioteca (framaly_get_media)
+```bash
+node /tmp/mcpe2e/e2e-get-media.mjs   # imagen como contenido MCP, URL firmada, otra cuenta denegada, id inválido, sin archivo, >4 MB
+```

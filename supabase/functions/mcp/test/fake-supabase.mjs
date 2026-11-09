@@ -40,6 +40,7 @@ export const createClient = () => ({
   },
   storage: { from: (b) => ({
     upload: async (p, bytes, o) => { DB.storage[b + '/' + p] = { size: bytes.length, type: o?.contentType, bytes }; return { data: {}, error: null }; },
+    download: async (p) => { const o = DB.storage[b + '/' + p]; return o ? { data: new Blob([o.bytes]), error: null } : { data: null, error: { message: 'Object not found' } }; },
     createSignedUrl: async (p) => ({ data: { signedUrl: 'https://signed.example/' + p + '?t=1' }, error: null }),
   }) },
 });

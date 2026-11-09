@@ -1,6 +1,6 @@
 // FRAMALY Studio · piezas puras del servidor MCP / API (sin red ni base de datos: se pueden probar solas).
 
-export const VERSION = "1.6.1";
+export const VERSION = "1.7.0";
 
 /** Modo de ejecución de una conexión: external = FRAMALY no genera nada · no_openai = puede generar, pero OpenAI queda bloqueado · all = todo permitido */
 export type ExecMode = "external" | "no_openai" | "all";
@@ -195,6 +195,9 @@ export const TOOLS: ToolDef[] = [
   { name: "framaly_list_projects", title: "Listar proyectos", scope: "read",
     description: "Lista los proyectos de video de la cuenta (id, nombre, formato, clips, duración y fecha).",
     inputSchema: { type: "object", additionalProperties: false, properties: { limit: { type: "integer", minimum: 1, maximum: 50 } } } },
+  { name: "framaly_get_media", title: "Ver una imagen de la biblioteca", scope: "read",
+    description: "Devuelve la imagen de la biblioteca (media_id) para verla en la conversación, con su nombre, tipo, tamaño y un enlace temporal firmado (10 min). Solo ve archivos de tu cuenta. No genera nada ni gasta créditos.",
+    inputSchema: { type: "object", required: ["media_id"], additionalProperties: false, properties: { media_id: { type: "string", maxLength: 60, description: "Identificador (framaly_list_media)." } } } },
   { name: "framaly_list_media", title: "Listar biblioteca", scope: "read",
     description: "Lista imágenes y audios de la biblioteca (id, nombre, tipo, duración) para reutilizarlos como image_media_id / voice_media_id.",
     inputSchema: { type: "object", additionalProperties: false, properties: { type: { type: "string", enum: ["image", "audio"] }, limit: { type: "integer", minimum: 1, maximum: 100 } } } },

@@ -425,6 +425,28 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     return { proyectos: (data ?? []).map((r: any) => ({ id: r.id, nombre: r.data?.name, formato: r.data?.aspect, clips: r.data?.clips?.length ?? 0, duracion_segundos: Math.round((r.data?.clips ?? []).reduce((s: number, c: any) => s + Number(c.duration || 0), 0) * 10) / 10, actualizado: new Date(Number(r.updated)).toISOString() })) };
   },
 
+  /** Ver una imagen ya guardada: bytes reales desde Storage (bucket privado) + enlace firmado con caducidad. Solo del dueño de la clave. */
+  async framaly_get_media(ctx, a) {
+    const id = String(a.media_id).trim();
+    if (!/^[A-Za-z0-9_-]{4,60}$/.test(id)) throw new ToolError("media_id no válido. Usa un id de framaly_list_media.");
+    // la búsqueda exige que el archivo sea de ESTA cuenta: de otra persona responde igual que si no existiera
+    const { data: row } = await ctx.client.from("framaly_media").select("id,type,name,mime,size,created,duration").eq("user_id", ctx.uid).eq("id", id).eq("deleted", false).maybeSingle();
+    if (!row) throw new ToolError(`No encontré el archivo «${id}» en tu biblioteca (usa framaly_list_media).`);
+    const path = `${ctx.uid}/${row.id}`;
+    const dl = await ctx.client.storage.from(BUCKET).download(path);
+    if (dl.error || !dl.data) throw new ToolError(`El archivo «${id}» está en tu biblioteca pero no se encontró en el almacenamiento (${dl.error?.message ?? "sin datos"}).`);
+    const bytes = new Uint8Array(await dl.data.arrayBuffer());
+    const mime = row.type === "image" ? (sniffImage(bytes) ?? row.mime) : (sniffAudio(bytes) ?? row.mime);
+    const sig = await ctx.client.storage.from(BUCKET).createSignedUrl(path, 600);
+    const MAX_INLINE = 4 * 1024 * 1024;
+    const inline = row.type === "image" && !!sniffImage(bytes) && bytes.length <= MAX_INLINE;
+    let b = ""; if (inline) { const parts: string[] = []; for (let i = 0; i < bytes.length; i += 0x8000) parts.push(String.fromCharCode(...bytes.subarray(i, i + 0x8000))); b = btoa(parts.join("")); }
+    return { success: true, media: { id: row.id, type: row.type, name: row.name, mime_type: mime, size_bytes: bytes.length, created: row.created ? new Date(Number(row.created)).toISOString() : null, duration_seconds: row.duration ?? null },
+      signed_url: sig.data?.signedUrl ?? null, signed_url_expires_in_seconds: 600, image_returned_inline: inline, credits_consumed: 0,
+      note: inline ? "La imagen va adjunta en esta respuesta (contenido de imagen MCP)." : row.type === "image" ? "La imagen pesa más de 4 MB: no se adjunta; usa signed_url." : "Es un audio: usa signed_url.",
+      ...(inline ? { __image: { data: b, mimeType: mime } } : {}) };
+  },
+
   async framaly_list_media(ctx, a) {
     let q = ctx.client.from("framaly_media").select("id,type,name,source,duration,created,mime,size").eq("user_id", ctx.uid).eq("deleted", false).order("created", { ascending: false }).limit(a.limit ?? 30);
     if (a.type) q = q.eq("type", a.type);
