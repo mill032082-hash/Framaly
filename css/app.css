@@ -689,3 +689,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .flows.max .fl-split.l { display: none; }
 @media (max-width: 1250px) { .fl-split.l { display: none; } }
 @media (max-width: 1000px) { .fl-split { display: none; } }
+.fl-split .chevs { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.fl-split .chev { height: 30px; }
+.flows { transition: grid-template-columns .18s ease; }
+body.resizing .flows { transition: none; }

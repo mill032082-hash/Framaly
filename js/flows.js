@@ -461,14 +461,16 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     const f = root?.querySelector('.flows'); if (!f) return;
     if (panels.l != null) f.style.setProperty('--fl-l', panels.l + 'px'); else f.style.removeProperty('--fl-l');
     if (panels.r != null) f.style.setProperty('--fl-r', panels.r + 'px'); else f.style.removeProperty('--fl-r');
-    const bl = root.querySelector('#flSplL .chev'), br = root.querySelector('#flSplR .chev');
-    if (bl) { bl.innerHTML = I(curL() > 0 ? 'chevL' : 'chevR'); bl.title = curL() > 0 ? 'Ocultar la lista de plantillas' : 'Mostrar la lista de plantillas'; }
-    if (br) { br.innerHTML = I(curR() > 0 ? 'chevR' : 'chevL'); br.title = curR() > 0 ? 'Ocultar el panel de ajustes (más espacio para la pizarra)' : 'Mostrar el panel de ajustes'; }
     setTimeout(renderEdges, 30);
   }
-  function togglePanel(side) {
-    if (side === 'l') { const c = curL(); if (c > 0) { panels.lastL = c; panels.l = 0; } else panels.l = panels.lastL >= 180 ? panels.lastL : 230; }
-    else { const c = curR(); if (c > 0) { panels.lastR = c; panels.r = 0; } else panels.r = panels.lastR >= 180 ? panels.lastR : 320; }
+  /** Cada pulsación mueve el borde un poquito (60 px) hacia la izquierda (-1) o la derecha (+1) */
+  function stepPanel(side, dir) {
+    const STEP = 60, max = side === 'l' ? 420 : 560, cur = side === 'l' ? curL() : curR();
+    const dw = side === 'l' ? dir * STEP : -dir * STEP;
+    let w = cur + dw;
+    if (cur === 0 && dw > 0) w = 140;            // al reabrir, ya aparece con un ancho usable
+    w = Math.min(max, Math.max(0, w)); if (w < 70) w = 0;
+    panels[side] = w; if (w >= 180) panels[side === 'l' ? 'lastL' : 'lastR'] = w;
     savePanels(); applyPanels();
   }
   function dragPanel(side, e) {
@@ -573,7 +575,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
           <div class="fl-area" id="fla"><svg class="edges" id="edges"></svg></div>
         </div>
         <aside class="fl-insp" id="fli"></aside>
-        <div class="fl-split l" id="flSplL" title="Arrastra para cambiar el ancho"><button class="chev"></button></div><div class="fl-split r" id="flSplR" title="Arrastra para cambiar el ancho"><button class="chev"></button></div>
+        <div class="fl-split l" id="flSplL" title="Arrastra para cambiar el ancho"><div class="chevs"><button class="chev" data-dir="-1" title="Mover el borde a la izquierda, poco a poco">${I('chevL')}</button><button class="chev" data-dir="1" title="Mover el borde a la derecha, poco a poco">${I('chevR')}</button></div></div><div class="fl-split r" id="flSplR" title="Arrastra para cambiar el ancho"><div class="chevs"><button class="chev" data-dir="-1" title="Mover el borde a la izquierda, poco a poco">${I('chevL')}</button><button class="chev" data-dir="1" title="Mover el borde a la derecha, poco a poco">${I('chevR')}</button></div></div>
         <div class="fl-log"><div class="row"><b class="small">Registro de ejecución</b><span class="grow"></span><span id="flCost" class="muted small"></span><button class="btn sm ghost" id="flClear">Limpiar</button></div><div class="logbox" id="flLog"></div></div>
       </div>`;
       el.querySelector('#flName').value = flow.name;
@@ -597,7 +599,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       for (const side of ['l', 'r']) {
         const h = el.querySelector(side === 'l' ? '#flSplL' : '#flSplR');
         h.addEventListener('pointerdown', (e) => { if (e.target.closest('.chev')) return; e.preventDefault(); dragPanel(side, e); });
-        h.querySelector('.chev').addEventListener('click', () => togglePanel(side));
+        h.querySelectorAll('.chev').forEach((bt) => bt.addEventListener('click', () => stepPanel(side, +bt.dataset.dir)));
       }
       el.querySelector('#flHelp').onclick = openGuide;
       el.querySelector('#flAutoGo').onclick = async () => { const t = el.querySelector('#flAutoTopic').value; if (!t.trim()) { el.querySelector('#flAutoTopic').focus(); return F.toast('Escribe primero de qué trata tu video'); } await F.auto.run({ topic: t, aspect: flow.cfg.idea.aspect, duration: flow.cfg.idea.duration }); };
