@@ -37,7 +37,7 @@
   };
 
   /* pestañas del panel izquierdo: archivos y herramientas para editar */
-  const TABS = [['image', 'Imágenes'], ['audio', 'Audio'], ['motion', 'Animaciones'], ['fx', 'Efectos'], ['trans', 'Transiciones'], ['text', 'Texto'], ['more', 'Más']];
+  const TABS = [['image', 'Imágenes'], ['audio', 'Audio'], ['motion', 'Animaciones'], ['fx', 'Efectos'], ['trans', 'Transiciones'], ['text', 'Texto'], ['golden', 'Golden'], ['more', 'Más']];
   const GLYPH = { none: '■', kenburns: '⤢', zoomIn: '⊕', zoomOut: '⊖', panL: '←', panR: '→', panU: '↑', panD: '↓', fade: '◐', black: '●', flash: '✦', slideL: '⇠', slideR: '⇢', slideU: '⇡', zoom: '⌖', wipe: '▌', circle: '◯', blur: '≋', spin: '↻', blinds: '☰', glitch: '▚' };
 
   function tpl() {
@@ -116,6 +116,9 @@
   function updUndo() { if (!root) return; q('#bUndo').disabled = !E.undo.length; q('#bRedo').disabled = !E.redo.length; }
   function after(o = {}) { E.t = F.clamp(E.t, 0, total()); saveSoon(); renderTimeline(); draw(); updateTime(); if (o.insp) renderInspector(); }
 
+  /* API interna para el módulo Golden */
+  E.api = { commit, after, total, save: () => p && F.projects.save(p), renderBin: () => renderBin(), setAspect: () => sizeCanvas() };
+
   /* ---------- biblioteca lateral ---------- */
   function renderBin() {
     const bin = q('#bin'); if (!bin) return;
@@ -133,6 +136,7 @@
 
   /* ---------- herramientas: animaciones, efectos, transiciones, texto y más ---------- */
   function renderTools(bin) {
+    if (E.binTab === 'golden' && F.golden) return F.golden.panel(bin, E);
     const c = E.selType === 'clip' ? clipById(E.sel) : null, i = c ? p.clips.indexOf(c) : -1, tab = E.binTab;
     const cur = (k) => (c ? c[k] : null);
     const item = (k, o, glyph, extra = '') => `<button class="pre-item ${cur(k) === o.id ? 'on' : ''}" data-pre="${k}:${o.id}" title="${F.esc(o.name)}">${extra || `<span class="g">${glyph}</span>`}<span class="n">${F.esc(o.name)}</span></button>`;

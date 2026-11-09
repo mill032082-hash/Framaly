@@ -32,6 +32,16 @@ Cada sección tiene instrucciones paso a paso arriba y en el botón **Instruccio
 - **Texto → Animación «Palabra por palabra»**: subtítulos en mayúsculas, máximo 3 palabras a la vez, repartidos en la duración del clip.
 - **Proyecto → «Bajar la música cuando habla la voz»**: baja la música 12 dB mientras suena la narración (también en el MP4 exportado).
 
+## Método Golden en el editor (sin IA, todo local)
+En el editor, pestaña **Golden** del panel izquierdo. Funciona en el navegador, sin Claude ni claves de API. Sigue la ley de orden: **Cortar → Subtitular → Ilustrar → Sonorizar**.
+- **Intake:** destino (anuncio 9:16 / YouTube / reel), producto, **claims prohibidos y permitidos** y duración objetivo.
+- **Quitar silencios de la voz:** analiza el audio, adapta el umbral al ruido de fondo, deja 200 ms de aire y no toca el inicio ni el final de las palabras. Crea una voz nueva en la biblioteca y conserva la original.
+- **Multicámara:** alterna encuadres (general, punch-in 113 %, tope 125 %). **Ajustar a duración objetivo.**
+- **Subtítulos:** pega el guion como se grabó y se reparte por clip, máx. 3 palabras en pantalla. **Limpiar textos** quita ¿ y ¡.
+- **Revisión Golden:** claims prohibidos, CTA en inglés, signos de apertura, gancho en 3 s, prueba del sonido apagado, formato y duración, ritmo y ducking, más el **reporte de cortes** (en qué segundo quedó cada clip y qué silencios se quitaron).
+- **Guía:** el método completo, dentro de la app.
+Lo que la herramienta no decide: qué se dice, dónde va el silencio que incomoda y si la pieza merece existir.
+
 ## Cuentas y base de datos (Supabase)
 La plataforma trae **inicio de sesión y base de datos integrados**. Las personas que la usen solo ven una pantalla de «Inicia sesión» (correo y contraseña); no configuran nada. Sus proyectos y su biblioteca se guardan en su cuenta y aparecen en cualquier dispositivo (PC, celular).
 
