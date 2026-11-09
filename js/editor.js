@@ -36,11 +36,15 @@
     };
   };
 
+  /* pestañas del panel izquierdo: archivos y herramientas para editar */
+  const TABS = [['image', 'Imágenes'], ['audio', 'Audio'], ['motion', 'Animaciones'], ['fx', 'Efectos'], ['trans', 'Transiciones'], ['text', 'Texto'], ['more', 'Más']];
+  const GLYPH = { none: '■', kenburns: '⤢', zoomIn: '⊕', zoomOut: '⊖', panL: '←', panR: '→', panU: '↑', panD: '↓', fade: '◐', black: '●', flash: '✦', slideL: '⇠', slideR: '⇢', slideU: '⇡', zoom: '⌖', wipe: '▌', circle: '◯', blur: '≋', spin: '↻', blinds: '☰', glitch: '▚' };
+
   function tpl() {
     return `
 <div class="editor">
   <aside class="panel ed-bin">
-    <div class="panel-h"><div class="seg" id="binTabs"><button data-t="image" class="${E.binTab === 'image' ? 'on' : ''}">Imágenes</button><button data-t="audio" class="${E.binTab === 'audio' ? 'on' : ''}">Audio</button></div><span class="grow"></span><button class="icon-btn" id="binUp" title="Subir archivos">${I('upload')}</button></div>
+    <div class="panel-h"><div class="seg" id="binTabs">${TABS.map(([k, n]) => `<button data-t="${k}" class="${E.binTab === k ? 'on' : ''}">${n}</button>`).join('')}</div><span class="grow"></span><button class="icon-btn" id="binUp" title="Subir archivos">${I('upload')}</button></div>
     <div class="bin-grid" id="bin"></div>
     <div class="bin-foot">Arrastra al timeline o pulsa <b>+</b><br><a href="#/imagenes">Generar imágenes</a> · <a href="#/voces">Crear voces</a></div>
   </aside>
@@ -114,6 +118,8 @@
   /* ---------- biblioteca lateral ---------- */
   function renderBin() {
     const bin = q('#bin'); if (!bin) return;
+    const up = q('#binUp'); if (up) up.style.display = ['image', 'audio'].includes(E.binTab) ? '' : 'none';
+    if (!['image', 'audio'].includes(E.binTab)) return renderTools(bin);
     const list = E.binTab === 'image' ? F.media.images() : F.media.audios();
     if (!list.length) {
       bin.innerHTML = `<div class="empty" style="grid-column:span 2;padding:24px 10px">${I(E.binTab === 'image' ? 'image' : 'music')}<p class="small">Sin ${E.binTab === 'image' ? 'imágenes' : 'audios'} todavía</p><button class="btn sm" data-up>${I('upload')} Subir</button></div>`;
@@ -122,6 +128,48 @@
     bin.innerHTML = list.map((m) => m.type === 'image'
       ? `<div class="bin-item" draggable="true" data-m="${m.id}" title="${F.esc(m.name)}" style="background-image:url('${F.media.url(m)}')"><button class="add" data-add="${m.id}" title="Añadir al final">${I('plus')}</button></div>`
       : `<div class="bin-item aud" draggable="true" data-m="${m.id}" title="${F.esc(m.name)}">${I(m.source === 'ai' ? 'mic' : 'music')}<span>${F.esc(m.name)}<br><small>${F.fmtS(m.duration)}</small></span><button class="add" data-add="${m.id}" title="Añadir">${I('plus')}</button></div>`).join('');
+  }
+
+  /* ---------- herramientas: animaciones, efectos, transiciones, texto y más ---------- */
+  function renderTools(bin) {
+    const c = E.selType === 'clip' ? clipById(E.sel) : null, i = c ? p.clips.indexOf(c) : -1, tab = E.binTab;
+    const cur = (k) => (c ? c[k] : null);
+    const item = (k, o, glyph, extra = '') => `<button class="pre-item ${cur(k) === o.id ? 'on' : ''}" data-pre="${k}:${o.id}" title="${F.esc(o.name)}">${extra || `<span class="g">${glyph}</span>`}<span class="n">${F.esc(o.name)}</span></button>`;
+    const head = `<div class="pre-head"><span class="small ${c ? '' : 'muted'}">${c ? `Se aplica al <b>clip ${i + 1}</b>` : 'Selecciona un clip en la línea de tiempo'}</span><label class="check"><input type="checkbox" id="preAll" ${E.applyAll ? 'checked' : ''}> A todos los clips</label></div>`;
+    let body = '';
+    if (tab === 'motion') body = R.MOTIONS.map((o) => item('motion', o, GLYPH[o.id] || '•')).join('');
+    else if (tab === 'trans') body = R.TRANSITIONS.map((o) => item('transition', o, GLYPH[o.id] || '•')).join('');
+    else if (tab === 'fx') {
+      const m = c ? F.media.byId(c.mediaId) : F.media.images()[0], bg = m ? `background-image:url('${F.media.url(m)}')` : 'background:linear-gradient(135deg,#f59e0b,#7c3aed)';
+      body = R.filters().map((o) => item('filter', o, '', `<span class="fxp" style="${bg};filter:${o.css === 'none' ? 'none' : o.css}"></span>`)).join('');
+    } else if (tab === 'text') {
+      body = `<div class="pre-sub">Estilo del texto</div>${R.TEXT_STYLES.map((o) => item('textStyle', o, 'Aa')).join('')}<div class="pre-sub">Animación del texto</div>${R.TEXT_ANIMS.map((o) => item('textAnim', o, '✦')).join('')}
+        <button class="btn sm primary" data-pre="text:add" style="grid-column:1/-1">${I('type')} Añadir texto al clip</button>`;
+    } else {
+      body = `<div class="pre-sub">Sobre todo el video</div>
+        <label class="check" style="grid-column:1/-1"><input type="checkbox" data-proj="letterbox" ${p.letterbox ? 'checked' : ''}> Barras de cine</label>
+        <label class="check" style="grid-column:1/-1"><input type="checkbox" data-proj="progressBar" ${p.progressBar ? 'checked' : ''}> Barra de progreso naranja</label>
+        <label class="lbl" style="grid-column:1/-1">Marca de agua / nombre del canal</label><input type="text" data-proj="watermark" value="${F.esc(p.watermark || '')}" placeholder="@TuCanal" style="grid-column:1/-1">
+        <div class="pre-sub">Más herramientas</div>
+        <a class="btn sm" href="#/efectos" style="grid-column:1/-1">${I('wand')} Crear un filtro propio</a>
+        <a class="btn sm" href="#/imagenes" style="grid-column:1/-1">${I('image')} Generar imágenes con IA</a>
+        <a class="btn sm" href="#/voces" style="grid-column:1/-1">${I('mic')} Crear una voz</a>`;
+    }
+    bin.innerHTML = (tab === 'more' ? '' : head) + body;
+  }
+  const PRE_NAME = { motion: 'Animación', transition: 'Transición', filter: 'Efecto', textStyle: 'Estilo de texto', textAnim: 'Animación de texto' };
+  function applyPreset(k, v) {
+    const c = E.selType === 'clip' ? clipById(E.sel) : null, targets = E.applyAll ? p.clips : c ? [c] : [];
+    if (!targets.length) return F.toast('Selecciona un clip en la línea de tiempo o marca «A todos los clips»');
+    commit();
+    targets.forEach((t) => {
+      if (k === 'text') { if (!t.text) t.text = 'Tu texto aquí'; return; }
+      t[k] = v;
+      if (k === 'motion' && v !== 'none' && !t.motionAmt) t.motionAmt = 0.15;
+      if (k === 'transition' && v !== 'none' && !t.transDur) t.transDur = 0.8;
+    });
+    after({ insp: true }); renderBin();
+    F.toast(k === 'text' ? 'Texto añadido: edítalo a la derecha' : `${PRE_NAME[k]} aplicada${targets.length > 1 ? ` a ${targets.length} clips` : ''}`, 'ok', 1500);
   }
 
   function addMedia(id, index, kind, start) {
@@ -233,7 +281,7 @@
   /* ---------- selección e inspector ---------- */
   function select(type, id, render = true) {
     E.selType = id ? type : null; E.sel = id || null;
-    if (render) { renderTimeline(); renderInspector(); }
+    if (render) { renderTimeline(); renderInspector(); if (!['image', 'audio'].includes(E.binTab)) renderBin(); }
   }
   const sec = (t, inner, all) => `<div class="insp-sec"><div class="t">${t}${all ? `<button class="applyall" data-all="${all}">Aplicar a todos</button>` : ''}</div>${inner}</div>`;
   const rangeTxt = (k, v) => k === 'motionAmt' ? Math.round(v * 100) + '%' : k === 'transDur' ? (+v).toFixed(1) + 's' : k === 'volume' ? Math.round(v * 100) + '%' : v;
@@ -328,6 +376,13 @@
     q('#bAddAud').onclick = async () => { const f = await F.pickFiles('audio/*'); if (!f.length) return; const added = await F.media.addFiles(f); added.forEach((m) => addMedia(m.id, null, 'musica', 0)); };
     const bin = q('#bin');
     bin.addEventListener('click', (e) => { const a = e.target.closest('[data-add]'); if (a) addMedia(a.dataset.add); if (e.target.closest('[data-up]')) upload(false); });
+    bin.addEventListener('click', (e) => { const b = e.target.closest('[data-pre]'); if (b) { const [k, v] = b.dataset.pre.split(':'); applyPreset(k, v); } });
+    bin.addEventListener('change', (e) => {
+      const t = e.target;
+      if (t.id === 'preAll') { E.applyAll = t.checked; return; }
+      const k = t.dataset.proj; if (!k) return;
+      commit(); p[k] = t.type === 'checkbox' ? t.checked : t.value.trim(); after({ insp: true });
+    });
     bin.addEventListener('dblclick', (e) => { const a = e.target.closest('[data-m]'); if (a) addMedia(a.dataset.m); });
     bin.addEventListener('dragstart', (e) => { const a = e.target.closest('[data-m]'); if (!a) return; e.dataTransfer.setData('text/media', a.dataset.m); e.dataTransfer.effectAllowed = 'copy'; });
 

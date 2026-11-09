@@ -635,3 +635,15 @@ body.has-ask #toasts { bottom: 82px; }
 }
 .catbar { margin: 0 0 6px; flex-wrap: wrap; }
 .catbar button { white-space: nowrap; }
+.ed-bin #binTabs { flex-wrap: wrap; gap: 4px; }
+.ed-bin #binTabs button { white-space: nowrap; padding: 5px 9px; font-size: 12px; }
+.pre-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 2px 2px 6px; }
+.pre-sub { grid-column: 1 / -1; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; margin-top: 6px; }
+.pre-item { position: relative; min-height: 78px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--bg2); color: var(--text); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 6px; font: 500 11px var(--font); transition: .15s; }
+.pre-item:hover { border-color: var(--or-line); background: var(--panel3); }
+.pre-item.on { border-color: var(--or); background: var(--or-soft); color: var(--or2); }
+.pre-item .g { font-size: 22px; line-height: 1; }
+.pre-item .n { text-align: center; line-height: 1.2; }
+.pre-item .fxp { position: absolute; inset: 0; background-size: cover; background-position: center; }
+.pre-item .fxp + .n { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, .62); color: #fff; padding: 3px 4px; }
+.pre-item.on .fxp + .n { background: var(--or); }
