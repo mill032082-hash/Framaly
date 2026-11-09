@@ -242,6 +242,52 @@
   G.multicamQuiet = (p) => p.clips.forEach((c, i) => { const k = i % 3; if (k === 0) { c.motion = 'none'; c.motionAmt = 0.15; } else if (k === 1) { c.motion = 'zoomIn'; c.motionAmt = 0.13; } else { c.motion = i % 2 ? 'panL' : 'panR'; c.motionAmt = 0.25; } });
   G.cleanQuiet = (p) => p.clips.forEach((c) => (c.text = G.cleanText(c.text)));
 
+
+  /* =========================================================
+     BIBLIOTECA DE PRODUCTOS (claims) y ESTILOS POR CLIENTE (Paso 6)
+     Se guardan en este dispositivo, junto a los ajustes de la app.
+     ========================================================= */
+  const prods = () => (F.settings.goldenProducts ||= []);
+  const styles = () => (F.settings.goldenStyles ||= []);
+  G.saveProduct = async (E) => {
+    const g = gd(E.p); let name = g.producto.trim();
+    if (!name) { name = await F.prompt('Nombre del producto', '', 'Para reutilizar sus claims en otros videos'); if (!name) return; g.producto = name; }
+    if (!terms(g.claimsNo).length && !terms(g.claimsOk).length) return F.toast('Escribe primero los claims prohibidos o permitidos del producto');
+    const ex = prods().find((x) => norm(x.name) === norm(name)), data = { name, claimsNo: g.claimsNo, claimsOk: g.claimsOk };
+    if (ex) Object.assign(ex, data); else prods().push({ id: F.uid(), ...data });
+    F.saveSettings(); E.api.save(); F.toast(`Producto «${name}» guardado con sus claims`, 'ok');
+  };
+  G.loadProduct = (E, id) => {
+    const x = prods().find((y) => y.id === id), g = gd(E.p); if (!x) return;
+    g.producto = x.name; g.claimsNo = x.claimsNo; g.claimsOk = x.claimsOk; E.api.save(); E.api.renderBin();
+    F.toast(`Claims de «${x.name}» cargados`, 'ok', 1800);
+  };
+  G.delProduct = (id) => { F.settings.goldenProducts = prods().filter((x) => x.id !== id); F.saveSettings(); };
+
+  /** Foto del estilo actual: lo que se repite en el proyecto (look, texto, transición, encuadres, extras) */
+  G.captureStyle = (p) => {
+    const c = p.clips[0] || {}, mot = new Set(p.clips.map((x) => x.motion));
+    return { filter: c.filter || 'none', transition: c.transition || 'none', transDur: c.transDur || 0.8, fit: c.fit || 'cover', textStyle: c.textStyle || 'subtitulo', textAnim: c.textAnim || 'words', textColor: c.textColor || '#ffffff',
+      multicam: mot.size >= 3, motion: c.motion || 'none', motionAmt: c.motionAmt ?? 0.15, letterbox: !!p.letterbox, progressBar: !!p.progressBar, watermark: p.watermark || '', duck: !!p.duck };
+  };
+  G.saveStyle = async (E) => {
+    if (!E.p.clips.length) return F.toast('Termina primero un video con el estilo que te gusta');
+    const name = await F.prompt('Nombre del estilo', '', 'Por ejemplo el nombre del cliente. La próxima vez es un solo clic.'); if (!name) return;
+    const s = G.captureStyle(E.p), ex = styles().find((x) => norm(x.name) === norm(name));
+    if (ex) ex.style = s; else styles().push({ id: F.uid(), name, style: s });
+    F.saveSettings(); E.api.renderBin(); F.toast(`Estilo «${name}» guardado`, 'ok');
+  };
+  G.applyStyle = (E, id) => {
+    const x = styles().find((y) => y.id === id), p = E.p; if (!x) return F.toast('Elige un estilo guardado');
+    if (!p.clips.length) return F.toast('Añade imágenes al timeline');
+    const s = x.style; E.api.commit();
+    p.clips.forEach((c) => { Object.assign(c, { filter: s.filter, transition: s.transition, transDur: s.transDur, fit: s.fit, textStyle: s.textStyle, textAnim: s.textAnim, textColor: s.textColor }); if (!s.multicam) { c.motion = s.motion; c.motionAmt = s.motionAmt; } });
+    if (s.multicam) G.multicamQuiet(p);
+    p.letterbox = s.letterbox; p.progressBar = s.progressBar; p.duck = s.duck; if (s.watermark) p.watermark = s.watermark;
+    E.api.after({ insp: true }); E.api.renderBin(); F.toast(`Estilo «${x.name}» aplicado`, 'ok');
+  };
+  G.delStyle = (id) => { F.settings.goldenStyles = styles().filter((x) => x.id !== id); F.saveSettings(); };
+
   /** Multicámara con una sola imagen: alterna encuadres (general, punch-in 113 %, punch-in 125 % tope). */
   G.multicam = (E) => {
     const p = E.p; if (!p.clips.length) return F.toast('Añade imágenes al timeline');
@@ -383,9 +429,11 @@
       <button class="btn primary auto-btn" data-g="auto">${I('wand')} Editar automático<small>Corta, subtitula, da ritmo y revisa con un clic</small></button>
       <div class="small muted" style="text-align:center">o hazlo a mano, paso a paso:</div>
       <div class="row" style="gap:6px;margin-bottom:8px"><button class="btn sm primary" data-g="review" style="flex:1">${I('check')} Revisión Golden</button><button class="btn sm" data-g="guide" title="Reglas y método">${I('eye')} Guía</button></div>
-      ${step('0', 'Intake', `<label class="lbl">Destino</label><select data-gf="destino">${Object.entries(DESTINOS).map(([k, v]) => `<option value="${k}" ${g.destino === k ? 'selected' : ''}>${v.n}</option>`).join('')}</select>
+      ${step('0', 'Intake', `<label class="lbl">Productos guardados</label><div class="row" style="gap:6px"><select data-gf="prodPick" id="gProd" style="flex:1"><option value="">— elegir producto —</option>${prods().map((x) => `<option value="${x.id}">${F.esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-g="prodDel" title="Borrar el producto elegido">${I('trash')}</button></div>
+        <label class="lbl">Destino</label><select data-gf="destino">${Object.entries(DESTINOS).map(([k, v]) => `<option value="${k}" ${g.destino === k ? 'selected' : ''}>${v.n}</option>`).join('')}</select>
         <label class="lbl">Producto</label><input type="text" data-gf="producto" value="${F.esc(g.producto)}" placeholder="Nombre del producto">
         <label class="lbl">Claims prohibidos (uno por línea)</label><textarea rows="3" data-gf="claimsNo" placeholder="Ej: cura, garantizado, elimina la calvicie">${F.esc(g.claimsNo)}</textarea>
+        <button class="btn sm" data-g="prodSave">${I('save')} Guardar producto y sus claims</button>
         <label class="lbl">Claims permitidos</label><textarea rows="2" data-gf="claimsOk" placeholder="Lo que sí se puede decir">${F.esc(g.claimsOk)}</textarea>
         <label class="lbl">Duración objetivo (s)</label><input type="number" min="0" step="1" data-gf="target" value="${g.target || ''}">`)}
       ${step('1', 'Cortar', `<label class="lbl">Motor de transcripción</label><select data-gf="engine" id="gEng"><option value="local">Local en el navegador (gratis, sin claves)</option><option value="openai">Whisper de OpenAI (clave propia)</option></select>
@@ -400,6 +448,10 @@
         <button class="btn sm" data-g="clean">${I('wand')} Limpiar textos (sin ¿ ¡)</button>`)}
       ${step('3', 'Ilustrar', `<div class="small muted" style="line-height:1.5">Pon una imagen cada vez que el guion NOMBRE algo: objeto sobre fondo negro, no stock, menos de 1 s. Usa el producto real, nunca redibujado. Arrastra la imagen al timeline y divide con <kbd>S</kbd>.</div>`)}
       ${step('4', 'Sonorizar', `<label class="check"><input type="checkbox" data-gf="duck" ${p.duck ? 'checked' : ''}> Bajar la música 12 dB cuando habla la voz</label><div class="small muted">Los efectos van desacoplados del corte.</div>`)}
+      ${step('6', 'Empaquetar el estilo', `<div class="small muted">Cuando el resultado te guste, guárdalo con el nombre del cliente. La próxima vez, un clic.</div>
+        <button class="btn sm" data-g="styleSave">${I('save')} Guardar el estilo de este video</button>
+        <div class="row" style="gap:6px"><select id="gStyle" style="flex:1"><option value="">— estilos guardados —</option>${styles().map((x) => `<option value="${x.id}">${F.esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-g="styleDel" title="Borrar el estilo elegido">${I('trash')}</button></div>
+        <button class="btn sm primary" data-g="styleApply">${I('wand')} Aplicar el estilo elegido</button>`)}
     </div>`;
     G.afterPanel(bin); G.bind(bin, E);
   };
@@ -412,6 +464,7 @@
       const p = E.p, g = gd(p);
       if (f === 'minSil') return void (G.minSil = +e.target.value);
       if (f === 'engine') return void F.transcribe.setEngine(e.target.value);
+      if (f === 'prodPick') return void (e.target.value && G.loadProduct(E, e.target.value));
       if (f === 'duck') { E.api.commit(); p.duck = e.target.checked; E.api.after({ insp: true }); return; }
       g[f] = f === 'target' ? +e.target.value || 0 : e.target.value;
       if (f === 'destino') {
@@ -422,7 +475,13 @@
     });
     bin.addEventListener('click', (e) => {
       const b = e.target.closest('[data-g]'); if (!b || !E.p) return; const a = b.dataset.g, p = E.p, g = gd(p);
+      const sel = (id) => bin.querySelector(id)?.value || '';
       if (a === 'auto') G.auto(E);
+      else if (a === 'prodSave') G.saveProduct(E).then(() => E.api.renderBin());
+      else if (a === 'prodDel') { const v = sel('#gProd'); if (!v) return F.toast('Elige un producto guardado'); G.delProduct(v); E.api.renderBin(); }
+      else if (a === 'styleSave') G.saveStyle(E);
+      else if (a === 'styleApply') G.applyStyle(E, sel('#gStyle'));
+      else if (a === 'styleDel') { const v = sel('#gStyle'); if (!v) return F.toast('Elige un estilo guardado'); G.delStyle(v); E.api.renderBin(); }
       else if (a === 'review') G.openReview(E);
       else if (a === 'guide') G.openGuide();
       else if (a === 'silence') { const v = E.selType === 'audio' ? E.sel : p.audio.find((x) => x.kind !== 'musica')?.id; b.disabled = true; G.cleanSilence(E, v, G.minSil || 0.6).catch((er) => F.toast('No se pudo analizar el audio: ' + er.message, 'error')).finally(() => (b.disabled = false)); }

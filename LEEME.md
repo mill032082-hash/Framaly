@@ -46,6 +46,9 @@ En el editor, pestaña **Golden** del panel izquierdo. Funciona en el navegador,
 - **Multicámara:** alterna encuadres (general, punch-in 113 %, tope 125 %). **Ajustar a duración objetivo.**
 - **Subtítulos:** pega el guion como se grabó y se reparte por clip, máx. 3 palabras en pantalla. **Limpiar textos** quita ¿ y ¡.
 - **Revisión Golden:** claims prohibidos, CTA en inglés, signos de apertura, gancho en 3 s, prueba del sonido apagado, formato y duración, ritmo y ducking, más el **reporte de cortes** (en qué segundo quedó cada clip y qué silencios se quitaron).
+- **Productos guardados:** guarda el nombre y los claims prohibidos y permitidos de un producto y cárgalos en cualquier video con un clic (así nunca se edita a ciegas).
+- **Empaquetar el estilo:** cuando un video te guste, guarda su estilo (filtro, transición, texto, encuadres, barras, marca de agua y ducking) con el nombre del cliente y aplícalo a otros videos en un clic.
+- Productos y estilos se guardan en este dispositivo, junto a los ajustes de la app.
 - **Guía:** el método completo, dentro de la app.
 Lo que la herramienta no decide: qué se dice, dónde va el silencio que incomoda y si la pieza merece existir.
 
