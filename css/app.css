@@ -693,3 +693,4 @@ body.resizing { cursor: col-resize; user-select: none; }
 .fl-split .chev { height: 30px; }
 .flows { transition: grid-template-columns .18s ease; }
 body.resizing .flows { transition: none; }
+.codebox { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--bg2); border: 1px solid var(--line2); color: var(--text); font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; user-select: all; }

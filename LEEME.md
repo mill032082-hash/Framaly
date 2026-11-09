@@ -65,6 +65,18 @@ Las claves de Claude, OpenAI y ElevenLabs pueden vivir **en el servidor** (Supab
 - **Integraciones API:** por API ves lo gastado, el límite mensual y el aviso (80/90/100 %), y el consumo por persona.
 - **Campanita:** avisos de límites y topes. Los montos son estimados; los precios se ajustan en `budget.ts`.
 
+## Conectar con ChatGPT, Claude y otros agentes (MCP + API)
+
+FRAMALY incluye un servidor **MCP** y una **API REST** (función `mcp` de Supabase) para que otra IA cree videos por ti.
+
+1. Ejecuta `supabase/api_tokens.sql` en el SQL Editor y despliega `supabase/functions/mcp` (**sin** verificar JWT: la función se autentica sola con la clave de conexión).
+2. En FRAMALY → **Ajustes → Conectar con ChatGPT y otras IAs** crea una clave (`fmk_…`). Se guarda solo su huella (SHA-256); se muestra una única vez y se puede revocar.
+3. Direcciones: MCP `https://<proyecto>.supabase.co/functions/v1/mcp` · OpenAPI `…/mcp/openapi.json` · REST `…/mcp/api/<herramienta>`.
+4. ChatGPT (GPT personalizado → Acciones): importa la URL de OpenAPI y autentica con Bearer. Claude, Cursor, Claude Code y otros clientes MCP: dirección del servidor + cabecera `Authorization: Bearer fmk_…` (o `…/mcp/t/<clave>` si no permiten cabeceras).
+5. Herramientas: `framaly_status`, `framaly_write_script`, `framaly_generate_image`, `framaly_generate_voice`, `framaly_seo_metadata`, `framaly_create_video_project`, `framaly_list_projects`, `framaly_list_media`.
+6. Seguridad: cada llamada usa las claves compartidas y respeta los modos de IA, el tope diario y los límites mensuales de la cuenta dueña de la clave; máximo 30 llamadas por minuto por clave; todo queda registrado en «Uso reciente».
+7. Pruebas del servidor: `supabase/functions/mcp/test` (necesitan Node y esbuild; no requieren Deno).
+
 ## Asesor IA (botón flotante)
 El botón **Asesor IA** (abajo a la derecha) explica paso a paso cómo hacer cualquier cosa en FRAMALY. Sabe en qué sección estás y respeta los permisos de tu cuenta. Responde de tres formas:
 1. **Con IA desde el servidor** (recomendada): la clave de Claude vive solo en Supabase y nadie la ve. Requiere ejecutar **`supabase/asesor.sql`**, desplegar la función **`supabase/functions/asesor`** y crear el secreto **`ANTHROPIC_API_KEY`** en Supabase (Edge Functions → Secrets). Cada persona tiene un límite diario de consultas (60 por defecto; se cambia con el secreto `ASESOR_DAILY_LIMIT`, y el modelo con `ASESOR_MODEL`).

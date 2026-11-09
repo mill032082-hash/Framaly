@@ -1,0 +1,27 @@
+import * as L from './lib.mjs';
+let bad = 0; const ok = (n, c) => { console.log((c ? 'OK  ' : 'FALLO ') + n); if (!c) bad++; };
+// mp3 sintético: MPEG1 Layer III 128 kbps 44.1 kHz = 417 bytes por trama (padding 0), 100 tramas
+const frame = new Uint8Array(417); frame.set([0xff, 0xfb, 0x90, 0x00]);
+const mp3 = new Uint8Array(417 * 100); for (let i = 0; i < 100; i++) mp3.set(frame, i * 417);
+ok('mp3 100 tramas ≈ 2.612 s', Math.abs(L.mp3Duration(mp3) - 100 * 1152 / 44100) < 0.001);
+const id3 = new Uint8Array(10 + 200 + mp3.length); id3.set([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 1, 0x48]); id3.set(mp3, 10 + 200);
+ok('mp3 con cabecera ID3 (200 bytes)', Math.abs(L.mp3Duration(id3) - 100 * 1152 / 44100) < 0.001);
+ok('sin tramas: estima por tamaño', Math.abs(L.mp3Duration(new Uint8Array(16000 * 3)) - 3) < 0.001);
+ok('sha256 conocido', (await L.sha256hex('abc')) === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+ok('parseJSON con vallas', L.parseJSON('```json\n{"a":1}\n```').a === 1);
+ok('parseJSON con texto alrededor', L.parseJSON('Aquí: {"t":"x","s":[1]} fin').s[0] === 1);
+ok('tamaños OpenAI', L.openaiSize('16:9') === '1536x1024' && L.openaiSize('9:16') === '1024x1536' && L.openaiSize('1:1') === '1024x1024');
+const def = (n) => L.TOOLS.find((t) => t.name === n);
+ok('8 herramientas', L.TOOLS.length === 8);
+ok('args: falta requerido', L.checkArgs(def('framaly_write_script'), {}) === 'Falta «topic».');
+ok('args: desconocido', /desconocido/.test(L.checkArgs(def('framaly_write_script'), { topic: 'x', hack: 1 })));
+ok('args: enum inválido', /uno de/.test(L.checkArgs(def('framaly_generate_image'), { prompt: 'x', aspect: '3:2' })));
+ok('args: entero fuera de rango', /entero/.test(L.checkArgs(def('framaly_write_script'), { topic: 'x', duration_seconds: 5000 })));
+ok('args: válidos', L.checkArgs(def('framaly_write_script'), { topic: 'faros', duration_seconds: 60, scenes: 5 }) === null);
+ok('args: lista vacía rechazada', /lista/.test(L.checkArgs(def('framaly_create_video_project'), { title: 't', scenes: [] })));
+ok('args: texto demasiado largo', /largo/.test(L.checkArgs(def('framaly_generate_voice'), { text: 'a'.repeat(4001) })));
+const spec = L.openapi('https://x.supabase.co/functions/v1/mcp');
+ok('OpenAPI 3.1 con 8 rutas y seguridad', spec.openapi === '3.1.0' && Object.keys(spec.paths).length === 8 && spec.security[0].bearer);
+ok('operationId único', new Set(Object.values(spec.paths).map((p) => p.post.operationId)).size === 8);
+ok('JSON-RPC ok/err', L.rpcOk(1, {}).result && L.rpcErr(1, -32601, 'x').error.code === -32601);
+process.exit(bad ? 1 : 0);

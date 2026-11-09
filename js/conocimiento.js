@@ -236,6 +236,12 @@ Si una IA aparece como **No habilitada**, pídele a quien administra FRAMALY que
 2. Con **Clave de FRAMALY** la persona usa tu clave sin verla y cuenta para tus límites. Con **Que ponga la suya** verá Integraciones API para pegar la suya.
 3. Ajusta el **Tope diario** (en dólares) que esa persona puede gastar con tu clave.
 **Preparar un correo:** escribe el correo en **Preparar acceso** y deja sus permisos antes de que se registre. Si entra con Google queda aprobado al instante; si usa contraseña queda pendiente con sus ajustes ya cargados y tú pulsas **Aprobar**.` },
+    { id: 'ajustes.conectar', sec: 'ajustes', t: 'Conectar FRAMALY con ChatGPT, Claude u otros agentes (MCP y API)', k: 'chatgpt claude mcp api conectar agente gpt personalizado accion openapi clave de conexion token fmk cursor claude code claude desktop servidor otra ia automatizar crear video desde chatgpt integracion', a: `En [[#/ajustes|Ajustes]] → **Conectar con ChatGPT y otras IAs**:
+1. Escribe un nombre (por ejemplo «ChatGPT») y pulsa **Crear clave**. Cópiala en ese momento: no se vuelve a mostrar. Puedes tener hasta 10 y revocarlas cuando quieras.
+2. **GPT personalizado de ChatGPT:** Crear → Configurar → Crear acción → Importar desde URL (pega la **especificación OpenAPI**) → Autenticación: Clave de API, tipo Bearer, y pega tu clave.
+3. **Conector MCP (ChatGPT, Claude, Cursor, Claude Code…):** usa la **dirección del servidor MCP** y la clave en la cabecera Authorization. Si el cliente no permite cabeceras, usa la dirección con la clave dentro (mira los ejemplos en esa misma tarjeta).
+4. La IA conectada puede escribir guiones, generar imágenes y voces, crear títulos SEO y **crear proyectos de video** que aparecen en tu Editor al pulsar **Actualizar**.
+Todo usa tus claves de IA y respeta tus topes de gasto. Abajo ves el **uso reciente** de cada llamada.` },
     { id: 'integraciones.limites', sec: 'integraciones', t: 'Límites de gasto, consumo y avisos (administrador)', k: 'limite mensual gasto consumo tokens avisos campanita campana notificacion notificaciones para que sirve la campanita presupuesto cuanto se ha gastado barra porcentaje alerta',
       a: `Solo lo ve quien administra FRAMALY, en [[#/integraciones|Integraciones API]]:
 1. Cada API tiene su tarjeta con lo gastado este mes, una **barra de progreso** y el detalle (tokens, imágenes o caracteres).

@@ -143,6 +143,13 @@
   /** Estado real de cada API: ok (probada y funciona) · fail · untested (guardada, sin probar) · none */
   st.apiStatus = async () => { const s = await sb(); const { data, error } = await s.rpc('framaly_api_status'); if (error) throw new Error(explain(error)); return data || {}; };
   st.recordCheck = async (provider, ok, msg = '') => { const s = await sb(); const { error } = await s.rpc('framaly_record_check', { p_provider: provider, p_ok: !!ok, p_msg: msg }); if (error) throw new Error(explain(error)); };
+  /* ---------- conexión con ChatGPT y otras IAs (servidor MCP + API REST) ---------- */
+  st.mcpUrl = () => cfg().url + '/functions/v1/mcp';
+  const tokMsg = (e) => { const m = String(e?.message || ''); return /too_many/.test(m) ? 'Ya tienes 10 claves activas. Revoca una para crear otra.' : /name/.test(m) ? 'Escribe un nombre para la clave (hasta 60 letras).' : /forbidden/.test(m) ? 'Tu cuenta aún no está aprobada.' : explain(e); };
+  st.tokens = async () => { const s = await sb(); const { data, error } = await s.rpc('framaly_token_list'); if (error) throw new Error(tokMsg(error)); return data || []; };
+  st.createToken = async (name) => { const s = await sb(); const { data, error } = await s.rpc('framaly_token_create', { p_name: String(name || '').trim() }); if (error) throw new Error(tokMsg(error)); return data; };
+  st.revokeToken = async (id) => { const s = await sb(); const { error } = await s.rpc('framaly_token_revoke', { p_id: id }); if (error) throw new Error(tokMsg(error)); };
+  st.apiCalls = async (n = 10) => { const s = await sb(); const { data, error } = await s.rpc('framaly_api_calls_recent', { p_limit: n }); if (error) throw new Error(tokMsg(error)); return data || []; };
   st.overview = async (days = 30) => { const s = await sb(); const { data, error } = await s.rpc('framaly_api_overview', { p_days: days }); if (error) throw new Error(explain(error)); return data || {}; };
   st.limits = async () => { const s = await sb(); return rows(s.from('framaly_limits').select('provider,monthly_usd,alert_pct')); };
   st.setLimit = async (provider, patch) => { const s = await sb(); await rows(s.from('framaly_limits').update({ ...patch, updated_at: new Date().toISOString() }).eq('provider', provider)); };

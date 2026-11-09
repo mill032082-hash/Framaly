@@ -23,6 +23,7 @@
 
     el.innerHTML = `<div class="page">
       <div class="card" id="aPeople" style="display:none;margin-bottom:16px"></div>
+      <div class="card" id="aConn" style="display:none;margin-bottom:16px"></div>
       <div class="split even">
         <div class="card" id="aCuenta"></div>
         <div class="card"><h3>${I('zap')} Ejecución de videos</h3><p class="desc">Valores con los que arrancan el modo automático y los proyectos nuevos.</p>
@@ -71,6 +72,65 @@
       if (b.id === 'aSync') { F.busy(b, true, 'Sincronizando…'); try { await C.sync({ manual: true }); } catch (err) { F.toast(err.message, 'error'); } if (b.isConnected) F.busy(b, false); }
       if (b.id === 'aOut') await C.signOut();
     });
+
+    /* ----- conectar con ChatGPT y otras IAs (servidor MCP + API) ----- */
+    const TOOLS_INFO = [['framaly_status', 'Qué IAs tienes disponibles y cuánto llevas gastado hoy'], ['framaly_write_script', 'Escribe el guion de un video en escenas'], ['framaly_generate_image', 'Genera una imagen y la guarda en tu biblioteca'], ['framaly_generate_voice', 'Convierte un texto en narración (MP3)'], ['framaly_seo_metadata', 'Título, descripción y etiquetas para YouTube'], ['framaly_create_video_project', 'Crea un proyecto de video completo, listo para el editor'], ['framaly_list_projects', 'Lista tus proyectos'], ['framaly_list_media', 'Lista tu biblioteca de imágenes y audios']];
+    const conn = { tokens: null, calls: [], fresh: null, busy: false };
+    const copyBtn = (v, label = 'Copiar') => `<button class="btn sm" data-copy="${F.esc(v)}">${I('copy')} ${label}</button>`;
+    const renderConn = () => {
+      const box = q('#aConn'); if (!box) return;
+      if (!C?.configured() || !C.user || !C.approved()) { box.style.display = 'none'; return; }
+      box.style.display = '';
+      const url = C.mcpUrl(), key = conn.fresh?.token || 'fmk_TU_CLAVE';
+      const toks = conn.tokens || [];
+      const fresh = conn.fresh ? `<div class="notice" style="margin:12px 0"><div><b>Tu nueva clave «${F.esc(conn.fresh.name)}»</b> — cópiala ahora, no se podrá volver a ver:
+        <div class="keyrow" style="margin-top:8px"><input type="text" readonly value="${F.esc(conn.fresh.token)}" id="aTokV" onclick="this.select()">${copyBtn(conn.fresh.token)}</div></div></div>` : '';
+      const rows = toks.filter((t) => !t.revoked_at).map((t) => `<div class="row2 prow"><span><b>${F.esc(t.name)}</b> <span class="mini">· ${F.esc(t.prefix)}••••••••</span></span><span class="mini">${t.last_used_at ? 'usada ' + F.ago(new Date(t.last_used_at).getTime()) : 'sin usar'} <button class="btn sm danger" data-revoke="${t.id}" style="margin-left:8px">Revocar</button></span></div>`).join('');
+      const calls = (conn.calls || []).map((c) => `<div class="row2 prow"><span><span class="tag ${c.ok ? 'ok' : 'err'}">${c.ok ? 'ok' : 'error'}</span> <b>${F.esc(c.tool)}</b> <span class="mini">${F.esc(c.token_name || '')}${c.ok ? '' : ' · ' + F.esc(c.detail || '')}</span></span><span class="mini">${F.ago(new Date(c.created_at).getTime())}${c.ms ? ' · ' + (c.ms / 1000).toFixed(1) + ' s' : ''}</span></div>`).join('');
+      box.innerHTML = `<h3>${I('plug')} Conectar con ChatGPT y otras IAs</h3>
+        <p class="desc">Deja que ChatGPT, Claude u otro agente use FRAMALY por ti: escribir guiones, generar imágenes y voces y <b>crear proyectos de video</b> que aparecen en tu editor. Usa tus claves de IA y respeta tus topes de gasto.</p>
+        <label class="lbl">Dirección del servidor MCP</label><div class="keyrow"><input type="text" readonly value="${F.esc(url)}" onclick="this.select()">${copyBtn(url)}</div>
+        <label class="lbl">Especificación de la API (OpenAPI)</label><div class="keyrow"><input type="text" readonly value="${F.esc(url)}/openapi.json" onclick="this.select()">${copyBtn(url + '/openapi.json')}</div>
+        <div class="sep"></div>
+        <b style="color:var(--text)">Tus claves de conexión</b>
+        <p class="mini" style="margin:4px 0 8px">Cada IA o programa usa su propia clave. Si una se filtra, la revocas aquí y deja de funcionar al instante.</p>
+        ${fresh}
+        <form class="invite-form" id="aTokForm" novalidate><input type="text" id="aTokName" placeholder="Nombre (ej: ChatGPT, Claude, Cursor)" maxlength="60" autocomplete="off"><button class="btn primary" type="submit">${I('plus')} Crear clave</button></form>
+        <div style="margin-top:10px">${rows || '<p class="mini" style="margin:0">Todavía no tienes claves de conexión.</p>'}</div>
+        <div class="sep"></div>
+        <details class="small"><summary style="cursor:pointer;color:var(--or2)">Cómo conectarlo con ChatGPT</summary><ol class="help-steps">
+          <li><b>GPT personalizado (más sencillo):</b> en ChatGPT entra a <b>Explorar GPT → Crear</b> → pestaña <b>Configurar</b> → <b>Crear acción</b>.</li>
+          <li>Pulsa <b>Importar desde URL</b> y pega la <b>especificación de la API</b> de arriba.</li>
+          <li>En <b>Autenticación</b> elige <b>Clave de API → Bearer</b> y pega tu clave <code>fmk_…</code>.</li>
+          <li>Guarda y dile al GPT: «<i>Crea un video de 5 escenas sobre los faros del mundo en FRAMALY</i>».</li>
+          <li><b>Conector MCP de ChatGPT / Claude:</b> añade un conector personalizado con la <b>dirección del servidor MCP</b>. Si no te deja poner una cabecera de autorización, usa esta dirección que ya lleva la clave: <code>${F.esc(url)}/t/${F.esc(key)}</code> (trátala como una contraseña).</li></ol></details>
+        <details class="small" style="margin-top:6px"><summary style="cursor:pointer;color:var(--or2)">Claude Desktop, Claude Code, Cursor y otros clientes MCP</summary>
+          <p class="mini" style="margin:8px 0 4px">Configuración para clientes que aceptan cabeceras:</p>
+          <pre class="codebox">{ "mcpServers": { "framaly": { "url": "${F.esc(url)}", "headers": { "Authorization": "Bearer ${F.esc(key)}" } } } }</pre>
+          <p class="mini" style="margin:8px 0 4px">Claude Code:</p>
+          <pre class="codebox">claude mcp add --transport http framaly ${F.esc(url)} --header "Authorization: Bearer ${F.esc(key)}"</pre></details>
+        <details class="small" style="margin-top:6px"><summary style="cursor:pointer;color:var(--or2)">Qué puede hacer la IA conectada (8 herramientas)</summary>${TOOLS_INFO.map(([n, d]) => `<div class="row2 prow"><span><code>${n}</code></span><span class="mini" style="text-align:right">${F.esc(d)}</span></div>`).join('')}
+          <p class="hint">Un proyecto creado por la IA aparece en tu Editor de video al pulsar <b>Actualizar</b>. Máximo 30 llamadas por minuto por clave.</p></details>
+        <div class="sep"></div>
+        <b style="color:var(--text)">Uso reciente</b>
+        <div style="margin-top:6px">${calls || '<p class="mini" style="margin:0">Todavía no hubo llamadas.</p>'}</div>`;
+    };
+    const loadConn = async () => { if (!C?.configured() || !C.user || !C.approved()) return renderConn(); try { [conn.tokens, conn.calls] = await Promise.all([C.tokens(), C.apiCalls(10)]); } catch (e) { F.toast(e.message, 'error'); } renderConn(); };
+    loadConn();
+    q('#aConn').addEventListener('click', async (e) => {
+      const cp = e.target.closest('[data-copy]');
+      if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); F.toast('Copiado', 'ok', 1200); } catch (err) { F.toast('No se pudo copiar: selecciona el texto y usa Ctrl+C'); } return; }
+      const rv = e.target.closest('[data-revoke]');
+      if (rv) { if (!(await F.confirm('Revocar clave', 'La IA o el programa que use esta clave dejará de funcionar. ¿Revocarla?', 'Revocar'))) return; try { await C.revokeToken(rv.dataset.revoke); F.toast('Clave revocada', 'ok'); conn.fresh = null; await loadConn(); } catch (err) { F.toast(err.message, 'error'); } }
+    });
+    q('#aConn').addEventListener('submit', async (e) => {
+      e.preventDefault(); if (conn.busy) return;
+      const name = q('#aTokName').value.trim(); if (!name) return F.toast('Ponle un nombre a la clave');
+      conn.busy = true;
+      try { conn.fresh = await C.createToken(name); F.toast('Clave creada. Cópiala ahora.', 'ok', 4000); await loadConn(); q('#aTokV')?.select(); } catch (err) { F.toast(err.message, 'error'); }
+      conn.busy = false;
+    });
+    const offConn = F.on('cloud', () => { if (!conn.tokens) loadConn(); else renderConn(); });
 
     /* ----- personas con acceso (solo administrador) ----- */
     let people = [], invites = [];
@@ -200,6 +260,6 @@
     /* ----- ayuda ----- */
     q('#aTour').onclick = () => F.onboarding();
     q('#aHelp').onclick = () => { localStorage.removeItem('framaly.helpHidden'); Object.keys(localStorage).filter((k) => k.startsWith('framaly.seenHelp.')).forEach((k) => localStorage.removeItem(k)); F.toast('Las instrucciones vuelven a mostrarse en cada sección', 'ok'); };
-    return offCloud;
+    return () => { offCloud(); offConn(); };
   };
 })();
