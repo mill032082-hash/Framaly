@@ -86,16 +86,42 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     return { provider: prov, voice, voiceId };
   };
 
-  P.run = async (cfg, { step = () => {}, log = () => {} } = {}) => {
+  /** Un agente falló: ¿seguimos sin él, reintentamos o paramos para corregirlo? Devuelve 'skip' | 'retry' | 'stop' */
+  P.askUser = ({ name, message, optional }) => new Promise((resolve) => {
+    let done = false; const fin = (v) => { if (!done) { done = true; resolve(v); } };
+    F.modal({ title: `${name} tuvo un problema`, locked: true,
+      body: `<p style="margin-top:0"><b>${F.esc(message)}</b></p><p class="muted">${optional ? '¿Seguimos <b>sin este agente</b> o prefieres <b>corregirlo primero</b>?' : 'Este agente es necesario para crear el video. Corrígelo y reintenta, o detén el flujo.'}</p><p class="hint">Revisa tus APIs y modelos en <a href="#/integraciones">Integraciones API</a>.</p>`,
+      actions: [...(optional ? [{ label: 'Seguir sin este agente', primary: true, onClick: () => fin('skip') }] : []), { label: 'Reintentar', primary: !optional, onClick: () => fin('retry') }, { label: 'Detener y corregir', onClick: () => fin('stop') }],
+      onClose: () => fin('stop') });
+  });
+
+  P.run = async (cfg, { step = () => {}, log = () => {}, ask = P.askUser } = {}) => {
+    // Si un agente falla: se pregunta qué hacer. Los opcionales (voz, SEO) pueden omitirse; los necesarios solo reintentar o detener.
+    const failed = async (id, e, optional) => {
+      step(id, 'err', 'Error'); log(`✗ ${P.NAMES[id]}: ${e.message}`, 'e');
+      const a = await ask({ id, name: P.NAMES[id], message: e.message, optional });
+      if (a === 'retry') { step(id, 'run', 'Reintentando…'); log(`↻ ${P.NAMES[id]}: reintentando…`, 'w'); }
+      return a;
+    };
     const { idea, montage: mt } = cfg;
     // Validaciones previas
     if (!cfg.presetScript || cfg.seo) F.api.textProvider(cfg.script?.provider);
     if (!P.hasImages()) throw new Error('El Agente Director Visual necesita una API de imágenes (OpenAI, Gemini o MiniMax). Ve a Integraciones API.');
-    if (cfg.voice && (!cfg.voice.provider || cfg.voice.provider === 'auto')) { cfg = { ...cfg, voice: { ...cfg.voice, ...(await P.pickVoice(cfg.voice)) } }; log(`Agente Locutor: voz automática con ${({ openai: 'OpenAI', elevenlabs: 'ElevenLabs', gemini: 'Gemini', minimax: 'MiniMax' })[cfg.voice.provider]}`); }
-    if (cfg.voice) {
-      const vp = cfg.voice.provider || 'openai';
-      if (!F.api.has(vp)) throw new Error('El Agente Locutor usa ' + ({ elevenlabs: 'ElevenLabs', gemini: 'Gemini', minimax: 'MiniMax', openai: 'OpenAI' })[vp] + ', pero no está disponible. Cámbialo en el nodo Voz o conéctalo en Integraciones API.');
-      if ((vp === 'elevenlabs' || vp === 'minimax') && !cfg.voice.voiceId) throw new Error('Indica el Voice ID de ' + (vp === 'minimax' ? 'MiniMax' : 'ElevenLabs') + ' en el Agente Locutor.');
+    const checkVoice = async () => {
+      if (cfg.voice && (!cfg.voice.provider || cfg.voice.provider === 'auto')) { cfg = { ...cfg, voice: { ...cfg.voice, ...(await P.pickVoice(cfg.voice)) } }; log(`Agente Locutor: voz automática con ${({ openai: 'OpenAI', elevenlabs: 'ElevenLabs', gemini: 'Gemini', minimax: 'MiniMax' })[cfg.voice.provider]}`); }
+      if (cfg.voice) {
+        const vp = cfg.voice.provider || 'openai';
+        if (!F.api.has(vp)) throw new Error('El Agente Locutor usa ' + ({ elevenlabs: 'ElevenLabs', gemini: 'Gemini', minimax: 'MiniMax', openai: 'OpenAI' })[vp] + ', pero no está disponible. Cámbialo en el nodo Voz o conéctalo en Integraciones API.');
+        if ((vp === 'elevenlabs' || vp === 'minimax') && !cfg.voice.voiceId) throw new Error('Indica el Voice ID de ' + (vp === 'minimax' ? 'MiniMax' : 'ElevenLabs') + ' en el Agente Locutor.');
+      }
+    };
+    for (;;) {
+      try { await checkVoice(); break; } catch (e) {
+        const a = await failed('voice', e, true);
+        if (a === 'retry') continue;
+        if (a === 'skip') { cfg = { ...cfg, voice: null }; step('voice', 'skip', 'Omitido por error'); log('Seguimos sin el Agente Locutor.', 'w'); break; }
+        throw e;
+      }
     }
     step('idea', 'done', idea.topic.slice(0, 50));
 
@@ -103,37 +129,48 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     let script;
     if (cfg.presetScript) { script = cfg.presetScript; step('script', 'done', `${script.scenes.length} escenas (guion propio)`); }
     else {
-      step('script', 'run', 'Escribiendo guion…'); log('Agente Guionista: escribiendo el guion…');
-      script = await P.writeScript(idea, cfg.script);
-      step('script', 'done', `${script.scenes.length} escenas`); log(`✓ Guion listo: "${script.title}" (${script.scenes.length} escenas)`, 'o');
+      for (;;) {
+        try {
+          step('script', 'run', 'Escribiendo guion…'); log('Agente Guionista: escribiendo el guion…');
+          script = await P.writeScript(idea, cfg.script);
+          step('script', 'done', `${script.scenes.length} escenas`); log(`✓ Guion listo: "${script.title}" (${script.scenes.length} escenas)`, 'o');
+          break;
+        } catch (e) { if ((await failed('script', e, false)) !== 'retry') throw e; }
+      }
     }
     const n = script.scenes.length;
 
     // 2. Imágenes
-    step('images', 'run', `0/${n}`); log(`Agente Director Visual: generando ${n} imágenes…`);
-    const size = P.sizeFor(idea.aspect); let ok = 0;
-    const imgIds = await F.pool(script.scenes, 3, async (sc, i) => {
-      const prompt = [sc.image_prompt, cfg.images.common, F.STYLES[cfg.images.style]?.p].filter(Boolean).join('. ');
-      try {
-        const [blob] = await F.api.image({ prompt, size, quality: cfg.images.quality, n: 1, provider: cfg.images.provider });
-        const m = await F.media.add({ type: 'image', name: `${script.title.slice(0, 40)} · escena ${i + 1}`, blob, source: 'ai', meta: { prompt } });
-        ok++; step('images', 'run', `${ok}/${n}`); log(`  · imagen ${i + 1}/${n} lista`);
-        return m.id;
-      } catch (e) {
-        log(`  ✗ imagen ${i + 1}: ${e.message}`, 'e');
-        if (/40[0-3]|key|billing|verif|quota/i.test(e.message)) throw e;
-        return null;
-      }
-    });
-    if (!imgIds.some(Boolean)) throw new Error('No se pudo generar ninguna imagen.');
-    step('images', 'done', `${ok}/${n} imágenes`); log(`✓ ${ok} imágenes generadas`, 'o');
+    const size = P.sizeFor(idea.aspect);
+    const genImages = async () => {
+      step('images', 'run', `0/${n}`); log(`Agente Director Visual: generando ${n} imágenes…`);
+      let ok = 0;
+      const ids = await F.pool(script.scenes, 3, async (sc, i) => {
+        const prompt = [sc.image_prompt, cfg.images.common, F.STYLES[cfg.images.style]?.p].filter(Boolean).join('. ');
+        try {
+          const [blob] = await F.api.image({ prompt, size, quality: cfg.images.quality, n: 1, provider: cfg.images.provider });
+          const m = await F.media.add({ type: 'image', name: `${script.title.slice(0, 40)} · escena ${i + 1}`, blob, source: 'ai', meta: { prompt } });
+          ok++; step('images', 'run', `${ok}/${n}`); log(`  · imagen ${i + 1}/${n} lista`);
+          return m.id;
+        } catch (e) {
+          log(`  ✗ imagen ${i + 1}: ${e.message}`, 'e');
+          if (/40[0-3]|key|billing|verif|quota/i.test(e.message)) throw e;
+          genImages.last = e; return null;
+        }
+      });
+      if (!ids.some(Boolean)) throw genImages.last || new Error('No se pudo generar ninguna imagen.');
+      step('images', 'done', `${ok}/${n} imágenes`); log(`✓ ${ok} imágenes generadas`, 'o');
+      return ids;
+    };
+    let imgIds;
+    for (;;) { try { imgIds = await genImages(); break; } catch (e) { if ((await failed('images', e, false)) !== 'retry') throw e; } }
 
     // 3. Voz
     let voiceIds = [];
-    if (cfg.voice) {
+    const genVoice = async () => {
       step('voice', 'run', `0/${n}`); log('Agente Locutor: narrando escenas…');
-      let vk = 0;
-      voiceIds = await F.pool(script.scenes, 3, async (sc, i) => {
+      let vk = 0, last = null;
+      const ids = await F.pool(script.scenes, 3, async (sc, i) => {
         if (!sc.narration.trim()) return null;
         try {
           const blob = await F.api.tts({ ...cfg.voice, text: sc.narration });
@@ -141,13 +178,25 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
           vk++; step('voice', 'run', `${vk}/${n}`);
           return m.id;
         } catch (e) {
-          log(`  ✗ voz ${i + 1}: ${e.message}`, 'e');
+          log(`  ✗ voz ${i + 1}: ${e.message}`, 'e'); last = e;
           if (/40[0-3]|key|quota/i.test(e.message)) throw e;
           return null;
         }
       });
+      if (!vk && last) throw last;
       step('voice', 'done', `${vk} narraciones`); log(`✓ ${vk} narraciones generadas`, 'o');
-    } else step('voice', 'skip', 'Desactivado');
+      return ids;
+    };
+    if (cfg.voice) {
+      for (;;) {
+        try { voiceIds = await genVoice(); break; } catch (e) {
+          const a = await failed('voice', e, true);
+          if (a === 'retry') continue;
+          if (a === 'skip') { voiceIds = []; step('voice', 'skip', 'Omitido por error'); log('Seguimos sin voz: el video quedará sin narración.', 'w'); break; }
+          throw e;
+        }
+      }
+    } else if (!false) step('voice', 'skip', 'Desactivado');
 
     // 4. Música
     const mus = cfg.music && cfg.music.mediaId && F.media.byId(cfg.music.mediaId);
@@ -183,12 +232,20 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     // 6. SEO
     p.meta = { title: script.title, description: '', tags: '' };
     if (cfg.seo) {
-      step('seo', 'run', 'Optimizando…'); log('Agente SEO: creando título, descripción y etiquetas…');
-      try {
-        const s = await P.seo({ topic: idea.topic, script, keywords: cfg.seo.keywords, language: idea.language, provider: cfg.script?.provider });
-        p.meta = { title: s.title || script.title, description: s.description + '\n\nCapítulos:\n' + P.chapters(p, script), tags: s.tags.join(', ') };
-        step('seo', 'done', 'Metadatos listos'); log('✓ Metadatos SEO listos', 'o');
-      } catch (e) { step('seo', 'err', 'Error'); log('  ✗ SEO: ' + e.message, 'e'); }
+      for (;;) {
+        try {
+          step('seo', 'run', 'Optimizando…'); log('Agente SEO: creando título, descripción y etiquetas…');
+          const s = await P.seo({ topic: idea.topic, script, keywords: cfg.seo.keywords, language: idea.language, provider: cfg.script?.provider });
+          p.meta = { title: s.title || script.title, description: s.description + '\n\nCapítulos:\n' + P.chapters(p, script), tags: s.tags.join(', ') };
+          step('seo', 'done', 'Metadatos listos'); log('✓ Metadatos SEO listos', 'o');
+          break;
+        } catch (e) {
+          const a = await failed('seo', e, true);
+          if (a === 'retry') continue;
+          if (a === 'skip') { step('seo', 'skip', 'Omitido por error'); log('Seguimos sin SEO: puedes completarlo después en Publicar.', 'w'); break; }
+          throw e;
+        }
+      }
     } else step('seo', 'skip', 'Desactivado');
 
     // 7. Salida
