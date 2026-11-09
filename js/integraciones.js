@@ -55,6 +55,7 @@
     const ownTag = (k) => !F.api.has(k) ? ['Sin configurar', ''] : data.own[k] === 'ok' ? ['Conectado', 'ok'] : data.own[k] === 'fail' ? ['No funciona', 'err'] : ['Falta probar', 'or'];
     const ownCard = (a) => `<div class="card int-card">${head(a, ...ownTag(a.k))}
       <label class="lbl">API key</label><div class="keyrow"><input type="password" data-key="${a.k}" value="${esc(S.keys[a.k])}" placeholder="Pega tu clave aquí" autocomplete="off" spellcheck="false"><button class="icon-btn" data-eye="${a.k}" title="Mostrar">${I('eye')}</button><button class="btn" data-test="${a.k}">Probar</button></div>
+      ${cloudOn && C.aiBaseMode(a.k) === 'shared' && !C.isAdmin() ? `<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn sm" data-src="${a.k}:shared">Volver a la clave de FRAMALY</button><span class="mini">El administrador comparte esta API contigo.</span></div>` : ''}
       ${a.k === 'minimax' ? '<p class="mini" style="margin:8px 0 0">MiniMax suele no permitir llamadas directas desde el navegador: funciona mejor con la clave de FRAMALY.</p>' : ''}${models(a.k)}${feats(a)}</div>`;
     /* --- saldo del proveedor + historial de la API (administrador) --- */
     const history = (a) => {
@@ -107,12 +108,18 @@
         <details style="margin-top:10px" class="small muted"><summary style="cursor:pointer;color:var(--or2)">Modelos</summary>${models(a.k)}</details></div>`;
     };
     /* --- clave de FRAMALY, vista de una persona --- */
+    /* Opción para que cada persona agregue su propia clave aunque FRAMALY comparta la suya */
+    const ownOption = (a) => `<details class="own-opt" style="margin-top:10px"${S.keys[a.k] ? ' open' : ''}><summary style="cursor:pointer;color:var(--or2)" class="small">Usar mi propia clave de ${esc(a.name.split(' · ')[0])} (opcional)</summary>
+        <p class="mini" style="margin:8px 0">Si pegas tu clave, tus usos se cobran a tu cuenta del proveedor y no cuentan en el tope de FRAMALY.</p>
+        <div class="keyrow"><input type="password" data-key="${a.k}" value="${esc(S.keys[a.k])}" placeholder="Pega tu clave aquí" autocomplete="off" spellcheck="false"><button class="icon-btn" data-eye="${a.k}" title="Mostrar">${I('eye')}</button></div>
+        <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn sm primary" data-src="${a.k}:own">Usar mi clave</button><span class="mini">Se guarda solo en este navegador.</span></div></details>`;
     const personCard = (a) => {
       const cap = +C.access?.daily_usd || 0, used = +data.rep?.mine_today || 0, pct = cap > 0 ? Math.round((used / cap) * 100) : 0;
       return `<div class="card int-card">${head(a, ...(stOf(a.k) === 'ok' ? ['Conectado', 'ok'] : ['No disponible aún', 'or']))}
         ${stOf(a.k) === 'ok' ? '<div class="shared-line"><b>Conectado</b> · compartido contigo por el administrador</div>' : '<div class="shared-line"><b style="color:var(--or2)">No disponible aún</b> · el administrador todavía no la ha conectado o está fallando.</div>'}
         <p class="mini" style="margin:0 0 8px">Usas la clave de FRAMALY. No necesitas configurar nada.</p>
         ${data.rep ? `${bar(pct, pct >= 80)}<div class="row2"><span>Hoy llevas ${usd(used)} de ${usd(cap)}</span><span>${pct}% de tu cupo</span></div>` : '<div class="mini">Cargando tu cupo…</div>'}
+        ${ownOption(a)}
         ${feats(a)}</div>`;
     };
     const offCard = (a) => `<div class="card int-card">${head(a, 'No habilitada', '')}<p class="mini" style="margin:0">Esta IA no está habilitada para tu cuenta. Pídeselo a quien administra FRAMALY.</p>${feats(a)}</div>`;
@@ -165,6 +172,12 @@
       if (m) { S.models[m] = e.target.value.trim(); F.saveSettings(); }
     });
     el.addEventListener('click', async (e) => {
+      const sr = e.target.closest('[data-src]');
+      if (sr) {
+        const [k, w] = sr.dataset.src.split(':');
+        if (w === 'own' && !(S.keys[k] || '').trim()) return F.toast('Pega primero tu clave');
+        S.useOwn[k] = w === 'own'; F.saveSettings(); F.toast(w === 'own' ? 'Ahora usas tu propia clave. Pulsa «Probar» para comprobarla.' : 'Ahora usas la clave de FRAMALY', 'ok'); draw(); return;
+      }
       const gl = e.target.closest('[data-gemlist]');
       if (gl) {
         F.busy(gl, true, 'Consultando…');

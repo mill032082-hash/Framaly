@@ -40,6 +40,7 @@
   const DEF = {
     keys: { openai: '', anthropic: '', elevenlabs: '', gemini: '', minimax: '', googleClientId: '' },
     textProvider: 'anthropic',
+    useOwn: {},   // APIs donde esta persona prefiere su propia clave aunque exista la de FRAMALY
     uses: {},   // para qué sirve cada API en este navegador: { openai: { image: false } }
     models: { anthropic: 'claude-sonnet-5-5', openai: 'gpt-4.1-mini', image: 'gpt-image-1', tts: 'gpt-4o-mini-tts', eleven: 'eleven_multilingual_v2', gemini: 'gemini-3.8-flash', geminiImage: 'gemini-2.5-flash-image', geminiTts: 'gemini-2.5-flash-preview-tts', minimax: 'MiniMax-M2', minimaxTts: 'speech-2.8-hd', minimaxImage: 'image-01' },
     currentProject: null,
@@ -50,7 +51,7 @@
   };
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem('framaly.settings') || '{}'); } catch (e) { saved = {}; }
-  F.settings = { ...DEF, ...saved, keys: { ...DEF.keys, ...(saved.keys || {}) }, models: { ...DEF.models, ...(saved.models || {}) }, cloud: { ...DEF.cloud, ...(saved.cloud || {}) }, uses: { ...(saved.uses || {}) } };
+  F.settings = { ...DEF, ...saved, keys: { ...DEF.keys, ...(saved.keys || {}) }, models: { ...DEF.models, ...(saved.models || {}) }, cloud: { ...DEF.cloud, ...(saved.cloud || {}) }, uses: { ...(saved.uses || {}) }, useOwn: { ...(saved.useOwn || {}) } };
   // Google retiró gemini-2.5-flash para cuentas nuevas: si quedó guardado como modelo por defecto, se actualiza
   if (F.settings.models.gemini === 'gemini-2.5-flash') F.settings.models.gemini = DEF.models.gemini;
   F.saveSettings = () => { try { localStorage.setItem('framaly.settings', JSON.stringify(F.settings)); } catch (e) {} F.emit('settings'); };

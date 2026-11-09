@@ -150,7 +150,7 @@
       else if (t.dataset.pai) {
         d.ai[t.dataset.pak] = t.value;
         // quien pega su propia clave necesita ver Integraciones; quien no, no (se puede ajustar a mano después)
-        if (Object.values(d.ai).includes('own')) delete d.perms.integraciones; else d.perms.integraciones = false;
+        if (Object.values(d.ai).includes('own')) delete d.perms.integraciones;
         renderPeople();
       } else d.daily_usd = t.value;
     };
