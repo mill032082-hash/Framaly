@@ -134,6 +134,9 @@
   /** Consumo: el administrador ve todo; cada persona, lo suyo */
   st.report = async () => { const s = await sb(); const { data, error } = await s.rpc('framaly_usage_report'); if (error) throw new Error(explain(error)); return data; };
   /** Historial por API: gasto diario, total, eventos de conexión y último saldo del proveedor (solo administrador) */
+  /** Estado real de cada API: ok (probada y funciona) · fail · untested (guardada, sin probar) · none */
+  st.apiStatus = async () => { const s = await sb(); const { data, error } = await s.rpc('framaly_api_status'); if (error) throw new Error(explain(error)); return data || {}; };
+  st.recordCheck = async (provider, ok, msg = '') => { const s = await sb(); const { error } = await s.rpc('framaly_record_check', { p_provider: provider, p_ok: !!ok, p_msg: msg }); if (error) throw new Error(explain(error)); };
   st.overview = async (days = 30) => { const s = await sb(); const { data, error } = await s.rpc('framaly_api_overview', { p_days: days }); if (error) throw new Error(explain(error)); return data || {}; };
   st.limits = async () => { const s = await sb(); return rows(s.from('framaly_limits').select('provider,monthly_usd,alert_pct')); };
   st.setLimit = async (provider, patch) => { const s = await sb(); await rows(s.from('framaly_limits').update({ ...patch, updated_at: new Date().toISOString() }).eq('provider', provider)); };

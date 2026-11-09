@@ -26,7 +26,7 @@
 
   V.integraciones = (el) => {
     const S = F.settings, C = F.cloud, cloudOn = !!(C?.configured() && C.user);
-    const data = { rep: null, lims: null, secrets: [], errors: null, ov: {}, acc: [], inv: [] };
+    const data = { rep: null, lims: null, secrets: [], errors: null, ov: {}, acc: [], inv: [], st: {}, own: {} };
     let dead = false;
     const mode = (k) => (cloudOn ? C.aiMode(k) : 'own');
     const model = (k, label, list) => `<label class="lbl">${label}</label><input type="text" data-model="${k}" value="${esc(S.models[k])}" list="dl-${k}"><datalist id="dl-${k}">${list.map((x) => `<option value="${x}">`).join('')}</datalist>`;
@@ -39,8 +39,18 @@
     const feats = (a) => `<div class="feat">${a.feats.map((f) => `<span class="tag">${f}</span>`).join('')}</div>`;
     const bar = (pct, warn) => `<div class="bar ${warn ? 'warn' : ''}"><i style="width:${Math.min(100, pct)}%"></i></div>`;
 
+    const STATE = { ok: ['Conectado', 'ok'], fail: ['No funciona', 'err'], untested: ['Falta probar', 'or'], none: ['Sin clave', ''] };
+    const stOf = (k) => data.st?.[k] || 'none';
+    /** Prueba la conexión y, si es la clave de FRAMALY, deja el resultado registrado para todos */
+    const check = async (k) => {
+      let msg;
+      try { msg = await F.api.test(k); if (C?.isAdmin() && mode(k) === 'shared') await C.recordCheck(k, true, msg).catch(() => {}); F.toast(msg, 'ok'); data.own[k] = 'ok'; }
+      catch (err) { if (C?.isAdmin() && mode(k) === 'shared') await C.recordCheck(k, false, err.message).catch(() => {}); data.own[k] = 'fail'; F.toast(err.message, 'error', 6000); }
+      if (cloudOn) data.st = await C.apiStatus().catch(() => data.st);
+    };
     /* --- clave propia (modo clásico) --- */
-    const ownCard = (a) => `<div class="card int-card">${head(a, F.api.has(a.k) ? 'Conectado' : 'Sin configurar', F.api.has(a.k) ? 'ok' : '')}
+    const ownTag = (k) => !F.api.has(k) ? ['Sin configurar', ''] : data.own[k] === 'ok' ? ['Conectado', 'ok'] : data.own[k] === 'fail' ? ['No funciona', 'err'] : ['Falta probar', 'or'];
+    const ownCard = (a) => `<div class="card int-card">${head(a, ...ownTag(a.k))}
       <label class="lbl">API key</label><div class="keyrow"><input type="password" data-key="${a.k}" value="${esc(S.keys[a.k])}" placeholder="Pega tu clave aquí" autocomplete="off" spellcheck="false"><button class="icon-btn" data-eye="${a.k}" title="Mostrar">${I('eye')}</button><button class="btn" data-test="${a.k}">Probar</button></div>
       ${a.k === 'minimax' ? '<p class="mini" style="margin:8px 0 0">MiniMax suele no permitir llamadas directas desde el navegador: funciona mejor con la clave de FRAMALY.</p>' : ''}${models(a.k)}${feats(a)}</div>`;
     /* --- saldo del proveedor + historial de la API (administrador) --- */
@@ -68,7 +78,8 @@
       return [...a, ...i];
     };
     const sharedLine = (a) => {
-      const l = sharedWith(a.k);
+      const l = sharedWith(a.k), s = stOf(a.k);
+      if (s !== 'ok') return `<div class="shared-line"><b style="color:var(--${s === 'fail' ? 'err' : 'or2'})">${s === 'fail' ? 'No funciona' : s === 'untested' ? 'Falta probar' : 'Sin clave'}</b> · ${s === 'none' ? 'guarda la clave y pulsa «Probar conexión»' : s === 'fail' ? 'la última prueba falló, revisa la clave' : 'pulsa «Probar conexión» para confirmar que funciona'}; no se comparte hasta que funcione.</div>`;
       return `<div class="shared-line"><b>Conectado</b> · ${l.length ? 'compartido con ' + l.map((x) => `<span class="tag ok">${esc(x.e || 'Sin correo')}${x.w ? ' (invitado)' : ''}</span>`).join(' ') : '<span class="mini">sin compartir con nadie todavía (Ajustes → Personas con acceso)</span>'}</div>`;
     };
     /* --- clave de FRAMALY, vista del administrador --- */
@@ -76,7 +87,7 @@
       const p = data.rep?.providers?.[a.k] || { cost: 0, units: {} }, l = (data.lims || []).find((x) => x.provider === a.k) || { monthly_usd: 0, alert_pct: 80 };
       const sec = (data.secrets || []).find((x) => x.provider === a.k);
       const pct = l.monthly_usd > 0 ? Math.round((p.cost / l.monthly_usd) * 100) : 0;
-      return `<div class="card int-card">${head(a, 'Clave compartida activa', 'ok')}
+      return `<div class="card int-card">${head(a, ...STATE[stOf(a.k)])}
         ${sharedLine(a)}
         <div class="big">${usd(p.cost)}<span class="mini"> de ${usd(l.monthly_usd)} este mes</span></div>${bar(pct, pct >= l.alert_pct)}
         <div class="row2"><span>${pct}% usado</span><span>${units(a.k, p.units)}</span></div>
@@ -95,8 +106,8 @@
     /* --- clave de FRAMALY, vista de una persona --- */
     const personCard = (a) => {
       const cap = +C.access?.daily_usd || 0, used = +data.rep?.mine_today || 0, pct = cap > 0 ? Math.round((used / cap) * 100) : 0;
-      return `<div class="card int-card">${head(a, 'Listo para usar', 'ok')}
-        <div class="shared-line"><b>Conectado</b> · compartido contigo por el administrador</div>
+      return `<div class="card int-card">${head(a, ...(stOf(a.k) === 'ok' ? ['Conectado', 'ok'] : ['No disponible aún', 'or']))}
+        ${stOf(a.k) === 'ok' ? '<div class="shared-line"><b>Conectado</b> · compartido contigo por el administrador</div>' : '<div class="shared-line"><b style="color:var(--or2)">No disponible aún</b> · el administrador todavía no la ha conectado o está fallando.</div>'}
         <p class="mini" style="margin:0 0 8px">Usas la clave de FRAMALY. No necesitas configurar nada.</p>
         ${data.rep ? `${bar(pct, pct >= 80)}<div class="row2"><span>Hoy llevas ${usd(used)} de ${usd(cap)}</span><span>${pct}% de tu cupo</span></div>` : '<div class="mini">Cargando tu cupo…</div>'}
         ${feats(a)}</div>`;
@@ -139,7 +150,7 @@
     draw();
     if (cloudOn) {
       (async () => {
-        try { data.rep = await C.report(); if (C.isAdmin()) { [data.lims, data.secrets, data.errors, data.ov] = await Promise.all([C.limits(), C.secrets(), C.errors(), C.overview()]); [data.acc, data.inv] = await Promise.all([C.people().catch(() => []), C.invites().catch(() => [])]); } } catch (e) { F.toast(e.message, 'error'); }
+        try { data.rep = await C.report(); data.st = await C.apiStatus().catch(() => ({})); if (C.isAdmin()) { [data.lims, data.secrets, data.errors, data.ov] = await Promise.all([C.limits(), C.secrets(), C.errors(), C.overview()]); [data.acc, data.inv] = await Promise.all([C.people().catch(() => []), C.invites().catch(() => [])]); } } catch (e) { F.toast(e.message, 'error'); }
         draw();
       })();
     }
@@ -156,8 +167,8 @@
       if (t) {
         const k = t.dataset.test; if (!F.api.has(k)) return F.toast('Escribe primero la clave');
         F.busy(t, true, '');
-        try { F.toast(await F.api.test(k), 'ok'); const s = q(`[data-st="${k}"]`); if (s && mode(k) === 'own') { s.className = 'tag ok'; s.textContent = 'Conectado'; } } catch (err) { F.toast(err.message, 'error'); }
-        F.busy(t, false); return;
+        await check(k); if (k === 'googleClientId') { const s = q(`[data-st="${k}"]`); if (s && data.own[k] === 'ok') { s.className = 'tag ok'; s.textContent = 'Conectado'; } F.busy(t, false); return; }
+        F.busy(t, false); draw(); return;
       }
       const ls = e.target.closest('[data-limsave]');
       if (ls) {
@@ -173,9 +184,9 @@
         if (!v) return F.toast('Pega primero la clave');
         F.busy(ss, true, 'Guardando…');
         try {
-          await C.setSecret(k, v); inp.value = ''; data.secrets = await C.secrets(); data.ov = await C.overview(); draw();
+          await C.setSecret(k, v); inp.value = ''; data.secrets = await C.secrets(); data.ov = await C.overview(); data.st = await C.apiStatus().catch(() => data.st); draw();
           // al conectar: se prueba la clave y, si el proveedor lo permite, se consulta el saldo
-          try { F.toast(await F.api.test(k), 'ok'); if (k === 'elevenlabs') await F.api.balance(k).catch((err) => F.toast(err.message, 'error')); } catch (err) { F.toast(err.message, 'error', 6000); }
+          await check(k); if (k === 'elevenlabs' && data.own[k] === 'ok') await F.api.balance(k).catch((err) => F.toast(err.message, 'error'));
           [data.ov, data.errors] = await Promise.all([C.overview(), C.errors()]); draw();
         } catch (err) { F.toast(err.message, 'error'); F.busy(ss, false); }
         return;
@@ -184,7 +195,7 @@
       if (sd) {
         const k = sd.dataset.secdel, nm = AIS.find((a) => a.k === k).name.split(' · ')[0];
         if (!(await F.confirm('Quitar la clave', `Se borrará la clave de ${nm} guardada en la plataforma. Si no hay otra en Supabase, esa IA dejará de funcionar para todos.`, 'Quitar'))) return;
-        try { await C.deleteSecret(k); data.secrets = await C.secrets(); F.toast('Clave quitada', 'ok'); draw(); } catch (err) { F.toast(err.message, 'error'); }
+        try { await C.deleteSecret(k); data.secrets = await C.secrets(); data.st = await C.apiStatus().catch(() => data.st); F.toast('Clave quitada', 'ok'); draw(); } catch (err) { F.toast(err.message, 'error'); }
         return;
       }
       if (e.target.closest('[data-errclear]')) { try { await C.clearErrors(); data.errors = []; draw(); } catch (err) { F.toast(err.message, 'error'); } return; }
