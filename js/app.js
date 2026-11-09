@@ -28,8 +28,7 @@
     sb.innerHTML = `<a class="brand" href="#/inicio"><div class="logo"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg></div><div><b>FRAMALY</b><small>Studio de video IA</small></div></a>
       <nav class="nav" id="nav"></nav>
       <div class="acct" id="acct"></div>
-      <button class="btn block" id="sbUpd" title="Guarda tus cambios en la nube y carga la última versión de FRAMALY">${I('refresh')} Actualizar app</button>
-      <div class="side-foot"><b style="color:var(--text);font-size:12px">Conexiones</b><div class="apis" id="apiDots"></div></div>`;
+      <button class="btn block" id="sbUpd" title="Guarda tus cambios en la nube y carga la última versión de FRAMALY">${I('refresh')} Actualizar app</button>`;
     F.$('#sbUpd').onclick = (e) => updateApp(e.currentTarget);
     nav(); dots(); acct();
   }
