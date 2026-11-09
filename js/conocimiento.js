@@ -148,7 +148,7 @@ Tip: **Enviar a Voces** lleva toda la narración al estudio de voz, y **Copiar**
 
     /* ================= IMÁGENES ================= */
     { id: 'imagenes.generar', sec: 'imagenes', t: 'Generar imágenes con IA', k: 'imagen imagenes generar crear foto escena fondo prompt describir ia dibujar estilo calidad cantidad',
-      a: `1. En [[#/imagenes|Imágenes]], describe la imagen en español o inglés. **Mejorar prompt con IA** la deja más detallada.
+      a: `1. En [[#/imagenes|Imágenes]], describe la imagen en español. **Mejorar prompt con IA** la deja más detallada.
 2. Elige **estilo visual** (Cinematográfico, Fotorrealista, Ilustración, Anime, Animación 3D, Acuarela, Épico fantasía, Cyberpunk neón, Minimalista, Documental).
 3. Elige **formato** (horizontal para YouTube, vertical para Shorts, cuadrado), **calidad** y **cantidad**.
 4. Pulsa **Generar imágenes**. Se guardan solas en la [[#/biblioteca|Biblioteca]].

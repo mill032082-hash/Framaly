@@ -133,7 +133,7 @@
         <button class="btn sm" id="sCopy">${I('copy')} Copiar</button><button class="btn sm" id="sVoice">${I('mic')} Enviar a Voces</button></div></div>
         <div class="card" id="sScenes">${s.scenes.map((x, i) => `<div class="scene" data-i="${i}"><span class="n">${i + 1}</span><button class="icon-btn" data-rm="${i}" style="position:absolute;right:8px;top:8px" title="Quitar escena">${I('x')}</button>
           <label class="lbl">Narración</label><textarea data-k="narration" rows="3">${F.esc(x.narration)}</textarea>
-          <div class="grid2"><div><label class="lbl">Prompt de imagen (inglés)</label><textarea data-k="image_prompt" rows="2">${F.esc(x.image_prompt)}</textarea></div><div><label class="lbl">Texto en pantalla</label><textarea data-k="on_screen_text" rows="2">${F.esc(x.on_screen_text)}</textarea></div></div></div>`).join('')}
+          <div class="grid2"><div><label class="lbl">Prompt de imagen</label><textarea data-k="image_prompt" rows="2">${F.esc(x.image_prompt)}</textarea></div><div><label class="lbl">Texto en pantalla</label><textarea data-k="on_screen_text" rows="2">${F.esc(x.on_screen_text)}</textarea></div></div></div>`).join('')}
           <button class="btn sm" id="sAdd" style="margin-top:12px">${I('plus')} Añadir escena</button></div>
         <div class="card"><h3>${I('film')} Producir video con este guion</h3><p class="desc">Los agentes generarán una imagen y una narración por escena y montarán el timeline con transiciones.</p>
           <div class="grid2"><div><label class="lbl">Formato</label><select id="pAsp">${opt(R.ASPECTS, st.aspect)}</select></div><div><label class="lbl">Estilo visual</label><select id="pSty">${opt(Object.entries(F.STYLES).map(([k, v]) => [k, v.name]), st.style)}</select></div>
@@ -229,7 +229,7 @@
       if (!st.prompt.trim()) return F.toast('Escribe primero una idea');
       const b = e.currentTarget; F.busy(b, true, 'Mejorando…');
       try {
-        const t = await F.api.llm({ provider: st.enhProvider || 'auto', system: 'Eres un experto en prompts para generación de imágenes.', prompt: `Convierte esta idea en un prompt de imagen excelente, en inglés, de 40-70 palabras: sujeto, entorno, composición, iluminación, lente y atmósfera. Sin texto ni letras en la imagen. Devuelve SOLO el prompt.\nIdea: ${st.prompt}`, maxTokens: 400 });
+        const t = await F.api.llm({ provider: st.enhProvider || 'auto', system: 'Eres un experto en prompts para generación de imágenes. Escribes SIEMPRE en español, nunca en inglés.', prompt: `Convierte esta idea en un prompt de imagen excelente, escrito totalmente en español (nada en inglés), de 40-70 palabras: sujeto, entorno, composición, iluminación, lente y atmósfera. Sin texto ni letras en la imagen. Devuelve SOLO el prompt.\nIdea: ${st.prompt}`, maxTokens: 400 });
         st.prompt = t.trim().replace(/^"|"$/g, ''); el.querySelector('#iPrompt').value = st.prompt; save(); F.toast('Prompt mejorado', 'ok');
       } catch (err) { F.toast(err.message, 'error'); }
       F.busy(b, false);

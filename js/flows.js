@@ -4,16 +4,16 @@
   const R = F.R, I = F.icon;
 
   F.STYLES = {
-    cine: { name: 'Cinematográfico', p: 'cinematic film still, dramatic lighting, shallow depth of field, anamorphic lens, rich color grading, highly detailed' },
-    foto: { name: 'Fotorrealista', p: 'photorealistic photograph, natural light, ultra detailed, sharp focus, professional photography' },
-    ilustracion: { name: 'Ilustración', p: 'beautiful digital illustration, painterly, soft shading, storybook style, rich colors' },
-    anime: { name: 'Anime', p: 'anime style illustration, vibrant colors, detailed background, dynamic composition' },
-    '3d': { name: 'Animación 3D', p: '3D animated movie style render, soft global illumination, stylized characters, high quality' },
-    acuarela: { name: 'Acuarela', p: 'watercolor painting, soft textures, delicate washes of color, paper texture' },
-    epico: { name: 'Épico fantasía', p: 'epic fantasy concept art, grand scale, volumetric light, atmospheric, matte painting' },
-    cyber: { name: 'Cyberpunk neón', p: 'cyberpunk aesthetic, neon lights, night city, reflections, moody atmosphere' },
-    minimal: { name: 'Minimalista', p: 'minimalist composition, clean background, soft pastel colors, simple shapes' },
-    documental: { name: 'Documental', p: 'documentary photography style, realistic, authentic, natural colors, National Geographic quality' },
+    cine: { name: 'Cinematográfico', p: 'fotograma de película cinematográfica, iluminación dramática, poca profundidad de campo, lente anamórfico, corrección de color rica, muy detallado' },
+    foto: { name: 'Fotorrealista', p: 'fotografía fotorrealista, luz natural, ultra detallado, enfoque nítido, fotografía profesional' },
+    ilustracion: { name: 'Ilustración', p: 'hermosa ilustración digital, estilo pictórico, sombreado suave, estilo de libro de cuentos, colores ricos' },
+    anime: { name: 'Anime', p: 'ilustración estilo anime, colores vibrantes, fondo detallado, composición dinámica' },
+    '3d': { name: 'Animación 3D', p: 'render estilo película animada en 3D, iluminación global suave, personajes estilizados, alta calidad' },
+    acuarela: { name: 'Acuarela', p: 'pintura en acuarela, texturas suaves, delicadas aguadas de color, textura de papel' },
+    epico: { name: 'Épico fantasía', p: 'arte conceptual de fantasía épica, gran escala, luz volumétrica, atmosférico, matte painting' },
+    cyber: { name: 'Cyberpunk neón', p: 'estética cyberpunk, luces de neón, ciudad de noche, reflejos, atmósfera sombría' },
+    minimal: { name: 'Minimalista', p: 'composición minimalista, fondo limpio, colores pastel suaves, formas simples' },
+    documental: { name: 'Documental', p: 'estilo de fotografía documental, realista, auténtico, colores naturales, calidad National Geographic' },
     ninguno: { name: 'Sin estilo (solo prompt)', p: '' },
   };
   const styleOpts = () => Object.entries(F.STYLES).map(([k, v]) => [k, v.name]);
@@ -39,7 +39,7 @@
 ${sc.extra ? '- Instrucciones extra: ' + sc.extra : ''}
 Para cada escena entrega:
   "narration": el texto exacto que leerá el locutor (frases naturales, sin acotaciones ni emojis),
-  "image_prompt": descripción visual detallada EN INGLÉS para generar una imagen (sujeto, entorno, composición, iluminación). Sin texto, letras ni logotipos dentro de la imagen. Mantén coherencia visual entre escenas (mismos personajes, época y estética).
+  "image_prompt": descripción visual detallada EN ESPAÑOL para generar una imagen (sujeto, entorno, composición, iluminación). Sin texto, letras ni logotipos dentro de la imagen. Mantén coherencia visual entre escenas (mismos personajes, época y estética).
   "on_screen_text": frase corta de 2 a 6 palabras para mostrar en pantalla.
 Devuelve JSON con esta forma exacta:
 {"title":"título atractivo para YouTube (máx. 70 caracteres)","scenes":[{"narration":"...","image_prompt":"...","on_screen_text":"..."}]}`;
