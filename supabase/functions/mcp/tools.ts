@@ -176,10 +176,29 @@ async function download(url: string, kind: "image" | "audio" = "image"): Promise
   }
   throw new ToolError("El enlace redirige demasiadas veces.");
 }
+/** Un archivo de ChatGPT puede llegar como texto (enlace) u objeto con download_url / download_link / url y, a veces, file_id / id, name y mime_type */
+type FileRef = { url: string; name?: string; mime?: string; id?: string };
+const asRef = (f: any): FileRef | null => {
+  if (typeof f === "string") return /^https?:\/\//i.test(f) ? { url: f } : null;
+  if (!f || typeof f !== "object") return null;
+  const url = [f.download_url, f.download_link, f.downloadUrl, f.url, f.file_url].find((u) => typeof u === "string" && /^https?:\/\//i.test(u));
+  return url ? { url, name: typeof f.name === "string" ? f.name : typeof f.filename === "string" ? f.filename : undefined, mime: f.mime_type ?? f.mimeType, id: f.file_id ?? f.id } : null;
+};
+/** Todo lo que pueda traer archivos en los argumentos (nombres de campo conocidos), ya normalizado */
+const fileRefsOf = (a: any): FileRef[] => {
+  const out: FileRef[] = [];
+  for (const k of ["image", "images", "openaiFileIdRefs", "files", "file"]) { const v = a?.[k]; for (const x of Array.isArray(v) ? v : v == null ? [] : [v]) { const r = asRef(x); if (r) out.push(r); } }
+  return out;
+};
+/** Qué recibimos exactamente (solo la forma, nunca los enlaces, que llevan firma): sirve para explicar un fallo real */
+const describeArgs = (a: any): string => {
+  const parts = Object.keys(a ?? {}).map((k) => { const v = a[k]; const one = (x: any) => (typeof x === "string" ? "texto" : x && typeof x === "object" ? `objeto{${Object.keys(x).join(",")}}` : typeof x); return `${k}=${Array.isArray(v) ? `lista(${v.length})[${v.slice(0, 3).map(one).join(" | ")}]` : one(v)}`; });
+  return parts.length ? parts.join("; ") : "ning\u00fan argumento";
+};
 const isAudioRef = (f: any) => /^audio\//i.test(String(f?.mime_type ?? "")) || /\.(mp3|wav|m4a|ogg|aac)$/i.test(String(f?.name ?? ""));
-const refUrls = (refs: unknown, audio = false): string[] => (Array.isArray(refs) ? refs : []).filter((f: any) => isAudioRef(f) === audio).map((f: any) => String(f?.download_link ?? "")).filter(Boolean);
+const refUrls = (refs: unknown, audio = false): string[] => (Array.isArray(refs) ? refs : []).filter((f: any) => isAudioRef(f) === audio).map((f: any) => asRef(f)?.url ?? "").filter(Boolean);
 const importAudio = async (ctx: Ctx, url: string, name: string) => { const d = await download(url, "audio"); const dur = audioDuration(d.bytes, d.mime); const m = await saveMedia(ctx, { type: "audio", bytes: d.bytes, mime: d.mime, name, meta: { imported: true }, duration: dur }); await ledger(ctx, { provider: "externo", kind: "importacion", units: { audio: 1, bytes: d.bytes.length, duplicado: m.duplicated }, detail: name }); return { ...m, duration: dur }; };
-const importUrl = async (ctx: Ctx, url: string, name: string, meta: Record<string, unknown> = {}) => { const d = await download(url); const m = await saveMedia(ctx, { type: "image", bytes: d.bytes, mime: d.mime, name, meta: { ...meta, imported: true } }); await ledger(ctx, { provider: "externo", kind: "importacion", units: { image: 1, bytes: d.bytes.length, duplicado: m.duplicated }, detail: name }); return m; };
+const importUrl = async (ctx: Ctx, url: string, name: string, meta: Record<string, unknown> = {}) => { const d = await download(url); const m = await saveMedia(ctx, { type: "image", bytes: d.bytes, mime: d.mime, name, meta: { ...meta, imported: true } }); await ledger(ctx, { provider: "externo", kind: "importacion", units: { image: 1, bytes: d.bytes.length, duplicado: m.duplicated }, detail: name }); return { ...m, mime: d.mime, name }; };
 
 /* ---------- biblioteca ---------- */
 async function saveMedia(ctx: Ctx, o: { type: "image" | "audio"; bytes: Uint8Array; mime: string; name: string; meta?: Record<string, unknown>; duration?: number }) {
@@ -248,13 +267,21 @@ Devuelve JSON: {"title":"título atractivo (máx. 70 caracteres)","scenes":[{"na
   },
 
   async framaly_import_image(ctx, a) {
-    const urls = [...(a.image_urls ?? []), ...refUrls(a.openaiFileIdRefs)];
-    if (!urls.length) throw new ToolError("Pasa image_urls (enlaces https) o las imágenes de la conversación (openaiFileIdRefs).");
-    if (urls.length > 12) throw new ToolError("Máximo 12 imágenes por llamada.");
-    const out: unknown[] = [], fallos: string[] = [];
-    await pool(urls, 3, async (u, i) => { try { const m = await importUrl(ctx, u, `${a.name || "Imagen importada"} ${i + 1}`); out[i] = { media_id: m.id, url_temporal: m.url, duplicado: m.duplicated }; } catch (e) { fallos.push(`imagen ${i + 1}: ${(e as Error).message}`); } });
-    if (!out.filter(Boolean).length) throw new ToolError(fallos.join(" · "));
-    return { importadas: out.filter(Boolean), fallos, siguiente_paso: "Usa los media_id en framaly_create_video_project (image_media_id)." };
+    // ChatGPT entrega sus imágenes en image / images (download_url + file_id) o en openaiFileIdRefs; tambi\u00e9n se aceptan enlaces https
+    const items: FileRef[] = [...fileRefsOf(a).filter((r) => !isAudioRef({ mime_type: r.mime, name: r.name })), ...(a.image_urls ?? []).map((u: string) => ({ url: u }))];
+    if (!items.length) throw new ToolError(`No lleg\u00f3 ninguna imagen utilizable. Recib\u00ed: ${describeArgs(a)}. Env\u00eda la imagen en el campo \u00abimage\u00bb (archivo de ChatGPT), en \u00abimage_urls\u00bb (enlaces https) o usa framaly_upload_media con el contenido en base64.`);
+    if (items.length > 12) throw new ToolError("M\u00e1ximo 12 im\u00e1genes por llamada.");
+    const out: any[] = [], fallos: string[] = [];
+    await pool(items, 3, async (it, i) => {
+      const nm = (items.length === 1 && a.name) || it.name || `${a.name || "Imagen de ChatGPT"} ${i + 1}`;
+      try { const m = await importUrl(ctx, it.url, nm, { source_file_id: it.id ?? null }); out[i] = { id: m.id, type: "image", mime_type: m.mime, name: nm, duplicate: m.duplicated, temporary_url: m.url }; }
+      catch (e) { fallos.push(`imagen ${i + 1}${it.name ? " (" + it.name + ")" : ""}: ${(e as Error).message}`); }
+    });
+    const ok = out.filter(Boolean);
+    if (!ok.length) throw new ToolError(`No se pudo guardar ninguna imagen. ${fallos.join(" \u00b7 ")}`);
+    return { success: fallos.length === 0, provider: "chatgpt_external", stored_in_library: true, media: ok[0], images: ok, credits_consumed: 0, failures: fallos,
+      importadas: ok.map((m) => ({ media_id: m.id, url_temporal: m.temporary_url, duplicado: m.duplicate })), fallos,
+      next_step: "Usa media.id como scenes[].image_media_id en framaly_create_video_project (sin volver a subir la imagen) y comprueba con framaly_list_media." };
   },
 
   async framaly_import_audio(ctx, a) {
@@ -277,7 +304,8 @@ Devuelve JSON: {"title":"título atractivo (máx. 70 caracteres)","scenes":[{"na
     const dur = image ? undefined : audioDuration(bytes, mime);
     const m = await saveMedia(ctx, { type: a.type, bytes, mime, name: a.name || (image ? "Imagen subida" : "Audio subido"), meta: { imported: true, uploaded: true }, duration: dur });
     await ledger(ctx, { provider: "externo", kind: "importacion", units: { [a.type]: 1, bytes: bytes.length, duplicado: m.duplicated }, detail: a.name });
-    return { media_id: m.id, tipo: a.type, mime, duracion_segundos: dur == null ? undefined : Number(dur.toFixed(2)), url_temporal: m.url, duplicado: m.duplicated };
+    return { success: true, provider: "chatgpt_external", stored_in_library: true, media: { id: m.id, type: a.type, mime_type: mime, name: a.name || (image ? "Imagen subida" : "Audio subido"), duplicate: m.duplicated }, credits_consumed: 0,
+      media_id: m.id, tipo: a.type, mime, duracion_segundos: dur == null ? undefined : Number(dur.toFixed(2)), url_temporal: m.url, duplicado: m.duplicated };
   },
 
   async framaly_generate_voice(ctx, a) {
@@ -385,9 +413,9 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
   },
 
   async framaly_list_media(ctx, a) {
-    let q = ctx.client.from("framaly_media").select("id,type,name,source,duration,created").eq("user_id", ctx.uid).eq("deleted", false).order("created", { ascending: false }).limit(a.limit ?? 30);
+    let q = ctx.client.from("framaly_media").select("id,type,name,source,duration,created,mime,size").eq("user_id", ctx.uid).eq("deleted", false).order("created", { ascending: false }).limit(a.limit ?? 30);
     if (a.type) q = q.eq("type", a.type);
     const { data, error } = await q; if (error) throw new ToolError(error.message);
-    return { archivos: (data ?? []).map((m: any) => ({ id: m.id, tipo: m.type, nombre: m.name, origen: m.source, duracion_segundos: m.duration })) };
+    return { archivos: (data ?? []).map((m: any) => ({ id: m.id, tipo: m.type, nombre: m.name, mime_type: m.mime ?? null, size_bytes: m.size ?? null, origen: m.source, duracion_segundos: m.duration, creado: m.created ? new Date(Number(m.created)).toISOString() : null })) };
   },
 };

@@ -70,7 +70,7 @@ async function rpc(a: Auth, msg: any): Promise<unknown | null> {
       return rpcOk(id, { protocolVersion: msg.params?.protocolVersion ?? "2025-03-26", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "framaly", title: "FRAMALY Studio", version: VERSION }, instructions: INSTRUCTIONS });
     case "ping": return rpcOk(id, {});
     case "tools/list":
-      return rpcOk(id, { tools: TOOLS.filter((t) => a.scopes.includes(t.scope)).map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: { readOnlyHint: t.scope === "read", openWorldHint: false } })) });
+      return rpcOk(id, { tools: TOOLS.filter((t) => a.scopes.includes(t.scope)).map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, ...(t.meta ? { _meta: t.meta } : {}), annotations: { readOnlyHint: t.scope === "read", openWorldHint: false } })) });
     case "tools/call": {
       const r = await runTool(a, String(msg.params?.name ?? ""), msg.params?.arguments);
       return rpcOk(id, { content: [{ type: "text", text: asText(r.value) }], isError: !r.ok });

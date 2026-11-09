@@ -19,3 +19,8 @@ node /tmp/mcpe2e/e2e-modes.mjs      # 44 comprobaciones: modos external / no_ope
 FX_DIR=/tmp/fx node /tmp/mcpe2e/make-fixture.mjs   # crea un proyecto real con archivos reales (para exportarlo en un navegador)
 ```
 Los archivos de ejemplo (`a.png`, `voz1.wav`…) se generan con Python (ver la sesión) y se leen desde `FX_DIR`.
+
+## Transferencia de imágenes ChatGPT → FRAMALY
+```bash
+node /tmp/mcpe2e/e2e-chatgpt-image.mjs   # 20 comprobaciones: image{download_url,file_id}, images[], openaiFileIdRefs, errores reales, list_media, image_media_id
+```

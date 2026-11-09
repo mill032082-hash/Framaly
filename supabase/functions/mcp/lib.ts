@@ -1,6 +1,6 @@
 // FRAMALY Studio · piezas puras del servidor MCP / API (sin red ni base de datos: se pueden probar solas).
 
-export const VERSION = "1.4.0";
+export const VERSION = "1.5.0";
 
 /** Modo de ejecución de una conexión: external = FRAMALY no genera nada · no_openai = puede generar, pero OpenAI queda bloqueado · all = todo permitido */
 export type ExecMode = "external" | "no_openai" | "all";
@@ -118,7 +118,9 @@ export function parseJSON(text: string): any {
 }
 
 /* ---------- herramientas: nombre, texto y esquema (las usan el MCP y la API REST) ---------- */
-export type ToolDef = { name: string; title: string; description: string; scope: "read" | "write"; inputSchema: Record<string, unknown> };
+export type ToolDef = { name: string; title: string; description: string; scope: "read" | "write"; inputSchema: Record<string, unknown>; meta?: Record<string, unknown> };
+/** Archivo que ChatGPT entrega a una herramienta MCP (campo declarado en _meta["openai/fileParams"]): ChatGPT rellena download_url y file_id */
+const fileObj = { type: "object", description: "Imagen generada o subida en ChatGPT (ChatGPT rellena download_url y file_id).", properties: { download_url: { type: "string" }, file_id: { type: "string" }, name: { type: "string" }, mime_type: { type: "string" } } };
 const urls = { type: "array", maxItems: 12, items: { type: "string" }, description: "Enlaces https públicos de imágenes (PNG, JPG, WEBP o GIF) que ya tengas." };
 const fileRefs = { type: "array", maxItems: 12, description: "Imágenes de la conversación de ChatGPT (ChatGPT las rellena solo).", items: { type: "object", properties: { name: { type: "string" }, id: { type: "string" }, mime_type: { type: "string" }, download_link: { type: "string" } } } };
 const aurls = { type: "array", maxItems: 12, items: { type: "string" }, description: "Enlaces https públicos de audios (MP3, WAV, M4A u OGG) que ya tengas." };
@@ -144,8 +146,11 @@ export const TOOLS: ToolDef[] = [
       quality: { type: "string", enum: ["low", "medium", "high"], description: "Solo OpenAI. Por defecto medium." },
       provider: { type: "string", enum: ["openai", "gemini"] }, name: { type: "string", description: "Nombre en la biblioteca." } } } },
   { name: "framaly_import_image", title: "Importar imágenes", scope: "write",
-    description: "Trae a la biblioteca de FRAMALY imágenes que ya existen (por ejemplo, las que creaste en ChatGPT) desde enlaces https o desde los archivos de la conversación. Devuelve el id de cada una para usarla en un video.",
-    inputSchema: { type: "object", additionalProperties: false, properties: { image_urls: urls, openaiFileIdRefs: fileRefs, name: { type: "string", description: "Nombre base en la biblioteca." } } } },
+    description: "Recibe en la biblioteca de FRAMALY las imágenes que ChatGPT generó (campo image / images) o imágenes de enlaces https. No genera nada ni gasta créditos. Devuelve media_id, nombre y tipo.",
+    meta: { "openai/fileParams": ["image", "images"] },
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      image: fileObj, images: { type: "array", maxItems: 12, items: fileObj, description: "Varias imágenes de ChatGPT." },
+      image_urls: urls, openaiFileIdRefs: fileRefs, name: { type: "string", description: "Nombre del archivo (ej: caballo_volador_andes.png). Si se omite se usa el que traiga la imagen." } } } },
   { name: "framaly_import_audio", title: "Importar audios", scope: "write",
     description: "Trae a la biblioteca de FRAMALY audios que ya existen (narración, música o efectos en MP3, WAV, M4A u OGG) desde enlaces https o desde los archivos de la conversación. Devuelve el id y la duración de cada uno.",
     inputSchema: { type: "object", additionalProperties: false, properties: { audio_urls: aurls, openaiFileIdRefs: fileRefs, name: { type: "string", description: "Nombre base en la biblioteca." } } } },
