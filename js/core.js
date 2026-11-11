@@ -52,6 +52,7 @@
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem('framaly.settings') || '{}'); } catch (e) { saved = {}; }
   F.settings = { ...DEF, ...saved, keys: { ...DEF.keys, ...(saved.keys || {}) }, models: { ...DEF.models, ...(saved.models || {}) }, cloud: { ...DEF.cloud, ...(saved.cloud || {}) }, uses: { ...(saved.uses || {}) }, useOwn: { ...(saved.useOwn || {}) } };
+  for (const mk in DEF.models) if (!String(F.settings.models[mk] || '').trim()) F.settings.models[mk] = DEF.models[mk];   // un modelo en blanco rompe la llamada
   // Google retiró gemini-2.5-flash para cuentas nuevas: si quedó guardado como modelo por defecto, se actualiza
   if (F.settings.models.gemini === 'gemini-2.5-flash') F.settings.models.gemini = DEF.models.gemini;
   F.saveSettings = () => { try { localStorage.setItem('framaly.settings', JSON.stringify(F.settings)); } catch (e) {} F.emit('settings'); };

@@ -285,5 +285,52 @@ El archivo guarda los proyectos; las imágenes y audios viajan con tu cuenta en 
 2. Pulsa **Permisos** en una persona y marca o desmarca las secciones que puede usar (por ejemplo, quitar **Integraciones API**).
 3. **Quitar acceso** bloquea a una persona ya aprobada.
 Los cambios le llegan en un minuto, sin que vuelva a entrar. El menú lateral avisa cuántas personas hay por aprobar.` },
+    { id: 'guiones.serie', sec: 'guiones', t: 'Crear una serie por capítulos en automático', k: 'serie capitulos capitulo episodios temporada historia continuar guion escenas automatico suspenso personajes saga partes',
+      a: `En [[#/guiones|Guiones]] elige la pestaña **Serie por capítulos**:
+1. Escribe la historia o el tema, cuántos **Capítulos** y los **Segundos por capítulo**; elige tono, estilo de imágenes, formato y voz.
+2. Pulsa **Crear la serie completa**: la IA planifica la serie (personajes, coherencia visual y cada capítulo con su final en suspenso) y escribe las escenas de todos los capítulos, uno tras otro.
+3. Abre **Ver y editar las escenas** de un capítulo para corregirlo, o pulsa **Reescribir**.
+4. **Producir video** hace ese capítulo; **Producir todos los capítulos** los hace seguidos y se salta los que ya tienen video.
+Si se corta, pulsa **Continuar**: solo se escribe lo que falta. Escribir la serie usa solo la IA de texto; las imágenes y voces se gastan al producir.` },
+    { id: 'guiones.ia', sec: 'guiones', t: 'Qué IA escribe los guiones y cómo usar Claude', k: 'claude anthropic ia guiones modelo texto cual escribe openai gemini minimax cambiar clave conectar asesor asistente',
+      a: `Los guiones, el SEO y el Asesor IA usan la **IA de texto**. Por defecto es **Claude**; si Claude no tiene clave, FRAMALY usa sola la siguiente IA conectada (OpenAI, Gemini o MiniMax) para no detenerse.
+Para usar Claude:
+1. Crea una clave en **console.anthropic.com** → **API keys** (empieza por \`sk-ant-\`). Es una cuenta de API aparte de la suscripción de Claude.ai y se paga por uso.
+2. En [[#/integraciones|Integraciones API]] → **Claude**, pega la clave y pulsa **Guardar clave** y luego **Probar**.
+3. En **Guiones**, deja **Modelo de texto** en «Según Integraciones» o elige «Claude (Anthropic)».
+Si eliges una IA concreta en un guion o flujo, se usa esa y no se cambia sola.` },
+    { id: 'flujos.sync', sec: 'flujos', t: 'Que la voz, las imágenes, los subtítulos y los sonidos salgan coordinados', k: 'sincronizar sincronia coordinacion voz imagenes subtitulos sonidos efectos desfase desfasado tiempo planos frase anime terror automatico',
+      a: `El flujo automático monta el video **sincronizado con la voz**: cada frase es un plano distinto de la imagen, los subtítulos salen de a 3 palabras cuando se dicen, y se colocan efectos de sonido en los cambios de escena.
+1. En [[#/flujos|Flujos y agentes]] elige un flujo ya hecho (por ejemplo **Anime épico narrado** o **Historia de terror**) y escribe el tema.
+2. En la tarjeta **Agente Editor** deja marcado **Sincronizar con la voz** y elige **Efectos de sonido** (automáticos, cine, anime, terror o ninguno).
+3. Pulsa **Ejecutar flujo**.
+Si algo queda fuera de tiempo, ábrelo en el Editor y ajusta la duración del clip.` },
+    { id: 'flujos.amedias', sec: 'flujos', t: 'Continuar un video que quedó a medias sin volver a gastar', k: 'medias mitad continuar reanudar interrumpido corto error creditos gastar otra vez pendiente incompleto',
+      a: `Si un flujo se corta (error, sin créditos o cerraste la página), aparece **Proyectos a medias** en [[#/inicio|Inicio]] y en la columna izquierda de [[#/flujos|Flujos]].
+1. Mira qué ya está hecho (Guion, Imágenes, Voz).
+2. Pulsa **Continuar**: se reutiliza lo generado y solo se hace lo que falta.
+La papelera descarta el avance; las imágenes y voces ya hechas siguen en tu Biblioteca. El avance se guarda en este navegador.` },
+    { id: 'editor.pro', sec: 'editor', t: 'Editor Pro: modo automático y manual', k: 'pro profesional automatico manual color correccion brillo contraste zoom encuadre posicion giro ritmo musica beat mezcla audio logo guias resolucion 4k pulido revision tecnica velocidad camara lenta',
+      a: `En el [[#/editor|Editor]] abre la pestaña **Pro**:
+- **Automático**: **Pulido automático** (color, audio, ritmo y fundidos en un clic), **Color automático**, **Igualar color entre clips**, **Mezcla automática**, **Cortes al ritmo de la música** y **Revisión técnica**.
+- **Manual**: selecciona un clip para corregir **color**, **encuadre** (zoom, posición, giro, espejo), **texto** (tamaño y posición) y **velocidad** de los videos. Sin nada seleccionado ajustas el fundido del video, el **logo**, las **guías** y la **resolución** de exportación.
+Atajos: \`,\` \`.\` un fotograma · \`Q\` \`W\` recortar hasta el cursor · \`G\` guías · \`Ctrl+Shift+C/V\` copiar y pegar estilo.` },
+    { id: 'editor.video', sec: 'editor', t: 'Subir y editar videos MP4', k: 'subir video mp4 mov webm clip grabacion celular camara audio extraer voz cortar silencios',
+      a: `1. En el [[#/editor|Editor]] pulsa el botón de subir (o arrastra el archivo). Sirven **MP4, MOV, M4V y WebM** de hasta 600 MB.
+2. El video aparece en la pestaña **Videos**; su audio se separa solo y queda como pista de **voz**.
+3. Añádelo a la línea de tiempo. Puedes dividirlo (\`S\`), recortarlo y cortar los silencios desde la pestaña **Golden**.
+Los videos de más de 45 MB se quedan solo en este dispositivo (no se suben a la nube).` },
+    { id: 'videosia.crear', sec: 'imagenes', t: 'Generar un video con IA (Veo o MiniMax)', k: 'generar video ia veo minimax hailuo clip texto a video imagen a video animar costo',
+      a: `En [[#/videosia|Videos con IA]]:
+1. Describe la escena (puedes pulsar **Mejorar descripción con IA**).
+2. Elige la **IA de video**, el formato, la duración y, si quieres, una **imagen de partida**.
+3. Pulsa **Generar video** y confirma el costo aproximado. Tarda de 1 a 6 minutos; puedes seguir trabajando.
+El video queda en tu Biblioteca y lo puedes mandar al editor. Veo usa la clave de **Gemini**; MiniMax usa la suya. Se conectan en [[#/integraciones|Integraciones API]].` },
+    { id: 'plantillas.usar', sec: 'editor', t: 'Usar plantillas de video y crear las mías', k: 'plantillas plantilla formato tipo video anuncio tutorial top terror receta agregar analizar referencia capturas copiar estilo',
+      a: `En [[#/plantillas|Plantillas]]:
+1. Filtra por grupo (Ventas, Contenido, Historias, Negocio, Redes) o busca.
+2. En una plantilla pulsa **Crear proyecto** (deja las escenas armadas) o **Guion con IA** (abre el guionista con esa estructura).
+3. **Agregar plantilla** analiza capturas o un video de referencia con IA y guarda la estructura en **Mis plantillas**.
+La pestaña **Método de la skill** tiene las recetas del método de edición.` },
   ];
 })();

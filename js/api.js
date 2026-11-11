@@ -86,8 +86,27 @@
     },
 
     /** Llamada a modelo de lenguaje. Devuelve texto. */
-    async llm({ system = '', prompt, json = false, maxTokens = 4000, provider, images }) {
+    /** Llamada de texto con respaldo: si la IA automática no tiene clave o está caída, prueba con la siguiente conectada.
+        Si la persona eligió una IA concreta, se respeta: no se cambia sola. Guarda en `lastText` cuál respondió. */
+    async llm(o) {
+      const auto = !o.provider || o.provider === 'auto', skip = (this.skipText ||= {});
+      let first = ''; try { first = auto ? (o.images?.length ? this.visionProvider() : this.textProvider()) : ''; } catch (e) { /* sin IA de texto: lo dirá llm1 */ }
+      if (auto && first && skip[first] > Date.now()) {   // ya se sabe que esa IA no tiene clave: no se insiste en cada llamada
+        const alt = (o.images?.length ? ['anthropic', 'openai', 'gemini'] : ['anthropic', 'openai', 'gemini', 'minimax']).find((x) => x !== first && !(skip[x] > Date.now()) && this.has(x) && canUse(x, 'text'));
+        if (alt) return this.llm1({ ...o, provider: alt });
+      }
+      try { const t = await this.llm1(o); return t; }
+      catch (e) {
+        if (auto && first && /Error 503|no hay clave|aún no ha guardado|no está configurada|Falta la API key/i.test(e.message)) skip[first] = Date.now() + 10 * 60000;
+        if (!auto || !/Error 50[0-9]|Error 529|Error 401|Error 403|no hay clave|aún no ha guardado|no está disponible|no está configurada|no es válida|Falta la API key|Failed to fetch/i.test(e.message)) throw e;
+        const tried = this.lastText, pool = (o.images?.length ? ['anthropic', 'openai', 'gemini'] : ['anthropic', 'openai', 'gemini', 'minimax']).filter((x) => x !== tried && this.has(x) && canUse(x, 'text'));
+        for (const alt of pool) { try { return await this.llm1({ ...o, provider: alt }); } catch (e2) { /* prueba la siguiente */ } }
+        throw e;
+      }
+    },
+    async llm1({ system = '', prompt, json = false, maxTokens = 4000, provider, images }) {
       const prov = images?.length ? this.visionProvider(provider) : this.textProvider(provider);   // images: [{ mime, data(base64) }] para leer capturas
+      this.lastText = prov;
       if (prov === 'anthropic') {
         const r = await net('anthropic', 'https://api.anthropic.com/v1/messages', {
           method: 'POST',

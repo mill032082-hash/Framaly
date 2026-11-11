@@ -131,11 +131,21 @@ Exactamente ${n} capítulos y de 1 a 4 personajes.`,
     });
   };
 
+  /** Qué IA de texto va a escribir: { claude: bool, other: nombre de la que se usará si Claude no está } */
+  X.writer = async () => {
+    const L = { openai: 'OpenAI', gemini: 'Gemini', minimax: 'MiniMax' }, other = L[['openai', 'gemini', 'minimax'].find((x) => F.api.has(x) && F.api.canUse(x, 'text'))] || '';
+    let claude = !!(F.settings.keys.anthropic || '').trim();
+    if (!claude && F.cloud?.configured?.() && F.cloud.user && F.api.has('anthropic')) { try { const st = await F.cloud.apiStatus(); const v = st?.anthropic; claude = !!v && v !== 'none' && v.state !== 'none' && v !== 'fail'; } catch (e) { return null; } }
+    if (!F.api.canUse('anthropic', 'text')) claude = false;
+    return { claude, other };
+  };
+
   /* La página Guiones ahora tiene dos modos */
   const single = V.guiones;
   V.guiones = (el) => {
     let tab = read(TAB, 'uno');
-    el.innerHTML = `<div class="page"><div class="seg" id="gMode" style="margin-bottom:14px"><button data-m="uno">${I('script')} Un video</button><button data-m="serie">${I('layers')} Serie por capítulos</button></div><div id="gBody"></div></div>`;
+    el.innerHTML = `<div class="page"><div class="seg" id="gMode" style="margin-bottom:14px"><button data-m="uno">${I('script')} Un video</button><button data-m="serie">${I('layers')} Serie por capítulos</button></div><div id="gIA" class="small muted" style="margin:-6px 0 12px"></div><div id="gBody"></div></div>`;
+    X.writer().then((w) => { const box = el.querySelector('#gIA'); if (box && w) box.innerHTML = w.claude ? `${I('sparkles')} Los guiones los escribe <b>Claude</b>.` : `${I('sparkles')} <b>Claude todavía no está conectado</b>: los guiones se escriben con <b>${esc(w.other || 'otra IA')}</b>. Para usar Claude, pega su clave en <a href="#/integraciones">Integraciones API → Claude</a>.`; });
     const body = el.querySelector('#gBody');
     const show = () => {
       el.querySelectorAll('#gMode button').forEach((b) => b.classList.toggle('on', b.dataset.m === tab));
