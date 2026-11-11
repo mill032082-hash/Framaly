@@ -11,6 +11,7 @@
     { sec: 'Creación con IA' },
     { id: 'guiones', name: 'Guiones', icon: 'script', sub: 'Guiones por escenas listos para producir' },
     { id: 'imagenes', name: 'Imágenes', icon: 'image', sub: 'Genera escenas y recursos visuales' },
+    { id: 'videosia', name: 'Videos con IA', icon: 'film', badge: 'Nuevo', sub: 'Genera clips de video con Veo o MiniMax' },
     { id: 'voces', name: 'Voces', icon: 'mic', sub: 'Narraciones y locuciones con IA' },
     { id: 'efectos', name: 'Efectos y transiciones', icon: 'layers', sub: 'Transiciones, filtros, movimientos y textos' },
     { sec: 'Gestión' },

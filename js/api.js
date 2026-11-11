@@ -285,6 +285,61 @@
       return { text: all.filter((n) => /^gemini/.test(n) && !/image|tts/i.test(n) && !bad.test(n)), image: all.filter((n) => /image/i.test(n)), tts: all.filter((n) => /tts/i.test(n)) };
     },
 
+    /* ---------- VIDEO con IA: Veo (con la clave de Gemini) y MiniMax Hailuo ---------- */
+    videoProviders() { return [['veo', 'Veo 3 · Google', 'gemini'], ['minimax', 'MiniMax Hailuo', 'minimax']].filter(([, , k]) => this.has(k)).map(([id, name]) => ({ id, name })); },
+    /** Empieza un video. Devuelve el trabajo { provider, id, model } para consultarlo después (tarda de 1 a 6 minutos) */
+    async videoStart({ provider, prompt, aspect = '16:9', duration, image, negative, resolution }) {
+      if (provider === 'minimax') {
+        need('minimax', 'MiniMax');
+        const model = F.settings.models.minimaxVideo || 'MiniMax-Hailuo-02';
+        const body = { model, prompt, duration: duration >= 10 ? 10 : 6, resolution: resolution || '768P' };
+        if (image) body.first_frame_image = `data:${image.mime};base64,${image.data}`;
+        const j = mmOk(await asJson(await net('minimax', `${MM}/v1/video_generation`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key('minimax') }, body: JSON.stringify(body) })));
+        if (!j.task_id) throw new Error('MiniMax no devolvió el número de tarea del video.');
+        return { provider: 'minimax', id: String(j.task_id), model };
+      }
+      need('gemini', 'Gemini (Veo)');
+      const model = F.settings.models.veo || 'veo-3.0-generate-001';
+      const inst = { prompt }; if (image) inst.image = { bytesBase64Encoded: image.data, mimeType: image.mime };
+      const params = { aspectRatio: aspect === '9:16' ? '9:16' : '16:9' };
+      if (negative) params.negativePrompt = negative;
+      if (duration && /3\.1/.test(model)) params.durationSeconds = duration;
+      if (resolution) params.resolution = resolution;
+      const j = await asJson(await net('gemini', `${GEM}/v1beta/models/${encodeURIComponent(model)}:predictLongRunning`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key('gemini') }, body: JSON.stringify({ instances: [inst], parameters: params }) }));
+      if (!j.name) throw new Error('Veo no devolvió el número de operación del video.');
+      return { provider: 'veo', id: String(j.name), model };
+    },
+    /** Estado de un video: { status: 'running' | 'done' | 'error', note?, error?, file? } */
+    async videoStatus(job) {
+      if (job.provider === 'minimax') {
+        const j = mmOk(await asJson(await net('minimax', `${MM}/v1/query/video_generation?task_id=${encodeURIComponent(job.id)}`, { method: 'GET', headers: { Authorization: 'Bearer ' + key('minimax') } })));
+        const st = String(j.status || '').toLowerCase();
+        if (st === 'success' && j.file_id) return { status: 'done', file: String(j.file_id) };
+        if (st === 'fail') return { status: 'error', error: 'MiniMax no pudo generar el video (a veces es por el contenido del texto). Cambia la descripción e inténtalo de nuevo.' };
+        return { status: 'running', note: { preparing: 'Preparando', queueing: 'En cola', processing: 'Generando' }[st] || 'Generando' };
+      }
+      if (!/^models\/veo-[\w.-]+\/operations\/[\w.-]+$/.test(job.id)) return { status: 'error', error: 'Operación de Veo no válida.' };
+      const j = await asJson(await net('gemini', `${GEM}/v1beta/${job.id}`, { method: 'GET', headers: { 'x-goog-api-key': key('gemini') } }));
+      if (!j.done) return { status: 'running', note: 'Generando' };
+      if (j.error) return { status: 'error', error: 'Veo: ' + (j.error.message || 'no pudo generar el video') };
+      const r = j.response?.generateVideoResponse || j.response || {}, s = (r.generatedSamples || r.generatedVideos || [])[0], uri = s?.video?.uri;
+      if (!uri) return { status: 'error', error: (r.raiMediaFilteredReasons || []).join(' ') || 'Veo bloqueó el video por sus filtros de contenido. Cambia la descripción.' };
+      return { status: 'done', file: String(uri) };
+    },
+    /** Descarga el video terminado. Devuelve un Blob MP4 */
+    async videoFetch(job, file) {
+      let b;
+      if (job.provider === 'minimax') {
+        if (mode('minimax') === 'shared') b = await asBlob(await net('minimax', `${MM}/v1/files/retrieve?file_id=${encodeURIComponent(file)}&download=1`, { method: 'GET', headers: {} }));
+        else { const j = mmOk(await asJson(await net('minimax', `${MM}/v1/files/retrieve?file_id=${encodeURIComponent(file)}`, { method: 'GET', headers: { Authorization: 'Bearer ' + key('minimax') } }))); b = await asBlob(await fetch(j.file?.download_url)); }
+      } else {
+        const u = new URL(file); if (u.hostname !== 'generativelanguage.googleapis.com') throw new Error('Dirección de video no reconocida.');
+        b = await asBlob(await net('gemini', u.href, { method: 'GET', headers: { 'x-goog-api-key': key('gemini') } }));
+      }
+      if (!b || b.size < 1000) throw new Error('El video llegó vacío. Vuelve a intentar la descarga.');
+      return /video/.test(b.type) ? b : new Blob([b], { type: 'video/mp4' });
+    },
+
     /** Modelos de video (Veo) disponibles con la clave de Gemini */
     async veoModels() {
       need('gemini', 'Gemini');

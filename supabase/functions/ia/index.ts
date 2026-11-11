@@ -25,14 +25,31 @@ const ROUTES: { p: Provider; m: string; re: RegExp; kind: string }[] = [
   { p: "minimax", m: "POST", re: /^\/v1\/t2a_v2$/, kind: "voz" },
   { p: "minimax", m: "POST", re: /^\/v1\/image_generation$/, kind: "imagen" },
   { p: "minimax", m: "POST", re: /^\/v1\/get_voice$/, kind: "prueba" },
+  // Video con IA: crear (cuesta), consultar el estado (gratis; el gasto se anota cuando termina bien) y bajar el archivo
+  { p: "gemini", m: "POST", re: /^\/v1beta\/models\/veo-[A-Za-z0-9._-]{3,50}:predictLongRunning$/, kind: "video" },
+  { p: "gemini", m: "GET", re: /^\/v1beta\/models\/veo-[A-Za-z0-9._-]{3,50}\/operations\/[A-Za-z0-9._-]{3,80}$/, kind: "video_estado" },
+  { p: "gemini", m: "GET", re: /^\/v1beta\/files\/[A-Za-z0-9._-]{3,80}:download$/, kind: "video_archivo" },
+  { p: "minimax", m: "POST", re: /^\/v1\/video_generation$/, kind: "video" },
+  { p: "minimax", m: "GET", re: /^\/v1\/query\/video_generation$/, kind: "video_estado" },
+  { p: "minimax", m: "GET", re: /^\/v1\/files\/retrieve$/, kind: "video_archivo" },
 ];
-const MAX_BODY = 200_000, MAX_TOKENS = 8000, MAX_CHARS = 5000;
+/* Precios ESTIMADOS de video en US$ (ajústalos si tu plan es distinto) */
+const VEO_PER_SEC = (model: string) => (/fast/i.test(model) ? 0.15 : /lite/i.test(model) ? 0.1 : 0.4);
+const MINIMAX_VIDEO = (seconds: number, res: string) => (/1080/.test(res) ? 0.49 : 0.28) * (seconds > 6 ? 2 : 1);
+const NO_COST = ["prueba", "saldo", "video_estado", "video_archivo"];
+const MAX_BODY = 200_000, MAX_BODY_VIDEO = 3_000_000, MAX_TOKENS = 8000, MAX_CHARS = 5000;   // el video puede llevar una imagen de partida
 
 const headersFor = (p: Provider, key: string): Record<string, string> =>
   p === "anthropic" ? { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" }
   : p === "openai" || p === "minimax" ? { Authorization: `Bearer ${key}`, "content-type": "application/json" }
   : p === "gemini" ? { "x-goog-api-key": key, "content-type": "application/json" }
   : { "xi-api-key": key, "content-type": "application/json" };
+
+/** ¿Ya se anotó el gasto de este video? (el estado se consulta muchas veces) */
+async function alreadyBilled(client: ReturnType<typeof db>, uid: string, job: string): Promise<boolean> {
+  const { data } = await client.from("framaly_usage").select("id").eq("user_id", uid).eq("kind", "video").eq("units->>job", job).limit(1);
+  return !!(data && data.length);
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -53,7 +70,7 @@ Deno.serve(async (req: Request) => {
     let kind = route.kind;
     if (kind === "gemini") kind = /image/i.test(path) ? "imagen" : /tts/i.test(path) ? "voz" : "texto";
     if (kind === "saldo" && acc.role !== "admin") return fail(403, "forbidden", "Solo el administrador puede ver el saldo.");
-    if (query && !/^output_format=[a-z0-9_]{3,30}$/.test(query)) return fail(400, "bad_request", "Parámetros no permitidos.");
+    if (query && !/^(output_format=[a-z0-9_]{3,30}|alt=media|task_id=[A-Za-z0-9_-]{3,80}|file_id=[A-Za-z0-9_-]{3,80}(&download=1)?)$/.test(query)) return fail(400, "bad_request", "Parámetros no permitidos.");
 
     // 2) ¿Esta persona usa la clave compartida de esta API?
     if (acc.role !== "admin" && !["shared", "both"].includes(String(acc.ai?.[provider]))) {
@@ -68,7 +85,7 @@ Deno.serve(async (req: Request) => {
       return fail(503, "not_configured", `La clave compartida de ${LABEL[provider]} todavía no está configurada.`);
     }
     // 4) Límites (las pruebas de conexión no gastan)
-    if (kind !== "prueba" && kind !== "saldo") {
+    if (!NO_COST.includes(kind)) {
       const stop = await checkBudget(client, provider, uid, acc);
       if (stop) return stop;
     }
@@ -77,12 +94,13 @@ Deno.serve(async (req: Request) => {
     let body: Record<string, any> | undefined;
     if (method === "POST") {
       body = input.body && typeof input.body === "object" ? input.body : {};
-      if (JSON.stringify(body).length > MAX_BODY) return fail(413, "too_large", "La solicitud es demasiado grande.");
+      if (JSON.stringify(body).length > (kind === "video" ? MAX_BODY_VIDEO : MAX_BODY)) return fail(413, "too_large", "La solicitud es demasiado grande.");
       delete body.stream;
       if (provider === "anthropic") body.max_tokens = Math.min(Number(body.max_tokens) || 1024, MAX_TOKENS);
       if (provider === "openai" && route.kind === "texto") { body.max_tokens = Math.min(Number(body.max_tokens) || 1024, MAX_TOKENS); delete body.max_completion_tokens; body.n = 1; }
       if (provider === "minimax" && kind === "texto") body.max_tokens = Math.min(Number(body.max_tokens) || 1024, MAX_TOKENS);
-      if (provider === "gemini") {
+      if (kind === "video" && provider === "gemini") { body.instances = Array.isArray(body.instances) ? body.instances.slice(0, 1) : []; if (body.parameters && typeof body.parameters === "object") body.parameters.sampleCount = 1; }
+      if (provider === "gemini" && kind !== "video") {
         const gc = (body.generationConfig ||= {});
         if (kind === "texto") gc.maxOutputTokens = Math.min(Number(gc.maxOutputTokens) || 1024, MAX_TOKENS);
         body.contents = Array.isArray(body.contents) ? body.contents.slice(0, 6) : [];
@@ -93,7 +111,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // 6) Llamada al proveedor con la clave del servidor
-    const up = await fetch(HOST[provider] + path + (query ? "?" + query : ""), { method, headers: headersFor(provider, key), body: body ? JSON.stringify(body) : undefined });
+    const upQuery = query.replace(/&download=1$/, "");
+    const up = await fetch(HOST[provider] + path + (upQuery ? "?" + upQuery : ""), { method, headers: headersFor(provider, key), body: body ? JSON.stringify(body) : undefined });
     const type = up.headers.get("content-type") ?? "application/json";
     if (kind === "saldo" && (up.status === 401 || up.status === 403)) {
       await logError(client, { provider, uid, email: acc.email, kind: "proveedor", status: up.status, message: "La clave no tiene permiso para leer el saldo (falta «User: Read»)." });
@@ -124,8 +143,17 @@ Deno.serve(async (req: Request) => {
       }
       return new Response(buf, { status: up.status, headers: { ...CORS, "Content-Type": type } });
     }
+    // Video de Veo: el archivo se reenvía tal cual (la clave nunca llega al navegador)
+    if (kind === "video_archivo" && provider === "gemini") return new Response(up.body, { status: up.status, headers: { ...CORS, "Content-Type": type } });
     const text = await up.text();
     let j: any = {}; try { j = JSON.parse(text); } catch { /* sin datos de uso */ }
+    // Video de MiniMax: con download=1 se baja el archivo desde la dirección que da MiniMax y se reenvía
+    if (kind === "video_archivo" && provider === "minimax" && /&download=1$/.test(query) && Number(j?.base_resp?.status_code ?? 0) === 0) {
+      const url = String(j?.file?.download_url ?? "");
+      if (!/^https:\/\//.test(url)) return fail(502, "no_file", "MiniMax no entregó el archivo del video.");
+      const f = await fetch(url);
+      return new Response(f.body, { status: f.status, headers: { ...CORS, "Content-Type": f.headers.get("content-type") ?? "video/mp4" } });
+    }
     // Saldo real de ElevenLabs: se guarda una instantánea y se avisa si la cuota se acaba
     if (provider === "elevenlabs" && kind === "saldo" && up.ok) {
       const used = Number(j.character_count ?? 0), quota = Number(j.character_limit ?? 0), reset = Number(j.next_character_count_reset_unix ?? 0);
@@ -146,7 +174,19 @@ Deno.serve(async (req: Request) => {
       }
       return new Response(text, { status: 200, headers: { ...CORS, "Content-Type": type } });
     }
-    if (up.ok && kind !== "prueba") {
+    // Video: el gasto se anota una sola vez, cuando el proveedor dice que terminó bien
+    if (kind === "video_estado" && up.ok) {
+      if (provider === "gemini") {
+        const done = j?.done === true && !j?.error && (j?.response?.generateVideoResponse?.generatedSamples?.length ?? j?.response?.generatedVideos?.length ?? 0) > 0;
+        const model = path.split("/")[3] ?? "veo", op = path.split("/").pop() ?? "";
+        if (done && !(await alreadyBilled(client, uid, op))) await record(client, { uid, acc, provider, kind: "video", units: { seconds: 8, model, job: op }, cost: 8 * VEO_PER_SEC(model) });
+      } else if (String(j?.status ?? "").toLowerCase() === "success") {
+        const job = query.replace(/^task_id=/, "");
+        if (!(await alreadyBilled(client, uid, job))) await record(client, { uid, acc, provider, kind: "video", units: { seconds: 6, job }, cost: MINIMAX_VIDEO(6, "768P") });
+      }
+      return new Response(text, { status: up.status, headers: { ...CORS, "Content-Type": type } });
+    }
+    if (up.ok && !NO_COST.includes(kind) && kind !== "video") {
       if (provider === "gemini") {
         const u = j.usageMetadata ?? {};
         const tin = Number(u.promptTokenCount ?? 0), tout = Number(u.candidatesTokenCount ?? 0) + Number(u.thoughtsTokenCount ?? 0);
