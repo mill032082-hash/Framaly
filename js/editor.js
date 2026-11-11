@@ -37,7 +37,7 @@
   };
 
   /* pestañas del panel izquierdo: archivos y herramientas para editar */
-  const TABS = [['image', 'Imágenes'], ['video', 'Videos'], ['audio', 'Audio'], ['motion', 'Animaciones'], ['fx', 'Efectos'], ['trans', 'Transiciones'], ['text', 'Texto'], ['golden', 'Golden'], ['plantillas', 'Plantillas'], ['more', 'Más']];
+  const TABS = [['image', 'Imágenes'], ['video', 'Videos'], ['audio', 'Audio'], ['motion', 'Animaciones'], ['fx', 'Efectos'], ['trans', 'Transiciones'], ['text', 'Texto'], ['golden', 'Golden'], ['plantillas', 'Plantillas'], ['pro', 'Pro'], ['more', 'Más']];
   const GLYPH = { none: '■', kenburns: '⤢', zoomIn: '⊕', zoomOut: '⊖', panL: '←', panR: '→', panU: '↑', panD: '↓', fade: '◐', black: '●', flash: '✦', slideL: '⇠', slideR: '⇢', slideU: '⇡', zoom: '⌖', wipe: '▌', circle: '◯', blur: '≋', spin: '↻', blinds: '☰', glitch: '▚', ...(R.GLYPHS || {}) };
 
   function tpl() {
@@ -107,7 +107,7 @@
   }
 
   /* ---------- historial ---------- */
-  const snap = () => JSON.stringify({ name: p.name, aspect: p.aspect, fps: p.fps, clips: p.clips, audio: p.audio, watermark: p.watermark, letterbox: p.letterbox, progressBar: p.progressBar, duck: !!p.duck });
+  const snap = () => JSON.stringify({ name: p.name, aspect: p.aspect, fps: p.fps, clips: p.clips, audio: p.audio, watermark: p.watermark, letterbox: p.letterbox, progressBar: p.progressBar, duck: !!p.duck, logo: p.logo || null, fadeIn: p.fadeIn || 0, fadeOut: p.fadeOut || 0 });
   function commit(soft) {
     if (soft && Date.now() - lastCommit < 900) return;
     lastCommit = Date.now();
@@ -121,7 +121,7 @@
   function after(o = {}) { E.t = F.clamp(E.t, 0, total()); saveSoon(); renderTimeline(); draw(); updateTime(); if (o.insp) renderInspector(); }
 
   /* API interna para el módulo Golden */
-  E.api = { undo: () => undo(), seek: (t) => seek(t), commit, after, total, save: () => p && F.projects.save(p), renderBin: () => renderBin(), setAspect: () => sizeCanvas() };
+  E.api = { undo: () => undo(), seek: (t) => seek(t), commit, after, total, save: () => p && F.projects.save(p), renderBin: () => renderBin(), setAspect: () => sizeCanvas(), select: (t, id) => select(t, id) };
 
   /* ---------- biblioteca lateral ---------- */
   function renderBin() {
@@ -142,6 +142,7 @@
   function renderTools(bin) {
     if (E.binTab === 'golden' && F.golden) return F.golden.panel(bin, E);
     if (E.binTab === 'plantillas' && F.plantillas) return F.plantillas.panel(bin, E);
+    if (E.binTab === 'pro' && F.pro) return F.pro.panel(bin, E);
     const c = E.selType === 'clip' ? clipById(E.sel) : null, i = c ? p.clips.indexOf(c) : -1, tab = E.binTab;
     const cur = (k) => (c ? c[k] : null);
     const item = (k, o, glyph, extra = '') => `<button class="pre-item ${cur(k) === o.id ? 'on' : ''}" data-pre="${k}:${o.id}" title="${F.esc(o.name)}">${extra || `<span class="g">${glyph}</span>`}<span class="n">${F.esc(o.name)}</span></button>`;
@@ -382,7 +383,7 @@
     if (!it) return F.toast('Coloca el cursor dentro de un clip (a más de 0,25 s de sus bordes) para dividirlo');
     commit();
     const c = it.clip, d1 = F.round1(t - it.start), d2 = Math.max(0.5, F.round1(c.duration - d1));
-    const n = { ...c, id: F.uid(), duration: d2, text: '' }; if (F.media.byId(c.mediaId)?.type === 'video') n.vstart = F.round1((c.vstart || 0) + d1);
+    const n = { ...c, id: F.uid(), duration: d2, text: '' }; if (F.media.byId(c.mediaId)?.type === 'video') n.vstart = F.round1((c.vstart || 0) + d1 * (c.speed || 1));
     n.transition = c.transition; c.duration = d1; c.transition = 'none'; delete c.capTimes; delete n.capTimes;
     p.clips.splice(p.clips.indexOf(c) + 1, 0, n);
     select('clip', n.id, false); after({ insp: true });

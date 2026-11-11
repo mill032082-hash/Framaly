@@ -95,7 +95,8 @@
   R.videoFrame = (clip, lt) => {
     const v = M.videoEl(clip.mediaId); touched.add(v);
     if (v.readyState < 2) return null;
-    const tt = Math.min((clip.vstart || 0) + lt, Math.max(0, (v.duration || 0) - 0.04));
+    const sp = Math.max(0.25, Math.min(4, +clip.speed || 1)), tt = Math.min((clip.vstart || 0) + lt * sp, Math.max(0, (v.duration || 0) - 0.04));
+    if (v.playbackRate !== sp) v.playbackRate = sp;
     if (R.live) { if (v.paused) { v.currentTime = tt; v.play().catch(() => {}); } else if (Math.abs(v.currentTime - tt) > 0.4) v.currentTime = tt; }
     else { if (!v.paused) v.pause(); if (Math.abs(v.currentTime - tt) > 0.03) v.currentTime = tt; }
     return v;

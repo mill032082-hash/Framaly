@@ -323,6 +323,8 @@
       const src = ac.createBufferSource(); src.buffer = buf; src.loop = !!a.loop;
       const g = ac.createGain(); const vol = a.volume ?? 1; g.gain.value = vol;
       src.connect(g).connect(dest);
+      const fin = +a.fadeIn || 0;   // entrada suave de la pista
+      if (fin > 0 && rel < fin && !(voices.length && a.kind === 'musica')) { const st = when + Math.max(0, -rel), r0 = Math.max(0, rel); g.gain.setValueAtTime(Math.max(0.0001, vol * (r0 / fin)), st); g.gain.linearRampToValueAtTime(vol, st + (fin - r0)); }
       if (rel < 0) src.start(when - rel, 0); else src.start(when, a.loop ? rel % buf.duration : rel);
       if (voices.length && a.kind === 'musica') {
         const low = vol * 0.25, ramp = 0.25, at = (t) => when + (t - fromT);

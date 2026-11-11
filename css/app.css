@@ -800,3 +800,16 @@ body.resizing .flows { transition: none; }
 .look-item { grid-column: 1 / -1; text-align: left; border: 1px solid var(--line2); background: var(--bg2); color: var(--text); border-radius: 10px; padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; font: inherit; }
 .look-item:hover { border-color: #ff6a1a; }
 .look-item small { color: var(--muted, #9aa); font-size: 11px; line-height: 1.3; }
+
+.pro { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
+.pro-seg { display: flex; } .pro-seg button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.pro-act { display: flex; gap: 10px; align-items: center; text-align: left; border: 1px solid var(--line2); background: var(--bg2); color: var(--text); border-radius: 10px; padding: 9px 11px; cursor: pointer; font: inherit; }
+.pro-act:hover { border-color: #ff6a1a; } .pro-act:disabled { opacity: .6; cursor: wait; }
+.pro-act.pri { background: linear-gradient(135deg, #ff8a1f, #ff5a1a); border-color: transparent; color: #fff; }
+.pro-act span { display: flex; flex-direction: column; gap: 2px; } .pro-act small { font-size: 11px; opacity: .75; line-height: 1.3; }
+.pro-act .i { flex: none; }
+.pro-box { border: 1px solid var(--line2); border-radius: 10px; background: var(--bg2); padding: 8px 10px; }
+.pro-t { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; display: flex; gap: 6px; align-items: center; margin-bottom: 2px; }
+.pro-t .applyall { margin-left: auto; } .pro-t .applyall + .applyall { margin-left: 0; }
+.pro kbd { font-size: 10px; }
+.pro-t .applyall { white-space: nowrap; }
