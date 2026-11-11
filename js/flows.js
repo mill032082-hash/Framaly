@@ -44,15 +44,16 @@
 - Exactamente ${n} escenas. La primera debe ser un gancho potente en los primeros 5 segundos; la última, un cierre con llamada a la acción (suscribirse / comentar).
 ${sc.extra ? '- Instrucciones extra: ' + sc.extra : ''}
 Para cada escena entrega:
-  "narration": el texto exacto que leerá el locutor (frases naturales, sin acotaciones ni emojis),
+  "narration": el texto exacto que leerá el locutor (frases naturales y CORTAS, de 6 a 14 palabras cada una, separadas por punto; sin acotaciones ni emojis),
   "image_prompt": descripción visual detallada EN ESPAÑOL para generar una imagen (sujeto, entorno, composición, iluminación). Sin texto, letras ni logotipos dentro de la imagen. Mantén coherencia visual entre escenas (mismos personajes, época y estética).
   "on_screen_text": frase corta de 2 a 6 palabras para mostrar en pantalla.
+Además entrega "visual_bible": un párrafo de 40 a 70 palabras que fija el aspecto de TODO el video para que las imágenes sean coherentes entre sí: cómo son exactamente los personajes que se repiten (edad, pelo, ropa, rasgos), el lugar y la época, la paleta de colores y el tipo de luz. No describas acciones ahí.
 Devuelve JSON con esta forma exacta:
-{"title":"título atractivo para YouTube (máx. 70 caracteres)","scenes":[{"narration":"...","image_prompt":"...","on_screen_text":"..."}]}`;
+{"title":"título atractivo para YouTube (máx. 70 caracteres)","visual_bible":"...","scenes":[{"narration":"...","image_prompt":"...","on_screen_text":"..."}]}`;
     const j = await F.api.llmJSON({ system, prompt, provider: sc.provider, maxTokens: 8000 });
     if (!Array.isArray(j.scenes) || !j.scenes.length) throw new Error('El guion generado no contiene escenas.');
     return {
-      title: String(j.title || idea.topic).slice(0, 100),
+      title: String(j.title || idea.topic).slice(0, 100), bible: String(j.visual_bible || '').slice(0, 700),
       scenes: j.scenes.map((s) => ({ narration: String(s.narration || ''), image_prompt: String(s.image_prompt || s.narration || ''), on_screen_text: String(s.on_screen_text || '') })),
     };
   };
@@ -201,7 +202,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       step('images', 'run', `${ok}/${n}`); log(ok ? `Agente Director Visual: ya hay ${ok} de ${n} imágenes, genero solo las que faltan…` : `Agente Director Visual: generando ${n} imágenes…`);
       const ids = await F.pool(script.scenes, 3, async (sc, i) => {
         if (have[i] && F.media.byId(have[i])) return have[i];   // ya generada: no se paga otra vez
-        const prompt = [sc.image_prompt, cfg.images.common, F.STYLES[cfg.images.style]?.p].filter(Boolean).join('. ');
+        const prompt = [sc.image_prompt, script.bible ? 'Coherencia visual de todo el video: ' + script.bible : '', cfg.images.common, F.STYLES[cfg.images.style]?.p].filter(Boolean).join('. ');
         try {
           const [blob] = await F.api.image({ prompt, size, quality: cfg.images.quality, n: 1, provider: cfg.images.provider });
           const m = await F.media.add({ type: 'image', name: `${script.title.slice(0, 40)} · escena ${i + 1}`, blob, source: 'ai', meta: { prompt } });
@@ -262,11 +263,13 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
 
     // 5. Montaje
     step('montage', 'run', 'Montando…'); log('Agente Editor: montando el timeline…');
-    const p = F.projects.blank(cfg.output?.name || script.title, idea.aspect);
+    let synced = null;
+    if (mt.sync !== false && F.sync) { try { synced = await F.sync.montage({ cfg, script, imgIds, voiceIds, mus, log }); } catch (e) { log('  ✗ No se pudo sincronizar con la voz (' + e.message + '): uso el montaje simple.', 'w'); } }
+    const p = synced || F.projects.blank(cfg.output?.name || script.title, idea.aspect);
     const TR = ['fade', 'slideL', 'zoom', 'circle', 'blur', 'wipe', 'leak', 'slideU', 'doors', 'dreamy', 'wipeDiag', 'zoomOut'];
     const MO = ['kenburns', 'zoomIn', 'panR', 'zoomOut', 'panL', 'dolly', 'diag', 'panU'];
-    let t = 0, lastImg = imgIds.find(Boolean);
-    script.scenes.forEach((sc, i) => {
+    let t = synced ? R.layout(p).total : 0, lastImg = imgIds.find(Boolean);
+    if (!synced) script.scenes.forEach((sc, i) => {
       const imgId = imgIds[i] || lastImg; lastImg = imgId;
       const vm = voiceIds[i] ? F.media.byId(voiceIds[i]) : null;
       const dur = F.round1(vm ? Math.max(2.5, (vm.duration || 3) + (+mt.padding || 0.7)) : Math.max(2.5, (+idea.duration || 60) / n));
@@ -281,7 +284,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       if (vm) p.audio.push({ id: F.uid(), mediaId: vm.id, start: F.round1(t + 0.2), volume: 1, loop: false, fadeOut: false, kind: 'voz' });
       t = F.round1(t + dur);
     });
-    if (mus) p.audio.push({ id: F.uid(), mediaId: mus.id, start: 0, volume: +cfg.music.volume || 0.18, loop: true, fadeOut: true, kind: 'musica' });
+    if (mus && !synced) p.audio.push({ id: F.uid(), mediaId: mus.id, start: 0, volume: +cfg.music.volume || 0.18, loop: true, fadeOut: true, kind: 'musica' });
     p.script = script;
     step('montage', 'done', `${p.clips.length} clips · ${F.fmtS(t)}`); log(`✓ Timeline montado: ${p.clips.length} clips, ${F.fmtS(t)}`, 'o');
 
@@ -386,6 +389,8 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       { k: 'subtitles', l: 'Textos en pantalla', t: 'select', o: [['narracion', 'Subtítulos de la narración'], ['pantalla', 'Frase clave por escena'], ['ninguno', 'Sin textos']] },
       { k: 'textStyle', l: 'Estilo de la frase clave', t: 'select', o: () => toOpts(R.TEXT_STYLES) },
       { k: 'textAnim', l: 'Animación del texto', t: 'select', o: () => [['', 'Automática'], ...toOpts(R.TEXT_ANIMS)] },
+      { k: 'sync', l: 'Sincronizar con la voz: un plano por frase y subtítulos palabra por palabra', t: 'checkbox' },
+      { k: 'sfx', l: 'Efectos de sonido', t: 'select', o: [['auto', 'Automáticos según el tema'], ['cine', 'Cine (suaves)'], ['anime', 'Anime / acción'], ['terror', 'Terror (con ambiente)'], ['ninguno', 'Sin efectos']] },
       { k: 'padding', l: 'Pausa extra al final de cada escena (s)', t: 'number', min: 0, max: 3, step: 0.1 },
     ],
     seo: [{ k: 'keywords', l: 'Palabras clave objetivo', t: 'text', ph: 'Ej: océano, misterios, ciencia' }],
@@ -414,7 +419,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     images: { style: 'cine', quality: 'medium', common: '' },
     voice: { provider: 'auto', voice: 'nova', voiceId: '', instructions: 'Narrador profesional de documental: voz cálida, clara y con ritmo dinámico.', speed: 1 },
     music: { mediaId: '', volume: 0.18 },
-    montage: { transition: 'auto', motion: 'auto', filter: 'cine', subtitles: 'narracion', textStyle: 'inferior', textAnim: '', padding: 0.7 },
+    montage: { transition: 'auto', motion: 'auto', filter: 'cine', subtitles: 'narracion', textStyle: 'inferior', textAnim: '', padding: 0.5, sync: true, sfx: 'auto' },
     seo: { keywords: '' },
     output: { name: '', open: true, autoExport: true },
   };
@@ -424,13 +429,14 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     auto: { name: 'Automático completo', desc: 'Solo escribes el tema; lo demás se elige solo', over: { idea: { duration: 60 } } },
     youtube: { name: 'Video YouTube narrado', desc: '90 s horizontal · voz + subtítulos', over: { idea: { duration: 90 } } },
     short: { name: 'Short / TikTok viral', desc: '30 s vertical · ritmo rápido', over: { idea: { duration: 30, aspect: '9:16', tone: 'enérgico, sorprendente y directo' }, voice: { instructions: 'Voz enérgica y rápida, estilo creador de contenido viral.', speed: 1.1 }, montage: { padding: 0.3 } } },
+    anime: { name: 'Anime épico narrado', desc: '60 s vertical · estilo anime, acción y subtítulos al ritmo', over: { idea: { duration: 60, aspect: '9:16', tone: 'épico, emocionante y dramático, como el narrador de un anime' }, script: { extra: 'Cuenta una historia con protagonista, conflicto, giro y final potente. Frases cortas y con fuerza.' }, images: { style: 'anime', quality: 'medium', common: 'ilustración anime de alta calidad, líneas limpias, sombreado cel shading, composición cinematográfica dinámica, mismo diseño de personaje en todas las escenas' }, voice: { voice: 'onyx', instructions: 'Narrador de anime: voz intensa, dramática y con energía.', speed: 1.03 }, montage: { filter: 'vivo', transition: 'auto', motion: 'auto', subtitles: 'narracion', textStyle: 'meme', sfx: 'anime', padding: 0.35 } } },
     historia: { name: 'Historia / cuento', desc: '2 min · ilustrado y emotivo', over: { idea: { duration: 120, tone: 'narrativo, emotivo y envolvente' }, images: { style: 'ilustracion' }, voice: { voice: 'fable', instructions: 'Narrador de cuentos: pausado, cálido y muy expresivo.' }, montage: { filter: 'calido', transition: 'fade', motion: 'kenburns', padding: 1 } } },
     top: { name: 'Top / Listado', desc: 'Top con frase clave por escena', over: { idea: { duration: 90, tone: 'dinámico, con datos sorprendentes' }, montage: { subtitles: 'pantalla', textStyle: 'inferior', transition: 'slideL' } } },
     documental: { name: 'Mini documental', desc: '3 min · estilo documental', over: { idea: { duration: 180, tone: 'documental, riguroso y fascinante' }, images: { style: 'documental' }, voice: { voice: 'onyx' }, montage: { filter: 'cine', transition: 'black', padding: 0.9 } } },
     anuncio: { name: 'Anuncio de producto', desc: '30 s vertical · gancho, producto, oferta', over: { idea: { duration: 30, aspect: '9:16', tone: 'persuasivo, directo y cercano' }, script: { extra: 'Estructura: gancho que frena el scroll (3 s), problema, producto, prueba o beneficio, oferta y llamado a la acción. No inventes cifras ni promesas médicas.' }, images: { style: 'producto' }, voice: { instructions: 'Voz enérgica y confiable de anuncio, ritmo ágil.', speed: 1.08 }, montage: { filter: 'hdr', transition: 'flash', motion: 'punch', subtitles: 'narracion', textAnim: 'words', padding: 0.25 } } },
     curiosidades: { name: '¿Sabías que…? / Curiosidades', desc: '45 s vertical · datos que sorprenden', over: { idea: { duration: 45, aspect: '9:16', tone: 'curioso, sorprendente y ágil' }, script: { extra: 'Empieza con una pregunta intrigante. Un dato sorprendente por escena y la mejor revelación al final.' }, voice: { speed: 1.05 }, montage: { filter: 'vivo', transition: 'whip', textAnim: 'words', padding: 0.3 } } },
     motivacional: { name: 'Motivacional épico', desc: '45 s · frases potentes e imágenes épicas', over: { idea: { duration: 45, aspect: '9:16', tone: 'motivacional, épico e inspirador' }, script: { extra: 'Frases cortas y contundentes. Cierra con una frase memorable.' }, images: { style: 'epico' }, voice: { voice: 'onyx', instructions: 'Voz grave, pausada y poderosa, como un discurso motivacional.', speed: 0.95 }, montage: { filter: 'tealorange', transition: 'zoom', motion: 'dolly', subtitles: 'pantalla', textStyle: 'titulo', padding: 0.8 } } },
-    terror: { name: 'Historia de terror', desc: '60 s vertical · suspenso y giro final', over: { idea: { duration: 60, aspect: '9:16', tone: 'misterioso, inquietante y con suspenso' }, script: { extra: 'Relato en primera persona. Sube la tensión escena a escena y termina con un final abierto e inquietante. Nada de violencia gráfica.' }, images: { style: 'terror' }, voice: { voice: 'onyx', instructions: 'Susurro grave y lento, lleno de suspenso.', speed: 0.92 }, montage: { filter: 'terror', transition: 'shake', motion: 'dolly', padding: 0.9 } } },
+    terror: { name: 'Historia de terror', desc: '60 s vertical · suspenso y giro final', over: { idea: { duration: 60, aspect: '9:16', tone: 'misterioso, inquietante y con suspenso' }, script: { extra: 'Relato en primera persona. Sube la tensión escena a escena y termina con un final abierto e inquietante. Nada de violencia gráfica.' }, images: { style: 'terror', common: 'misma casa, mismos personajes y misma paleta fría y desaturada en todas las escenas, sin sangre' }, voice: { voice: 'onyx', instructions: 'Susurro grave y lento, lleno de suspenso.', speed: 0.92 }, montage: { filter: 'terror', transition: 'auto', motion: 'auto', sfx: 'terror', padding: 0.8 } } },
     infantil: { name: 'Cuento infantil', desc: '2 min · ilustrado, tierno y con moraleja', over: { idea: { duration: 120, tone: 'tierno, alegre y sencillo', audience: 'niños de 4 a 8 años' }, script: { extra: 'Personajes simpáticos, frases cortas y una moraleja positiva al final.' }, images: { style: 'infantil' }, voice: { voice: 'fable', instructions: 'Narrador de cuentos infantiles: dulce, juguetón y muy expresivo.', speed: 0.95 }, montage: { filter: 'pastel', transition: 'circle', motion: 'float', padding: 1 } } },
     receta: { name: 'Receta de cocina', desc: '45 s vertical · ingredientes y pasos', over: { idea: { duration: 45, aspect: '9:16', tone: 'apetitoso, claro y cercano' }, script: { extra: 'Primera escena: el plato terminado. Luego ingredientes y un paso por escena. Texto en pantalla corto con el paso.' }, images: { style: 'foto', common: 'fotografía gastronómica, luz natural, primer plano apetitoso' }, montage: { filter: 'calido', transition: 'slideU', subtitles: 'pantalla', textStyle: 'caja', padding: 0.4 } } },
     tutorial: { name: 'Tutorial paso a paso', desc: '90 s horizontal · pasos numerados', over: { idea: { duration: 90, tone: 'educativo, claro y ordenado' }, script: { extra: 'Di qué se logra al final, luego un paso por escena numerado («Paso 1», «Paso 2»…) y un error común a evitar.' }, images: { style: 'minimal' }, montage: { filter: 'none', transition: 'slideL', motion: 'zoomIn', subtitles: 'pantalla', textStyle: 'inferior', textAnim: 'slide' } } },
