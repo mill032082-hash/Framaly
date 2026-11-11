@@ -176,3 +176,7 @@ En Guiones hay dos modos: «Un video» y «Serie por capítulos» (`js/series.js
 
 ## IA de texto: Claude primero, con respaldo
 Guiones, SEO y Asesor usan la IA de texto. `F.api.llm` intenta la IA automática (Claude por defecto) y, si no tiene clave o está caída, usa la siguiente conectada sin detener el trabajo; recuerda 10 minutos qué IA no tiene clave para no insistir. Si la persona eligió una IA concreta, se respeta. Guiones muestra qué IA va a escribir. El Asesor conoce las secciones nuevas (serie por capítulos, sincronía, Pro, Videos con IA, Plantillas, proyectos a medias). Para usar Claude hay que guardar su clave en Integraciones API → Claude.
+
+## Lo que envía ChatGPT (MCP/API) llega solo a su sección
+- **Servidor (MCP 1.9.0):** herramientas nuevas `framaly_save_script` (guarda en FRAMALY un guion escrito por la otra IA; admite `image_media_id` / `voice_media_id` por escena) y `framaly_list_scripts`. `framaly_write_script` también guarda su guion. Tabla `framaly_scripts` (`supabase/scripts.sql`). Prueba: `supabase/functions/mcp/test/e2e-scripts.mjs`.
+- **App (`js/inbox.js`):** cada 25 s, con la pestaña visible, revisa si llegaron imágenes, audios, proyectos o guiones y los baja sin pulsar «Actualizar». Las imágenes quedan en Imágenes y Biblioteca; los guiones en Guiones → «Recibidos de tu IA», con «Abrir en el guionista» y «Producir video» (usa las imágenes y voces que la IA ya envió, sin volver a generarlas).

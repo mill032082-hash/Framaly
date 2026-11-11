@@ -144,7 +144,7 @@ Exactamente ${n} capítulos y de 1 a 4 personajes.`,
   const single = V.guiones;
   V.guiones = (el) => {
     let tab = read(TAB, 'uno');
-    el.innerHTML = `<div class="page"><div class="seg" id="gMode" style="margin-bottom:14px"><button data-m="uno">${I('script')} Un video</button><button data-m="serie">${I('layers')} Serie por capítulos</button></div><div id="gIA" class="small muted" style="margin:-6px 0 12px"></div><div id="gBody"></div></div>`;
+    el.innerHTML = `<div class="page"><div class="seg" id="gMode" style="margin-bottom:14px"><button data-m="uno">${I('script')} Un video</button><button data-m="serie">${I('layers')} Serie por capítulos</button></div><div id="gIA" class="small muted" style="margin:-6px 0 12px"></div><div id="gInbox"></div><div id="gBody"></div></div>`;
     X.writer().then((w) => { const box = el.querySelector('#gIA'); if (box && w) box.innerHTML = w.claude ? `${I('sparkles')} Los guiones los escribe <b>Claude</b>.` : `${I('sparkles')} <b>Claude todavía no está conectado</b>: los guiones se escriben con <b>${esc(w.other || 'otra IA')}</b>. Para usar Claude, pega su clave en <a href="#/integraciones">Integraciones API → Claude</a>.`; });
     const body = el.querySelector('#gBody');
     const show = () => {
@@ -154,5 +154,7 @@ Exactamente ${n} capítulos y de 1 a 4 personajes.`,
     };
     el.querySelector('#gMode').addEventListener('click', (e) => { const b = e.target.closest('[data-m]'); if (!b) return; tab = b.dataset.m; write(TAB, tab); show(); });
     show();
+    // guiones que envió ChatGPT u otra IA: se abren en el guionista de «Un video»
+    F.inbox?.mount(el.querySelector('#gInbox'), { open: (script, row) => { const cur = read('framaly.script', {}); write('framaly.script', { ...cur, topic: row.data?.topic || script.title, aspect: row.data?.aspect || cur.aspect || '9:16', language: row.data?.language || cur.language || 'español', script }); tab = 'uno'; write(TAB, tab); show(); el.querySelector('#gBody').scrollIntoView({ behavior: 'smooth', block: 'start' }); F.toast('Guion abierto: revísalo y pulsa «Generar video completo»', 'ok'); } });
   };
 })();

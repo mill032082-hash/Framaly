@@ -816,3 +816,5 @@ body.resizing .flows { transition: none; }
 
 .sr-n { flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-weight: 800; color: #fff; background: linear-gradient(135deg, #ff8a1f, #ff5a1a); }
 .sr-ch { margin-top: 12px; } .sr-ch .scene { margin-top: 10px; }
+
+.inbox { margin-bottom: 14px; border-color: rgba(255, 106, 26, .45); }

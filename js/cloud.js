@@ -75,6 +75,7 @@
 
   /* ---------- aprobación: quién puede usar la plataforma ---------- */
   st.approved = () => st.access?.status === 'approved';
+  st.client = () => sb();   // cliente de Supabase con la sesión de la persona (para la bandeja de la IA)
   st.isAdmin = () => st.approved() && st.access?.role === 'admin';
   /** ¿Esta persona puede usar la sección? Sin nube todo está permitido; el administrador siempre puede. */
   st.can = (section) => !st.configured() || !st.user || st.isAdmin() || st.access?.perms?.[section] !== false;

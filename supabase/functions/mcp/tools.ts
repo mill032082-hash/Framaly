@@ -233,6 +233,19 @@ async function saveMedia(ctx: Ctx, o: { type: "image" | "audio"; bytes: Uint8Arr
   return { id, url: sig.data?.signedUrl ?? null, duplicated: false };
 }
 
+/** Guarda (o corrige) un guion en la sección Guiones del usuario */
+async function saveScript(ctx: Ctx, o: { id?: string; idem?: string; title: string; topic?: string; bible?: string; aspect?: string; language?: string; scenes: Record<string, string>[]; origin: string }) {
+  const now = Date.now(), T = ctx.client.from("framaly_scripts");
+  let id = "", created = now;
+  if (o.id) { const { data } = await ctx.client.from("framaly_scripts").select("id,created").eq("user_id", ctx.uid).eq("id", String(o.id)).eq("deleted", false).maybeSingle(); if (!data) throw new ToolError(`No encontré el guion «${o.id}» (usa framaly_list_scripts).`); id = data.id; created = Number(data.created) || now; }
+  else if (o.idem) { const { data } = await ctx.client.from("framaly_scripts").select("id,created").eq("user_id", ctx.uid).eq("deleted", false).eq("data->>idem", String(o.idem)).limit(1).maybeSingle(); if (data) { id = data.id; created = Number(data.created) || now; } }
+  const updated = !!id; if (!id) id = newId("s");
+  const data = { topic: String(o.topic ?? "").slice(0, 400), bible: String(o.bible ?? "").slice(0, 900), aspect: o.aspect ?? "9:16", language: String(o.language ?? "español").slice(0, 40), scenes: o.scenes, idem: o.idem ?? null, origin: o.origin };
+  const { error } = await T.upsert({ user_id: ctx.uid, id, title: o.title.slice(0, 120), data, source: "mcp", created, updated: now, deleted: false }, { onConflict: "user_id,id" });
+  if (error) throw new ToolError("No se pudo guardar el guion en FRAMALY: " + error.message);
+  return { id, updated };
+}
+
 async function mediaRow(ctx: Ctx, id: string, type: "image" | "audio") {
   const { data } = await ctx.client.from("framaly_media").select("id,type,duration,name").eq("user_id", ctx.uid).eq("id", id).eq("deleted", false).maybeSingle();
   if (!data || data.type !== type) throw new ToolError(`No encontré ${type === "image" ? "la imagen" : "el audio"} «${id}» en tu biblioteca (usa framaly_list_media).`);
@@ -277,7 +290,36 @@ ${a.extra ? "- Instrucciones extra: " + a.extra : ""}
 Para cada escena entrega "narration" (texto exacto del locutor, sin acotaciones), "image_prompt" (descripción visual detallada EN ESPAÑOL, sin texto ni letras en la imagen, coherente entre escenas) y "on_screen_text" (2 a 6 palabras).
 Devuelve JSON: {"title":"título atractivo (máx. 70 caracteres)","scenes":[{"narration":"...","image_prompt":"...","on_screen_text":"..."}]}` });
     if (!Array.isArray(data.scenes) || !data.scenes.length) throw new ToolError("El guion generado no contiene escenas. Inténtalo de nuevo.");
-    return { ia_usada: provider, title: String(data.title ?? a.topic).slice(0, 100), scenes: data.scenes.slice(0, 12).map((s: any) => ({ narration: String(s.narration ?? ""), image_prompt: String(s.image_prompt ?? s.narration ?? ""), on_screen_text: String(s.on_screen_text ?? "") })) };
+    const out = { title: String(data.title ?? a.topic).slice(0, 100), scenes: data.scenes.slice(0, 12).map((s: any) => ({ narration: String(s.narration ?? ""), image_prompt: String(s.image_prompt ?? s.narration ?? ""), on_screen_text: String(s.on_screen_text ?? "") })) };
+    // queda guardado solo en la sección Guiones de FRAMALY
+    const saved = await saveScript(ctx, { title: out.title, topic: String(a.topic ?? ""), language: a.language, scenes: out.scenes, origin: "framaly:" + provider }).catch(() => null);
+    return { ia_usada: provider, ...out, script_id: saved?.id ?? null, guardado_en_framaly: saved ? "Guiones → Recibidos de tu IA" : null };
+  },
+
+  async framaly_save_script(ctx, a) {
+    const warn: string[] = [];
+    const scenes = [];
+    for (const [i, s] of (a.scenes as any[]).entries()) {
+      const sc: Record<string, string> = { narration: String(s.narration ?? "").trim(), image_prompt: String(s.image_prompt ?? "").trim(), on_screen_text: String(s.on_screen_text ?? "").trim() };
+      for (const [k, type] of [["image_media_id", "image"], ["voice_media_id", "audio"]] as const) {
+        if (!s[k]) continue;
+        try { await mediaRow(ctx, String(s[k]), type); sc[k] = String(s[k]); } catch { warn.push(`escena ${i + 1}: no encontré ${type === "image" ? "la imagen" : "el audio"} «${s[k]}» en la biblioteca (se guardó sin enlazar)`); }
+      }
+      if (sc.narration || sc.image_prompt) scenes.push(sc);
+    }
+    if (!scenes.length) throw new ToolError("El guion no tiene escenas con narración o descripción de imagen.");
+    const r = await saveScript(ctx, { id: a.script_id, idem: a.idempotency_key, title: String(a.title).trim() || "Guion", topic: a.topic, bible: a.visual_bible, aspect: a.aspect, language: a.language, scenes, origin: "externo" });
+    await ledger(ctx, { provider: "externo", kind: "guion", units: { escenas: scenes.length, actualizado: r.updated }, detail: String(a.title).slice(0, 120) });
+    const withImg = scenes.filter((s) => s.image_media_id).length;
+    return { success: true, script_id: r.id, updated_existing: r.updated, scenes: scenes.length, scenes_with_image: withImg, credits_consumed: 0, avisos: warn,
+      donde_verlo: "FRAMALY → Guiones → «Recibidos de tu IA». Aparece solo en menos de un minuto.",
+      siguiente_paso: withImg === scenes.length ? "El usuario puede pulsar «Producir video» sin gastar en imágenes." : "Si quieres que el video use TUS imágenes, impórtalas con framaly_import_image y vuelve a llamar a framaly_save_script con script_id e image_media_id en cada escena." };
+  },
+
+  async framaly_list_scripts(ctx, a) {
+    const { data, error } = await ctx.client.from("framaly_scripts").select("id,title,data,source,updated").eq("user_id", ctx.uid).eq("deleted", false).order("updated", { ascending: false }).limit(a.limit ?? 20);
+    if (error) throw new ToolError("No se pudieron leer los guiones: " + error.message);
+    return { guiones: (data ?? []).map((r: any) => ({ script_id: r.id, title: r.title, escenas: r.data?.scenes?.length ?? 0, origen: r.source, actualizado: new Date(Number(r.updated)).toISOString() })) };
   },
 
   async framaly_generate_image(ctx, a) {

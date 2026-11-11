@@ -8,11 +8,11 @@ class Q {
   eq(k, v) { this.f.push(['eq', k, v]); return this; } gte(k, v) { this.f.push(['gte', k, v]); return this; } in(k, v) { this.f.push(['in', k, v]); return this; }
   order(k, o) { this.o = [k, o?.ascending !== false]; return this; } limit(n) { this.l = n; return this; }
   maybeSingle() { this.single = true; return this; }
-  insert(r) { this.ins = r; return this; } upsert(r) { this.ins = r; return this; }
+  insert(r) { this.ins = r; return this; } upsert(r) { this.ins = r; this.up = true; return this; }
   then(res, rej) { return Promise.resolve(this.run()).then(res, rej); }
   run() {
     const rows = DB.tables[this.t] ??= [];
-    if (this.ins) { const list = Array.isArray(this.ins) ? this.ins : [this.ins]; list.forEach((r) => rows.push({ created_at: new Date().toISOString(), id: r.id ?? rows.length + 1, ...r })); return { data: null, error: null }; }
+    if (this.ins) { const list = Array.isArray(this.ins) ? this.ins : [this.ins]; list.forEach((r) => { const i = this.up && r.user_id && r.id ? rows.findIndex((x) => x.user_id === r.user_id && x.id === r.id) : -1; if (i >= 0) rows[i] = { ...rows[i], ...r }; else rows.push({ created_at: new Date().toISOString(), id: r.id ?? rows.length + 1, ...r }); }); return { data: null, error: null }; }
     let out = rows.filter((r) => match(r, this.f));
     if (this.o) out = [...out].sort((a, b) => (a[this.o[0]] > b[this.o[0]] ? 1 : -1) * (this.o[1] ? 1 : -1));
     if (this.l) out = out.slice(0, this.l);
