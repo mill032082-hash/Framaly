@@ -38,7 +38,7 @@
 
   /* pestañas del panel izquierdo: archivos y herramientas para editar */
   const TABS = [['image', 'Imágenes'], ['video', 'Videos'], ['audio', 'Audio'], ['motion', 'Animaciones'], ['fx', 'Efectos'], ['trans', 'Transiciones'], ['text', 'Texto'], ['golden', 'Golden'], ['plantillas', 'Plantillas'], ['more', 'Más']];
-  const GLYPH = { none: '■', kenburns: '⤢', zoomIn: '⊕', zoomOut: '⊖', panL: '←', panR: '→', panU: '↑', panD: '↓', fade: '◐', black: '●', flash: '✦', slideL: '⇠', slideR: '⇢', slideU: '⇡', zoom: '⌖', wipe: '▌', circle: '◯', blur: '≋', spin: '↻', blinds: '☰', glitch: '▚' };
+  const GLYPH = { none: '■', kenburns: '⤢', zoomIn: '⊕', zoomOut: '⊖', panL: '←', panR: '→', panU: '↑', panD: '↓', fade: '◐', black: '●', flash: '✦', slideL: '⇠', slideR: '⇢', slideU: '⇡', zoom: '⌖', wipe: '▌', circle: '◯', blur: '≋', spin: '↻', blinds: '☰', glitch: '▚', ...(R.GLYPHS || {}) };
 
   function tpl() {
     return `
@@ -156,7 +156,7 @@
       body = `<div class="pre-sub">Estilo del texto</div>${R.TEXT_STYLES.map((o) => item('textStyle', o, 'Aa')).join('')}<div class="pre-sub">Animación del texto</div>${R.TEXT_ANIMS.map((o) => item('textAnim', o, '✦')).join('')}
         <button class="btn sm primary" data-pre="text:add" style="grid-column:1/-1">${I('type')} Añadir texto al clip</button>`;
     } else {
-      body = `<div class="pre-sub">Sobre todo el video</div>
+      body = `${F.looks ? F.looks.html() : ''}<div class="pre-sub">Sobre todo el video</div>
         <label class="check" style="grid-column:1/-1"><input type="checkbox" data-proj="letterbox" ${p.letterbox ? 'checked' : ''}> Barras de cine</label>
         <label class="check" style="grid-column:1/-1"><input type="checkbox" data-proj="progressBar" ${p.progressBar ? 'checked' : ''}> Barra de progreso naranja</label>
         <label class="lbl" style="grid-column:1/-1">Marca de agua / nombre del canal</label><input type="text" data-proj="watermark" value="${F.esc(p.watermark || '')}" placeholder="@TuCanal" style="grid-column:1/-1">

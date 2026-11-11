@@ -158,3 +158,6 @@ La sección Plantillas ahora tiene un catálogo de 28 plantillas (Ventas, Conten
 
 ## Proyectos a medias (continuar sin volver a gastar créditos)
 Los agentes (modo automático y Flujos) guardan un punto de avance: guion, cada imagen y cada narración en cuanto se generan. Si se corta (error, sin créditos, cierras la página) aparece una tarjeta **Proyectos a medias** en Inicio y en la columna de Flujos con lo que ya está hecho; «Continuar» reutiliza lo generado y solo hace lo que falta. Código: `P.pending` y `P.run` en `js/flows.js`. El avance se guarda en el dispositivo (localStorage); las imágenes y voces viven en la Biblioteca.
+
+## Paquete de efectos y flujos ya hechos
+`js/extras.js` (se carga después de `render.js`) añade 17 transiciones, 7 movimientos de cámara, 12 filtros (varios con grano, líneas VHS, fugas de luz o brillo), 3 estilos y 4 animaciones de texto, y los **Estilos en un clic** + **Sorpréndeme** (Editor → pestaña «Más»). En Flujos hay 18 flujos ya hechos nuevos (anuncio, curiosidades, motivacional, terror, cuento infantil, receta, tutorial, noticia, viaje, biografía, comparativa, mitos, tips de dinero, ciencia ficción, cómic, retro VHS, meditación, frases) y 6 estilos de imagen nuevos; el montaje acepta «Animación del texto».

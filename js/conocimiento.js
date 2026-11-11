@@ -172,10 +172,11 @@ La opción **Navegador (gratis)** solo sirve para **escuchar una prueba**; no cr
     /* ================= EFECTOS ================= */
     { id: 'efectos.catalogo', sec: 'efectos', t: 'Qué transiciones, filtros y movimientos hay', k: 'efectos transiciones filtros movimientos textos animaciones lista cuales hay catalogo disponible glitch zoom',
       a: `En [[#/efectos|Efectos y transiciones]]:
-- **14 transiciones**: Corte directo, Disolver, Fundido a negro, Destello blanco, Deslizar (← → ↑), Zoom de impacto, Barrido, Círculo, Desenfoque, Giro, Persianas y Glitch.
-- **8 movimientos**: Estático, Ken Burns, Acercar, Alejar y Paneo en 4 direcciones.
-- **10 filtros**: Original, Cinemático, Cálido, Frío, Vívido, Dramático, Vintage, Suave, Blanco y negro y Noir.
-- **Textos**: 3 estilos (Subtítulo, Título central, Rótulo inferior) y 5 animaciones (Aparecer, Subir, Máquina de escribir, Rebote, Sin animación).` },
+- **31 transiciones**: Corte directo, Disolver, Fundido a negro, Destello blanco, Deslizar (← → ↑ ↓), Zoom de impacto, Zoom hacia atrás, Barrido (→ ↑ diagonal), Círculo, Rombo, Reloj, Puertas, Desenfoque, Sueño, Giro, Voltear, Caída, Persianas, Franjas, Mosaico, Pixelado, Latigazo, Fuga de luz, Apagado de TV, Sacudida y Glitch.
+- **15 movimientos**: Estático, Ken Burns, Acercar, Alejar, Paneo en 4 direcciones, Latido, Cámara en mano, Inclinación, Diagonal, Golpe de zoom, Flotar y Travelling.
+- **Estilos en un clic**: en el Editor → pestaña «Más» hay 12 estilos completos (Cine, Viral, Documental, Retro VHS, Neón, Vlog, Terror…) y el botón «Sorpréndeme», que aplican filtro, transiciones, movimiento y texto a todo el video.
+- **22 filtros**: Original, Cinemático, Cálido, Frío, Vívido, Dramático, Vintage, Suave, Blanco y negro, Noir, HDR, Atardecer, Teal & Orange, Pastel, Neón, Matrix, Película 35 mm (grano), VHS retro (líneas), Sepia antiguo (polvo), Fuga de luz, Terror y Ensueño.
+- **Textos**: 6 estilos (Subtítulo, Título central, Rótulo inferior, Impacto, Neón, Caja de color) y 10 animaciones (Aparecer, Subir, Palabra por palabra, Máquina de escribir, Rebote, Entrar de lado, Zoom, Caer con rebote, Parpadeo neón, Sin animación).` },
     { id: 'efectos.aplicar', sec: 'efectos', t: 'Aplicar un efecto o crear mi propio filtro', k: 'aplicar efecto clip todos crear filtro propio guardar color vineta personalizado',
       a: `1. Abre un proyecto en el [[#/editor|Editor]] y, si quieres, selecciona un clip.
 2. En [[#/efectos|Efectos y transiciones]] elige la pestaña (transiciones, filtros, movimientos o textos).

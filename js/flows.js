@@ -14,6 +14,12 @@
     cyber: { name: 'Cyberpunk neón', p: 'estética cyberpunk, luces de neón, ciudad de noche, reflejos, atmósfera sombría' },
     minimal: { name: 'Minimalista', p: 'composición minimalista, fondo limpio, colores pastel suaves, formas simples' },
     documental: { name: 'Documental', p: 'estilo de fotografía documental, realista, auténtico, colores naturales, calidad National Geographic' },
+    comic: { name: 'Cómic', p: 'ilustración estilo cómic, trazos de tinta marcados, tramas de puntos, colores planos vibrantes, composición dinámica' },
+    retro: { name: 'Retro años 80', p: 'estética retro de los años 80, fotografía analógica, colores desvaídos, grano de película, ambiente nostálgico' },
+    oleo: { name: 'Pintura al óleo', p: 'pintura al óleo clásica, pinceladas visibles, luz de claroscuro, estilo de museo' },
+    producto: { name: 'Foto de producto', p: 'fotografía de producto profesional, fondo limpio, iluminación de estudio suave, enfoque nítido, estilo comercial' },
+    infantil: { name: 'Cuento infantil', p: 'ilustración de libro infantil, personajes tiernos, formas redondeadas, colores alegres y suaves' },
+    terror: { name: 'Terror oscuro', p: 'atmósfera de terror, penumbra, niebla, iluminación tenue y fría, fotograma de película de suspenso, sin sangre' },
     ninguno: { name: 'Sin estilo (solo prompt)', p: '' },
   };
   const styleOpts = () => Object.entries(F.STYLES).map(([k, v]) => [k, v.name]);
@@ -257,20 +263,20 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     // 5. Montaje
     step('montage', 'run', 'Montando…'); log('Agente Editor: montando el timeline…');
     const p = F.projects.blank(cfg.output?.name || script.title, idea.aspect);
-    const TR = ['fade', 'slideL', 'zoom', 'circle', 'blur', 'wipe', 'black', 'slideU'];
-    const MO = ['kenburns', 'zoomIn', 'panR', 'zoomOut', 'panL', 'panU'];
+    const TR = ['fade', 'slideL', 'zoom', 'circle', 'blur', 'wipe', 'leak', 'slideU', 'doors', 'dreamy', 'wipeDiag', 'zoomOut'];
+    const MO = ['kenburns', 'zoomIn', 'panR', 'zoomOut', 'panL', 'dolly', 'diag', 'panU'];
     let t = 0, lastImg = imgIds.find(Boolean);
     script.scenes.forEach((sc, i) => {
       const imgId = imgIds[i] || lastImg; lastImg = imgId;
       const vm = voiceIds[i] ? F.media.byId(voiceIds[i]) : null;
       const dur = F.round1(vm ? Math.max(2.5, (vm.duration || 3) + (+mt.padding || 0.7)) : Math.max(2.5, (+idea.duration || 60) / n));
       const text = mt.subtitles === 'narracion' ? sc.narration : mt.subtitles === 'pantalla' ? sc.on_screen_text : '';
-      const textStyle = mt.subtitles === 'narracion' ? 'subtitulo' : i === 0 ? 'titulo' : mt.textStyle;
+      const textStyle = mt.subtitles === 'narracion' ? 'subtitulo' : i === 0 && !['meme', 'neon', 'caja'].includes(mt.textStyle) ? 'titulo' : mt.textStyle;
       p.clips.push(F.newClip(imgId, {
         duration: dur, filter: mt.filter,
         transition: mt.transition === 'auto' ? TR[i % TR.length] : mt.transition,
         motion: mt.motion === 'auto' ? MO[i % MO.length] : mt.motion,
-        text, textStyle, textAnim: mt.subtitles === 'narracion' ? 'fade' : 'up',
+        text, textStyle, textAnim: mt.textAnim || (mt.subtitles === 'narracion' ? 'fade' : 'up'),
       }));
       if (vm) p.audio.push({ id: F.uid(), mediaId: vm.id, start: F.round1(t + 0.2), volume: 1, loop: false, fadeOut: false, kind: 'voz' });
       t = F.round1(t + dur);
@@ -379,6 +385,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
       { k: 'filter', l: 'Filtro de color', t: 'select', o: () => toOpts(R.filters()) },
       { k: 'subtitles', l: 'Textos en pantalla', t: 'select', o: [['narracion', 'Subtítulos de la narración'], ['pantalla', 'Frase clave por escena'], ['ninguno', 'Sin textos']] },
       { k: 'textStyle', l: 'Estilo de la frase clave', t: 'select', o: () => toOpts(R.TEXT_STYLES) },
+      { k: 'textAnim', l: 'Animación del texto', t: 'select', o: () => [['', 'Automática'], ...toOpts(R.TEXT_ANIMS)] },
       { k: 'padding', l: 'Pausa extra al final de cada escena (s)', t: 'number', min: 0, max: 3, step: 0.1 },
     ],
     seo: [{ k: 'keywords', l: 'Palabras clave objetivo', t: 'text', ph: 'Ej: océano, misterios, ciencia' }],
@@ -407,7 +414,7 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     images: { style: 'cine', quality: 'medium', common: '' },
     voice: { provider: 'auto', voice: 'nova', voiceId: '', instructions: 'Narrador profesional de documental: voz cálida, clara y con ritmo dinámico.', speed: 1 },
     music: { mediaId: '', volume: 0.18 },
-    montage: { transition: 'auto', motion: 'auto', filter: 'cine', subtitles: 'narracion', textStyle: 'inferior', padding: 0.7 },
+    montage: { transition: 'auto', motion: 'auto', filter: 'cine', subtitles: 'narracion', textStyle: 'inferior', textAnim: '', padding: 0.7 },
     seo: { keywords: '' },
     output: { name: '', open: true, autoExport: true },
   };
@@ -420,6 +427,24 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     historia: { name: 'Historia / cuento', desc: '2 min · ilustrado y emotivo', over: { idea: { duration: 120, tone: 'narrativo, emotivo y envolvente' }, images: { style: 'ilustracion' }, voice: { voice: 'fable', instructions: 'Narrador de cuentos: pausado, cálido y muy expresivo.' }, montage: { filter: 'calido', transition: 'fade', motion: 'kenburns', padding: 1 } } },
     top: { name: 'Top / Listado', desc: 'Top con frase clave por escena', over: { idea: { duration: 90, tone: 'dinámico, con datos sorprendentes' }, montage: { subtitles: 'pantalla', textStyle: 'inferior', transition: 'slideL' } } },
     documental: { name: 'Mini documental', desc: '3 min · estilo documental', over: { idea: { duration: 180, tone: 'documental, riguroso y fascinante' }, images: { style: 'documental' }, voice: { voice: 'onyx' }, montage: { filter: 'cine', transition: 'black', padding: 0.9 } } },
+    anuncio: { name: 'Anuncio de producto', desc: '30 s vertical · gancho, producto, oferta', over: { idea: { duration: 30, aspect: '9:16', tone: 'persuasivo, directo y cercano' }, script: { extra: 'Estructura: gancho que frena el scroll (3 s), problema, producto, prueba o beneficio, oferta y llamado a la acción. No inventes cifras ni promesas médicas.' }, images: { style: 'producto' }, voice: { instructions: 'Voz enérgica y confiable de anuncio, ritmo ágil.', speed: 1.08 }, montage: { filter: 'hdr', transition: 'flash', motion: 'punch', subtitles: 'narracion', textAnim: 'words', padding: 0.25 } } },
+    curiosidades: { name: '¿Sabías que…? / Curiosidades', desc: '45 s vertical · datos que sorprenden', over: { idea: { duration: 45, aspect: '9:16', tone: 'curioso, sorprendente y ágil' }, script: { extra: 'Empieza con una pregunta intrigante. Un dato sorprendente por escena y la mejor revelación al final.' }, voice: { speed: 1.05 }, montage: { filter: 'vivo', transition: 'whip', textAnim: 'words', padding: 0.3 } } },
+    motivacional: { name: 'Motivacional épico', desc: '45 s · frases potentes e imágenes épicas', over: { idea: { duration: 45, aspect: '9:16', tone: 'motivacional, épico e inspirador' }, script: { extra: 'Frases cortas y contundentes. Cierra con una frase memorable.' }, images: { style: 'epico' }, voice: { voice: 'onyx', instructions: 'Voz grave, pausada y poderosa, como un discurso motivacional.', speed: 0.95 }, montage: { filter: 'tealorange', transition: 'zoom', motion: 'dolly', subtitles: 'pantalla', textStyle: 'titulo', padding: 0.8 } } },
+    terror: { name: 'Historia de terror', desc: '60 s vertical · suspenso y giro final', over: { idea: { duration: 60, aspect: '9:16', tone: 'misterioso, inquietante y con suspenso' }, script: { extra: 'Relato en primera persona. Sube la tensión escena a escena y termina con un final abierto e inquietante. Nada de violencia gráfica.' }, images: { style: 'terror' }, voice: { voice: 'onyx', instructions: 'Susurro grave y lento, lleno de suspenso.', speed: 0.92 }, montage: { filter: 'terror', transition: 'shake', motion: 'dolly', padding: 0.9 } } },
+    infantil: { name: 'Cuento infantil', desc: '2 min · ilustrado, tierno y con moraleja', over: { idea: { duration: 120, tone: 'tierno, alegre y sencillo', audience: 'niños de 4 a 8 años' }, script: { extra: 'Personajes simpáticos, frases cortas y una moraleja positiva al final.' }, images: { style: 'infantil' }, voice: { voice: 'fable', instructions: 'Narrador de cuentos infantiles: dulce, juguetón y muy expresivo.', speed: 0.95 }, montage: { filter: 'pastel', transition: 'circle', motion: 'float', padding: 1 } } },
+    receta: { name: 'Receta de cocina', desc: '45 s vertical · ingredientes y pasos', over: { idea: { duration: 45, aspect: '9:16', tone: 'apetitoso, claro y cercano' }, script: { extra: 'Primera escena: el plato terminado. Luego ingredientes y un paso por escena. Texto en pantalla corto con el paso.' }, images: { style: 'foto', common: 'fotografía gastronómica, luz natural, primer plano apetitoso' }, montage: { filter: 'calido', transition: 'slideU', subtitles: 'pantalla', textStyle: 'caja', padding: 0.4 } } },
+    tutorial: { name: 'Tutorial paso a paso', desc: '90 s horizontal · pasos numerados', over: { idea: { duration: 90, tone: 'educativo, claro y ordenado' }, script: { extra: 'Di qué se logra al final, luego un paso por escena numerado («Paso 1», «Paso 2»…) y un error común a evitar.' }, images: { style: 'minimal' }, montage: { filter: 'none', transition: 'slideL', motion: 'zoomIn', subtitles: 'pantalla', textStyle: 'inferior', textAnim: 'slide' } } },
+    noticia: { name: 'Noticia en 60 segundos', desc: '60 s · qué pasó, por qué importa, qué sigue', over: { idea: { duration: 60, tone: 'informativo, neutral y directo' }, script: { extra: 'Estructura: titular, qué pasó, por qué importa y qué sigue. Solo hechos; no inventes datos, cifras ni declaraciones.' }, images: { style: 'documental' }, voice: { voice: 'onyx', instructions: 'Presentador de noticias: sobrio, claro y con ritmo.' }, montage: { filter: 'frio', transition: 'wipe', subtitles: 'pantalla', textStyle: 'inferior' } } },
+    viaje: { name: 'Destino de viaje', desc: '60 s · lugares, qué hacer y consejo final', over: { idea: { duration: 60, tone: 'inspirador, aventurero y cálido' }, script: { extra: 'Abre con la mejor vista. Un lugar o actividad por escena y un consejo práctico al final.' }, images: { style: 'foto', common: 'fotografía de viajes, hora dorada, gran angular' }, montage: { filter: 'fugaluz', transition: 'leak', motion: 'diag', padding: 0.7 } } },
+    biografia: { name: 'Biografía en 2 minutos', desc: '2 min · vida, obstáculos y legado', over: { idea: { duration: 120, tone: 'narrativo, admirativo y riguroso' }, script: { extra: 'Orden cronológico: origen, obstáculo, logro principal y legado. No inventes fechas ni citas.' }, images: { style: 'oleo' }, voice: { voice: 'onyx' }, montage: { filter: 'sepia', transition: 'dreamy', motion: 'kenburns', padding: 0.9 } } },
+    versus: { name: 'Comparativa X vs Y', desc: '60 s · ventajas, diferencias y veredicto', over: { idea: { duration: 60, tone: 'analítico, justo y dinámico' }, script: { extra: 'Presenta las dos opciones, compáralas en 3 criterios (uno por escena) y da un veredicto claro según el tipo de persona.' }, montage: { filter: 'hdr', transition: 'doors', subtitles: 'pantalla', textStyle: 'titulo', textAnim: 'drop' } } },
+    mitos: { name: 'Mitos y verdades', desc: '45 s vertical · desmiente creencias', over: { idea: { duration: 45, aspect: '9:16', tone: 'claro, sorprendente y confiable' }, script: { extra: 'Alterna «Mito:» y «Verdad:» por escena. Explica cada verdad en una frase sencilla.' }, montage: { filter: 'vivo', transition: 'flip', subtitles: 'pantalla', textStyle: 'caja', textAnim: 'pop', padding: 0.4 } } },
+    finanzas: { name: 'Tips de dinero', desc: '45 s vertical · 3 consejos prácticos', over: { idea: { duration: 45, aspect: '9:16', tone: 'práctico, claro y motivador' }, script: { extra: 'Tres consejos accionables, uno por escena, con un ejemplo simple. Sin promesas de ganancias ni asesoría de inversión.' }, images: { style: 'minimal' }, montage: { filter: 'hdr', transition: 'slideU', textAnim: 'words', padding: 0.3 } } },
+    scifi: { name: 'Ciencia ficción neón', desc: '60 s · mundo cyberpunk', over: { idea: { duration: 60, tone: 'futurista, intrigante y cinematográfico' }, images: { style: 'cyber' }, voice: { voice: 'onyx', speed: 0.97 }, montage: { filter: 'neon', transition: 'glitch', motion: 'tilt', subtitles: 'pantalla', textStyle: 'neon', textAnim: 'flicker' } } },
+    comic: { name: 'Historia en cómic', desc: '60 s · viñetas con acción', over: { idea: { duration: 60, tone: 'dinámico, divertido y con acción' }, images: { style: 'comic' }, montage: { filter: 'vivo', transition: 'stripes', motion: 'punch', subtitles: 'pantalla', textStyle: 'meme' } } },
+    retro: { name: 'Nostalgia retro VHS', desc: '45 s · estética años 80–90', over: { idea: { duration: 45, tone: 'nostálgico, cálido y evocador' }, images: { style: 'retro' }, montage: { filter: 'vhs', transition: 'tv', motion: 'handheld', subtitles: 'pantalla', textStyle: 'meme', textAnim: 'flicker' } } },
+    meditacion: { name: 'Meditación / relajación', desc: '2 min · sin prisa, voz suave', over: { idea: { duration: 120, tone: 'sereno, lento y reconfortante' }, script: { extra: 'Frases cortas y pausadas que guían la respiración. Sin afirmaciones médicas.' }, images: { style: 'acuarela', common: 'paisaje natural tranquilo, luz suave' }, voice: { voice: 'shimmer', instructions: 'Voz muy suave, lenta y tranquila, como una meditación guiada.', speed: 0.88 }, montage: { filter: 'ensueno', transition: 'dreamy', motion: 'float', subtitles: 'ninguno', padding: 1.6 } }, off: ['seo'] },
+    frases: { name: 'Frases / poema visual', desc: 'Sin voz · una frase por escena con música', over: { idea: { duration: 40, aspect: '9:16', tone: 'poético y emotivo' }, script: { extra: 'Una frase corta y memorable por escena, como texto en pantalla.' }, images: { style: 'acuarela' }, montage: { filter: 'ensueno', transition: 'dreamy', motion: 'float', subtitles: 'pantalla', textStyle: 'titulo', textAnim: 'zoom' } }, off: ['voice', 'seo'] },
     slideshow: { name: 'Presentación con música', desc: 'Sin voz · imágenes + textos', over: { montage: { subtitles: 'pantalla', textStyle: 'titulo' } }, off: ['voice', 'seo'] },
   };
   const makeFlow = (tid) => {
@@ -547,8 +572,8 @@ Devuelve JSON: {"title":"título con gancho, máx. 70 caracteres","description":
     const sel = root.querySelector('#flTpl');
     if (sel) sel.innerHTML = `<option value="">Plantillas…</option>${Object.entries(TPL).map(([k, t]) => `<option value="tpl:${k}">${F.esc(t.name)}</option>`).join('')}${F.settings.flows.length ? `<optgroup label="Mis flujos">${F.settings.flows.map((f) => `<option value="fl:${f.id}">${F.esc(f.name)}</option>`).join('')}</optgroup>` : ''}`;
     const el = root.querySelector('#flList');
-    el.innerHTML = `<div id="flPend">${P.pendingHTML()}</div><div class="nav-sec">Plantillas</div>${Object.entries(TPL).map(([k, t]) => `<button class="it" data-tpl="${k}"><b>${t.name}</b><small>${t.desc}</small></button>`).join('')}
-      <div class="nav-sec">Mis flujos</div>${F.settings.flows.length ? F.settings.flows.map((f) => `<button class="it ${f.id === flow.id ? 'on' : ''}" data-fl="${f.id}"><b>${F.esc(f.name)}</b><small>${F.esc(f.cfg.idea.topic.slice(0, 40) || 'Sin tema')}</small></button>`).join('') : '<div class="small dim" style="padding:4px 12px">Aún no guardaste flujos</div>'}`;
+    el.innerHTML = `<div id="flPend">${P.pendingHTML()}</div><div class="nav-sec">Mis flujos</div>${F.settings.flows.length ? F.settings.flows.map((f) => `<button class="it ${f.id === flow.id ? 'on' : ''}" data-fl="${f.id}"><b>${F.esc(f.name)}</b><small>${F.esc(f.cfg.idea.topic.slice(0, 40) || 'Sin tema')}</small></button>`).join('') : '<div class="small dim" style="padding:4px 12px">Aún no guardaste flujos</div>'}
+      <div class="nav-sec">Flujos ya hechos (${Object.keys(TPL).length - 1})</div>${Object.entries(TPL).map(([k, t]) => `<button class="it" data-tpl="${k}"><b>${t.name}</b><small>${t.desc}</small></button>`).join('')}`;
   }
   function setRunBtn() { const b = root?.querySelector('#flRun'); if (!b) return; b.disabled = running; b.innerHTML = running ? '<span class="spin"></span> Ejecutando…' : `${I('play')} Ejecutar flujo`; }
 

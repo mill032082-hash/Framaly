@@ -796,3 +796,7 @@ body.resizing .flows { transition: none; }
 .pend-row { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; }
 .pend-st { color: var(--muted, #9aa); }
 .pend-st.ok { color: #22c55e; }
+
+.look-item { grid-column: 1 / -1; text-align: left; border: 1px solid var(--line2); background: var(--bg2); color: var(--text); border-radius: 10px; padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; font: inherit; }
+.look-item:hover { border-color: #ff6a1a; }
+.look-item small { color: var(--muted, #9aa); font-size: 11px; line-height: 1.3; }
