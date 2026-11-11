@@ -32,28 +32,41 @@
   P.sizeFor = (a) => (a === '16:9' ? '1536x1024' : a === '1:1' ? '1024x1024' : '1024x1536');
   P.sceneCount = (idea, sc) => (sc && +sc.scenes) || F.clamp(Math.round((+idea.duration || 60) / 7), 3, 30);
 
-  P.writeScript = async (idea, sc = {}) => {
+  /** ctx (opcional) = { series, index }: escribe el capítulo `index` de una serie manteniendo la continuidad */
+  P.writeScript = async (idea, sc = {}, ctx = null) => {
     const n = P.sceneCount(idea, sc);
     const words = Math.round((+idea.duration || 60) * 2.4);
-    const system = 'Eres un guionista profesional de YouTube, experto en retención de audiencia, storytelling y videos narrados construidos con imágenes.';
+    const system = 'Eres un guionista profesional de YouTube y de series narradas, experto en retención de audiencia, storytelling y videos construidos con imágenes. Escribes con imágenes concretas, ritmo y tensión; nunca con relleno.';
+    const S = ctx?.series, ci = ctx?.index ?? 0, ch = S?.chapters?.[ci], lastCh = S ? ci === S.chapters.length - 1 : true;
+    const serie = !S ? '' : `
+ESTE GUION ES EL CAPÍTULO ${ci + 1} DE ${S.chapters.length} de la serie «${S.title}».
+- De qué va la serie: ${S.logline || ''}
+- Personajes (no cambies sus nombres ni su aspecto): ${(S.characters || []).map((c) => `${c.name}: ${c.description}`).join(' | ') || 'los que aparezcan'}
+- Lo que ya pasó: ${S.chapters.slice(0, ci).map((c, k) => `Cap. ${k + 1} «${c.title}»: ${c.recap || c.summary}`).join(' ') || 'nada, es el primer capítulo.'}
+- Lo que debe pasar en ESTE capítulo («${ch.title}»): ${ch.summary}
+- Cómo empieza: ${ch.hook || 'con un gancho potente'}${ci ? ' (antes, una sola frase que recuerde dónde quedó la historia)' : ''}
+- Cómo termina: ${lastCh ? 'resuelve la historia de forma satisfactoria y cierra con una llamada a la acción breve.' : `${ch.cliffhanger || 'deja una intriga abierta'}. NO resuelvas la historia: termina en suspenso e invita en una frase a ver el siguiente capítulo.`}
+${lastCh ? '' : `- No adelantes lo que pasa después: ${S.chapters.slice(ci + 1).map((c) => `«${c.title}»`).join(', ')}.`}
+- Usa como "visual_bible" exactamente este texto: ${S.bible || ''}`;
     const prompt = `Escribe el guion de un video narrado sobre: "${idea.topic}".
 - Idioma de la narración: ${idea.language || 'español'}
 - Tono: ${idea.tone || 'informativo y entretenido'}
 - Público: ${idea.audience || 'público general'}
 - Duración aproximada: ${idea.duration} segundos (unas ${words} palabras de narración en total, repartidas entre las escenas)
-- Exactamente ${n} escenas. La primera debe ser un gancho potente en los primeros 5 segundos; la última, un cierre con llamada a la acción (suscribirse / comentar).
+- Exactamente ${n} escenas. La primera debe ser un gancho potente en los primeros 5 segundos${S ? '' : '; la última, un cierre con llamada a la acción (suscribirse / comentar)'}.
+- Reglas de calidad: 1) El gancho abre con una imagen, un hecho o una pregunta concreta; nunca con «hola» ni «en este video». 2) Cada escena hace avanzar la historia o aporta UN dato nuevo: nada de relleno ni de repetir lo ya dicho. 3) Abre una incógnita al principio y resuélvela cerca del final. 4) Lenguaje concreto y sensorial, verbos activos, frases que se puedan decir en voz alta. 5) La tensión o el interés suben escena a escena. 6) No inventes cifras, citas ni personas reales.${serie}
 ${sc.extra ? '- Instrucciones extra: ' + sc.extra : ''}
 Para cada escena entrega:
   "narration": el texto exacto que leerá el locutor (frases naturales y CORTAS, de 6 a 14 palabras cada una, separadas por punto; sin acotaciones ni emojis),
-  "image_prompt": descripción visual detallada EN ESPAÑOL para generar una imagen (sujeto, entorno, composición, iluminación). Sin texto, letras ni logotipos dentro de la imagen. Mantén coherencia visual entre escenas (mismos personajes, época y estética).
+  "image_prompt": descripción visual detallada EN ESPAÑOL para generar una imagen: UNA sola acción clara, sujeto, entorno, tipo de plano (alterna entre plano general, plano medio, primer plano, detalle, contrapicado y vista aérea; no repitas el mismo dos veces seguidas) e iluminación. Sin texto, letras ni logotipos dentro de la imagen. Mantén coherencia visual entre escenas (mismos personajes, época y estética).
   "on_screen_text": frase corta de 2 a 6 palabras para mostrar en pantalla.
 Además entrega "visual_bible": un párrafo de 40 a 70 palabras que fija el aspecto de TODO el video para que las imágenes sean coherentes entre sí: cómo son exactamente los personajes que se repiten (edad, pelo, ropa, rasgos), el lugar y la época, la paleta de colores y el tipo de luz. No describas acciones ahí.
 Devuelve JSON con esta forma exacta:
-{"title":"título atractivo para YouTube (máx. 70 caracteres)","visual_bible":"...","scenes":[{"narration":"...","image_prompt":"...","on_screen_text":"..."}]}`;
+{"title":"título atractivo para YouTube (máx. 70 caracteres)","visual_bible":"...","recap":"una o dos frases con lo que pasó en este guion","scenes":[{"narration":"...","image_prompt":"...","on_screen_text":"..."}]}`;
     const j = await F.api.llmJSON({ system, prompt, provider: sc.provider, maxTokens: 8000 });
     if (!Array.isArray(j.scenes) || !j.scenes.length) throw new Error('El guion generado no contiene escenas.');
     return {
-      title: String(j.title || idea.topic).slice(0, 100), bible: String(j.visual_bible || '').slice(0, 700),
+      title: String(j.title || idea.topic).slice(0, 100), bible: String(S?.bible || j.visual_bible || '').slice(0, 900), recap: String(j.recap || '').slice(0, 400),
       scenes: j.scenes.map((s) => ({ narration: String(s.narration || ''), image_prompt: String(s.image_prompt || s.narration || ''), on_screen_text: String(s.on_screen_text || '') })),
     };
   };

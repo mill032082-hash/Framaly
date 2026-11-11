@@ -131,6 +131,7 @@
       if (!s) { out.innerHTML = `<div class="empty" style="padding:70px 20px">${I('script')}<p><b>Tu guion aparecerá aquí</b></p><p class="small">Escribe un tema y pulsa “Escribir guion”. Podrás editar cada escena antes de producir el video.</p></div>`; return; }
       const words = s.scenes.reduce((a, x) => a + x.narration.split(/\s+/).filter(Boolean).length, 0);
       out.innerHTML = `<div class="card"><label class="lbl">Título</label><input type="text" id="sTitle" value="${F.esc(s.title)}" style="font-size:16px;font-weight:700">
+        <label class="lbl">Coherencia visual (personajes, lugar y colores que se repiten en todas las imágenes)</label><textarea id="sBible" rows="2" placeholder="Ej: Chica de pelo negro corto y abrigo rojo; pueblo nevado; paleta fría.">${F.esc(s.bible || '')}</textarea>
         <div class="row" style="margin:12px 0 4px"><span class="tag or">${s.scenes.length} escenas</span><span class="tag">${words} palabras</span><span class="tag">≈ ${F.fmtS(words / 2.4)} de narración</span><span class="grow"></span>
         <button class="btn sm" id="sCopy">${I('copy')} Copiar</button><button class="btn sm" id="sVoice">${I('mic')} Enviar a Voces</button></div></div>
         <div class="card" id="sScenes">${s.scenes.map((x, i) => `<div class="scene" data-i="${i}"><span class="n">${i + 1}</span><button class="icon-btn" data-rm="${i}" style="position:absolute;right:8px;top:8px" title="Quitar escena">${I('x')}</button>
@@ -142,6 +143,7 @@
           <div><label class="lbl">Voz (OpenAI)</label><select id="pVoice">${opt([['', 'Sin voz'], ...F.api.OPENAI_VOICES.map((v) => [v, v])], st.voice)}</select></div><div><label class="lbl">Textos</label><select id="pSub">${opt([['narracion', 'Subtítulos de la narración'], ['pantalla', 'Frase clave por escena'], ['ninguno', 'Sin textos']], st.subtitles)}</select></div></div>
           <button class="btn primary lg block" id="pGo" style="margin-top:16px">${I('zap')} Generar video completo</button><p class="hint">Para más control (ElevenLabs, música, SEO) usa <a href="#/flujos">Flujos y agentes</a>.</p></div>`;
       out.querySelector('#sTitle').addEventListener('input', (e) => { s.title = e.target.value; save(); });
+      out.querySelector('#sBible').addEventListener('input', (e) => { s.bible = e.target.value; save(); });
       out.querySelector('#sScenes').addEventListener('input', (e) => { const sc = e.target.closest('[data-i]'); if (sc && e.target.dataset.k) { s.scenes[+sc.dataset.i][e.target.dataset.k] = e.target.value; save(); } });
       out.querySelector('#sScenes').addEventListener('click', (e) => {
         const rm = e.target.closest('[data-rm]'); if (rm) { s.scenes.splice(+rm.dataset.rm, 1); save(); renderOut(); }
@@ -152,7 +154,7 @@
       out.querySelector('#sVoice').onclick = () => { sessionStorage.setItem('framaly.voiceText', full()); F.router.go('#/voces'); };
       for (const [id, k] of [['pAsp', 'aspect'], ['pSty', 'style'], ['pVoice', 'voice'], ['pSub', 'subtitles']]) out.querySelector('#' + id).addEventListener('change', (e) => { st[k] = e.target.value; save(); });
       out.querySelector('#pGo').onclick = () => {
-        const s2 = { title: s.title, scenes: s.scenes.filter((x) => x.narration.trim() || x.image_prompt.trim()) };
+        const s2 = { title: s.title, bible: s.bible || '', scenes: s.scenes.filter((x) => x.narration.trim() || x.image_prompt.trim()) };
         if (!s2.scenes.length) return F.toast('El guion no tiene escenas');
         const fl = F.pipeline.makeFlow('youtube');
         Object.assign(fl.cfg.idea, { topic: st.topic || s.title, duration: st.duration, aspect: st.aspect, language: st.language });
